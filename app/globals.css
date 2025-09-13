@@ -1,0 +1,32 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+body {
+  @apply bg-bg text-textpri min-h-screen;
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl2 px-4 py-3 font-medium;
+  @apply bg-accent text-black hover:brightness-110 transition;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-xl2 px-4 py-3 font-medium;
+  @apply border border-gray-700 text-textpri hover:bg-gray-800 transition;
+}
+
+.card {
+  @apply bg-card rounded-xl2 border border-gray-800;
+}
+
+.input {
+  @apply w-full rounded-xl2 bg-gray-900 border border-gray-800 px-4 py-3 text-textpri placeholder:text-textsec outline-none focus:ring-2 focus:ring-accent/40;
+}
+/* Tamaños compactos para botones del admin */
+.btn-sm { @apply px-3 py-2 text-sm rounded-xl; }
+.btn-ghost { @apply bg-transparent border border-white/10 hover:bg-white/5; }
