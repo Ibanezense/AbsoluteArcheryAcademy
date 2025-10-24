@@ -3,50 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/lib/hooks/useAuth'
+import { formatTime, toLocalYMD, parseLocalYMD, startOfDayISO, endOfDayISO } from '@/lib/utils/dateUtils'
+import type { Session, BookingWithProfile, RosterLine, GroupType } from '@/lib/types'
 import AdminGuard from '@/components/AdminGuard'
-import AdminBottomNav from '@/components/AdminBottomNav'
-import AppContainer from '@/components/AppContainer'
+import AdminQuickBooking from '@/components/AdminQuickBooking'
+import AdminBookingsManager from '@/components/AdminBookingsManager'
+import Avatar from '@/components/ui/Avatar'
 
-type Session = {
-  id: string
-  start_at: string
-  end_at: string
-  status: 'scheduled' | 'cancelled'
-}
-
-type RosterLine = {
-  session_id: string
-  distance_m: number
-  targets: number
-  reserved_count: number
-}
-
-type BookingItem = {
-  id: string
-  session_id: string
-  status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
-  group_type: 'children' | 'youth' | 'adult' | 'assigned' | 'ownbow'
-  distance_m: number | null
-  profiles: { full_name: string | null; avatar_url: string | null } | null
-}
-
-function startOfDayISO(d = new Date()) {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-  // return local midnight in ISO (properly converted to UTC)
-  return x.toISOString()
-}
-function endOfDayISO(d = new Date()) {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
-  // return local end of day in ISO (properly converted to UTC)
-  return x.toISOString()
-}
-function hhmm(dateISO: string) {
-  const d = new Date(dateISO)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-const groupLabel: Record<NonNullable<BookingItem['group_type']>, string> = {
+const groupLabel: Record<GroupType, string> = {
   children: 'Niños',
   youth: 'Jóvenes',
   adult: 'Adultos',
@@ -57,33 +23,13 @@ const groupLabel: Record<NonNullable<BookingItem['group_type']>, string> = {
 export default function AdminDashboard() {
   const router = useRouter()
   const toast = useToast()
+  const { signOut } = useAuth()
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<Session[]>([])
   const [roster, setRoster] = useState<RosterLine[]>([])
-  const [bookings, setBookings] = useState<BookingItem[]>([])
+  const [bookings, setBookings] = useState<BookingWithProfile[]>([])
   const [updatingId, setUpdatingId] = useState<string | null>(null)
-  // selectedDate is stored as local YYYY-MM-DD (no timezone offsets)
-  const ymdLocal = (d: Date) => {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-  const [selectedDate, setSelectedDate] = useState(() => ymdLocal(new Date())) // YYYY-MM-DD local
-
-  const parseYmdToLocalDate = (s: string) => {
-    const [y, m, d] = s.split('-').map(Number)
-    return new Date(y, (m || 1) - 1, d || 1)
-  }
-
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      toast.push({ message: error.message, type: 'error' })
-      return
-    }
-    router.replace('/login')
-  }
+  const [selectedDate, setSelectedDate] = useState(() => toLocalYMD(new Date()))
 
   // --- Marcar asistencia/no-show ---
   const markAttendance = async (bookingId: string, attended: boolean) => {
@@ -137,28 +83,29 @@ export default function AdminDashboard() {
     }
 
     // 3) Reservas del día (status=reserved) con perfil (normalizando profiles)
-let bks: BookingItem[] = []
-if (ids.length) {
-  const { data: b, error: e3 } = await supabase
-    .from('bookings')
-    .select('id,session_id,status,group_type,distance_m,profiles(full_name,avatar_url)')
-    .in('status', ['reserved', 'attended', 'no_show'])
-    .in('session_id', ids as string[])
-  if (e3) { toast.push({ message: e3.message, type: 'error' }); setLoading(false); return }
+    let bks: BookingWithProfile[] = []
+    if (ids.length) {
+      const { data: b, error: e3 } = await supabase
+        .from('bookings')
+        .select('id,session_id,status,group_type,distance_m,created_at,user_id,profiles(full_name,avatar_url)')
+        .in('status', ['reserved', 'attended', 'no_show'])
+        .in('session_id', ids as string[])
+      if (e3) { toast.push({ message: e3.message, type: 'error' }); setLoading(false); return }
 
-  const rows = (b ?? []) as any[]
-  bks = rows.map((row) => ({
-    id: row.id as string,
-    session_id: row.session_id as string,
-    status: row.status as BookingItem['status'],
-    group_type: row.group_type as BookingItem['group_type'],
-    distance_m: (row.distance_m ?? null) as number | null,
-    profiles: Array.isArray(row.profiles)
-      ? (row.profiles[0] ?? null)
-      : (row.profiles ?? null),
-  }))
-}
-
+      const rows = (b ?? []) as any[]
+      bks = rows.map((row) => ({
+        id: row.id as string,
+        user_id: row.user_id as string,
+        session_id: row.session_id as string,
+        status: row.status,
+        group_type: row.group_type,
+        distance_m: row.distance_m ?? null,
+        created_at: row.created_at,
+        profiles: Array.isArray(row.profiles)
+          ? (row.profiles[0] ?? null)
+          : (row.profiles ?? null),
+      }))
+    }
 
     setSessions((ses || []) as Session[])
     setRoster(ros)
@@ -205,32 +152,13 @@ if (ids.length) {
     })
   }, [bookings, sessions])
 
-  // util Avatar
-  const Avatar = ({ url }: { url: string | null | undefined }) => (
-    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center overflow-hidden">
-      {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span className="text-xl">🏹</span>}
-    </div>
-  )
-
   return (
     <AdminGuard>
-      <AppContainer title="Panel de Control">
-        <div className="pb-24"> {/* espacio para la barra inferior */}
+      <div className="space-y-6">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-white/10">
-          <div className="max-w-screen-sm mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8">
+          <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-2">
-              <div className="relative group">
-                <button className="btn-ghost px-2">☰</button>
-                <div className="absolute left-0 mt-2 py-2 w-48 bg-bg border border-white/10 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-                  <button 
-                    className="w-full px-4 py-2 text-left hover:bg-white/5 transition-colors"
-                    onClick={handleSignOut}
-                  >
-                    Cerrar Sesión
-                  </button>
-                </div>
-              </div>
               <input
                 type="date"
                 value={selectedDate}
@@ -240,84 +168,111 @@ if (ids.length) {
               />
             </div>
             <h1 className="text-lg font-semibold">Panel de Control</h1>
-            <button className="btn-ghost px-2" onClick={() => loadDate(selectedDate)}>⟳</button>
+            <div className="flex items-center gap-2">
+              <button 
+                className="btn-ghost px-3 py-1.5 text-sm"
+                onClick={signOut}
+                title="Cerrar Sesión"
+              >
+                Salir
+              </button>
+              <button className="btn-ghost px-2" onClick={() => loadDate(selectedDate)}>⟳</button>
+            </div>
           </div>
         </div>
 
-        <div className="max-w-screen-sm mx-auto px-4 py-4 space-y-4">
+        <div className="space-y-6">
           {/* Reservas de hoy */}
-          {/* Reservas para la fecha seleccionada */}
-          <h2 className="text-sm font-semibold">Reservas — {parseYmdToLocalDate(selectedDate).toLocaleDateString()}</h2>
+          <div>
+            <h2 className="text-sm font-semibold mb-4">Reservas — {parseLocalYMD(selectedDate).toLocaleDateString()}</h2>
 
-          {loading && <div className="text-textsec text-sm">Cargando…</div>}
-          {!loading && bookingsOrdered.length === 0 && (
-            <div className="text-textsec text-sm">No hay reservas para hoy.</div>
-          )}
+            {loading && <div className="text-textsec text-sm">Cargando…</div>}
+            {!loading && bookingsOrdered.length === 0 && (
+              <div className="text-textsec text-sm">No hay reservas para hoy.</div>
+            )}
 
-          <div className="space-y-3">
-            {bookingsOrdered.map((b) => {
-              const session = sessions.find(s => s.id === b.session_id)
-              const time = session ? `${hhmm(session.start_at)} – ${hhmm(session.end_at)}` : ''
-              const name = b.profiles?.full_name || 'Alumno'
-              const badge = groupLabel[b.group_type] || '—'
-              const dist = b.distance_m ? `${b.distance_m} m` : '—'
-              const status = b.status === 'attended' ? 'Asistió' :
-                            b.status === 'no_show' ? 'No asistió' :
-                            b.status === 'cancelled' ? 'Cancelada' : ''
-              const canMark = b.status === 'reserved'
-              const updating = updatingId === b.id
-              return (
-                <div key={b.id} className="card p-3 flex items-center gap-3">
-                  <Avatar url={b.profiles?.avatar_url} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{name}</p>
-                    <p className="text-xs text-textsec truncate">
-                      {time} · {badge} · {dist}
-                      {status && ` · ${status}`}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
+            {/* Grid de tarjetas compactas */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {bookingsOrdered.map((b) => {
+                const session = sessions.find(s => s.id === b.session_id)
+                const time = session ? `${formatTime(session.start_at)} – ${formatTime(session.end_at)}` : ''
+                const name = b.profiles?.full_name || 'Alumno'
+                const badge = b.group_type ? groupLabel[b.group_type] : '—'
+                const dist = b.distance_m ? `${b.distance_m} m` : '—'
+                const status = b.status === 'attended' ? 'Asistió' :
+                              b.status === 'no_show' ? 'No asistió' :
+                              b.status === 'cancelled' ? 'Cancelada' : ''
+                const canMark = b.status === 'reserved'
+                const updating = updatingId === b.id
+                
+                return (
+                  <div key={b.id} className="card p-3 flex flex-col items-center text-center gap-2 hover:bg-white/5 transition-colors">
+                    <Avatar name={name} url={b.profiles?.avatar_url} size="md" />
+                    <div className="w-full min-w-0">
+                      <p className="font-medium text-sm truncate">{name}</p>
+                      <p className="text-xs text-textsec truncate">{time}</p>
+                      <p className="text-xs text-textsec truncate">{badge}</p>
+                      {status && (
+                        <span className={`inline-block mt-1 text-[10px] px-2 py-0.5 rounded ${
+                          b.status === 'attended' ? 'bg-success/20 text-success' :
+                          b.status === 'no_show' ? 'bg-danger/20 text-danger' :
+                          'bg-textsec/20 text-textsec'
+                        }`}>
+                          {status}
+                        </span>
+                      )}
+                    </div>
                     {canMark && (
-                      <>
+                      <div className="flex gap-1 w-full">
                         <button
-                          className={`btn-outline !px-3 !py-1 ${b.status === 'attended' ? 'bg-success/20 text-success' : ''}`}
+                          className="btn-outline !px-2 !py-1 text-xs flex-1"
                           onClick={() => markAttendance(b.id, true)}
                           disabled={updating}
+                          title="Marcar asistencia"
                         >
                           {updating ? '...' : '✓'}
                         </button>
                         <button
-                          className={`btn-outline !px-3 !py-1 ${b.status === 'no_show' ? 'bg-danger/20 text-danger' : ''}`}
+                          className="btn-outline !px-2 !py-1 text-xs flex-1"
                           onClick={() => markAttendance(b.id, false)}
                           disabled={updating}
+                          title="No asistió"
                         >
                           {updating ? '...' : '✗'}
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
 
           {/* Resumen del día */}
-          <h2 className="text-sm font-semibold">Resumen del Día</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="card p-4">
-              <p className="text-xs text-textsec">Ocupación</p>
-              <p className="text-2xl font-bold mt-1">{totals.occPct}%</p>
-              <p className="text-[11px] text-textsec mt-1">
-                {totals.dayOcc}/{totals.dayCap} plazas ocupadas
-              </p>
+          <div>
+            <h2 className="text-sm font-semibold mb-4">Resumen del Día</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="card p-4">
+                <p className="text-xs text-textsec">Ocupación</p>
+                <p className="text-2xl font-bold mt-1">{totals.occPct}%</p>
+                <p className="text-[11px] text-textsec mt-1">
+                  {totals.dayOcc}/{totals.dayCap} plazas ocupadas
+                </p>
+              </div>
+              <div className="card p-4">
+                <p className="text-xs text-textsec">Turnos disponibles</p>
+                <p className="text-2xl font-bold mt-1">{totals.availSessions}</p>
+                <p className="text-[11px] text-textsec mt-1">
+                  {sessions.length} turnos hoy
+                </p>
+              </div>
             </div>
-            <div className="card p-4">
-              <p className="text-xs text-textsec">Turnos disponibles</p>
-              <p className="text-2xl font-bold mt-1">{totals.availSessions}</p>
-              <p className="text-[11px] text-textsec mt-1">
-                {sessions.length} turnos hoy
-              </p>
-            </div>
+          </div>
+
+          {/* Reserva Rápida y Gestión en grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AdminQuickBooking />
+            <AdminBookingsManager />
           </div>
 
           {/* CTA gestionar */}
@@ -325,9 +280,7 @@ if (ids.length) {
             Gestionar Turnos
           </button>
         </div>
-        </div>
-      </AppContainer>
-      <AdminBottomNav active="dashboard" />
+      </div>
     </AdminGuard>
   )
 }

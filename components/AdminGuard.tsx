@@ -1,27 +1,20 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { useRequireAdmin } from '@/lib/hooks/useAuth'
 
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const [ok, setOk] = useState(false)
+  const { isAdmin, checking } = useRequireAdmin()
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/login'); return }
-      // Eres admin si estás en admin_users
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('user_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-  if (error || !data) { console.warn('Acceso restringido a administradores'); router.replace('/'); return }
-      setOk(true)
-    })()
-  }, [router])
+  if (checking) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <p className="text-textsec">Verificando acceso...</p>
+      </div>
+    )
+  }
 
-  if (!ok) return <div className="p-5">Cargando…</div>
+  if (!isAdmin) {
+    return null
+  }
+
   return <>{children}</>
 }

@@ -8,8 +8,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 import AdminGuard from '@/components/AdminGuard'
-import AdminBottomNav from '@/components/AdminBottomNav'
-import AppContainer from '@/components/AppContainer'
 
 type Session = {
   id: string
@@ -76,8 +74,7 @@ export default function AdminSessionsCalendar() {
 
   // data del mes y del día
   const [monthSessions, setMonthSessions] = useState<Session[]>([])
-  const [daySessions, setDaySessions] = useState<Session[]>([])
-  const [dayRoster, setDayRoster] = useState<Record<string, RosterLine[]>>({})
+  const [weekRoster, setWeekRoster] = useState<Record<string, RosterLine[]>>({})
 
   // UI menus
   const [openMonthMenu, setOpenMonthMenu] = useState(false)
@@ -103,50 +100,74 @@ export default function AdminSessionsCalendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month])
 
-  /* ----- cargar sesiones/roster del día ----- */
-  useEffect(() => {
-    const y = Number(selectedYMD.slice(0, 4))
-    const m = Number(selectedYMD.slice(5, 7)) - 1
-    const d = Number(selectedYMD.slice(8, 10))
-    const start = new Date(y, m, d, 0, 0, 0, 0)
-    const end = new Date(y, m, d, 23, 59, 59, 999)
-    ;(async () => {
-      const { data: ses, error: e1 } = await supabase
-        .from('sessions')
-        .select('id,start_at,end_at,status')
-        .gte('start_at', isoLocal(start))
-        .lte('start_at', isoLocal(end))
-        .order('start_at', { ascending: true })
-      if (e1) {
-        toast.push({ message: e1.message, type: 'error' })
-        return
-      }
-      setDaySessions((ses || []) as Session[])
+  /* ----- sesiones de la semana (derivado del mes) ----- */
+  const weekSessionsMap = useMemo(() => {
+    if (!monthSessions.length) return {}
+    const monday = mondayOf(selectedYMD)
+    const sunday = sundayOf(selectedYMD)
+    const startDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime()
+    const endDay = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate()).getTime()
+    const byDay: Record<string, Session[]> = {}
+    monthSessions.forEach((session) => {
+      const dt = new Date(session.start_at)
+      const dayStamp = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime()
+      if (dayStamp < startDay || dayStamp > endDay) return
+      const ymd = ymdLocal(dt)
+      if (!byDay[ymd]) byDay[ymd] = []
+      byDay[ymd].push(session)
+    })
+    Object.values(byDay).forEach((list) =>
+      list.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    )
+    return byDay
+  }, [monthSessions, selectedYMD])
 
-      const ids = (ses || []).map((s) => s.id)
-      if (!ids.length) {
-        setDayRoster({})
-        return
-      }
-      const { data: rr, error: e2 } = await supabase
+  const weekSessionIds = useMemo(() => {
+    const ids = Object.values(weekSessionsMap).flat().map((s) => s.id)
+    ids.sort()
+    return ids
+  }, [weekSessionsMap])
+
+  useEffect(() => {
+    if (!weekSessionIds.length) {
+      setWeekRoster({})
+      return
+    }
+    ;(async () => {
+      const { data, error } = await supabase
         .from('admin_roster_by_distance')
         .select('session_id,distance_m,targets,reserved_count')
-        .in('session_id', ids as string[])
-      if (e2) {
-        toast.push({ message: e2.message, type: 'error' })
+        .in('session_id', weekSessionIds as string[])
+      if (error) {
+        toast.push({ message: error.message, type: 'error' })
         return
       }
       const grouped: Record<string, RosterLine[]> = {}
-      ;(rr || []).forEach((r: any) => {
-        if (!grouped[r.session_id]) grouped[r.session_id] = []
-        grouped[r.session_id].push(r as RosterLine)
+      ;(data || []).forEach((row: any) => {
+        if (!grouped[row.session_id]) grouped[row.session_id] = []
+        grouped[row.session_id].push(row as RosterLine)
       })
       Object.values(grouped).forEach((arr) =>
         arr.sort((a, b) => a.distance_m - b.distance_m)
       )
-      setDayRoster(grouped)
+      setWeekRoster(grouped)
     })()
-  }, [selectedYMD, monthSessions])
+  }, [weekSessionIds, toast])
+
+  const weekDays = useMemo(() => {
+    const monday = mondayOf(selectedYMD)
+    const days = Array.from({ length: 7 }, (_, idx) => {
+      const date = new Date(monday)
+      date.setDate(monday.getDate() + idx)
+      const ymd = ymdLocal(date)
+      return {
+        date,
+        ymd,
+        sessions: weekSessionsMap[ymd] || [],
+      }
+    })
+    return days.filter((day) => day.sessions.length > 0)
+  }, [selectedYMD, weekSessionsMap])
 
   /* ----- resumen por día (para marcar calendario) ----- */
   const daySummary = useMemo(() => {
@@ -231,27 +252,36 @@ export default function AdminSessionsCalendar() {
 
   /* ----- util ocupación/cupos ----- */
   const capacityOf = (sessionId: string) =>
-    (dayRoster[sessionId] || []).reduce((t, r) => t + r.targets * 4, 0)
+    (weekRoster[sessionId] || []).reduce((t, r) => t + r.targets * 4, 0)
   const occupiedOf = (sessionId: string) =>
-    (dayRoster[sessionId] || []).reduce((t, r) => t + r.reserved_count, 0)
+    (weekRoster[sessionId] || []).reduce((t, r) => t + r.reserved_count, 0)
+
+  const weekRangeLabel = useMemo(() => {
+    const monday = mondayOf(selectedYMD)
+    const sunday = sundayOf(selectedYMD)
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '')
+    return `${fmt(monday)} – ${fmt(sunday)}`
+  }, [selectedYMD])
 
   /* ============ UI ============ */
   return (
     <AdminGuard>
-      <AppContainer title="Turnos">
-        <div className="flex flex-col">
-
+      <div className="space-y-6">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center gap-3">
-          <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>←</button>
-          <h1 className="text-lg font-semibold">Turnos</h1>
+        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8 py-3">
+          <div className="flex items-center gap-3">
+            <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>←</button>
+            <h1 className="text-lg font-semibold">Turnos</h1>
+          </div>
         </div>
 
-        {/* Contenido scroll */}
-        <div className="flex-1 overflow-y-auto px-4 pb-36">
-
-          {/* Calendario compacto */}
-          <div className="card p-4 mt-4">
+        {/* Layout responsivo: 1 col en móvil, 2 cols en desktop */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* COLUMNA IZQUIERDA: Calendario */}
+          <div className="lg:col-span-5 xl:col-span-4">
+            <div className="card p-4 lg:sticky lg:top-24">{/* Calendario compacto */}
             <div className="flex items-center justify-between mb-3">
               <button className="btn-ghost" onClick={goPrevMonth}>‹</button>
               <div className="font-medium capitalize">{monthLabel}</div>
@@ -313,91 +343,150 @@ export default function AdminSessionsCalendar() {
                 )
               })}
             </div>
+
+            {/* Botón copiar semana - dentro del card */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <button className="btn w-full" onClick={copyWeek}>
+                Copiar semana → siguiente
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMNA DERECHA: Turnos de la semana */}
+        <div className="lg:col-span-7 xl:col-span-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
+            <button className="btn-outline text-sm" onClick={() => router.push('/admin/sesiones/editar/new')}>
+              + Nuevo turno
+            </button>
           </div>
 
-          {/* Título del día */}
-          <h2 className="mt-6 mb-2 font-semibold">
-            {new Date(selectedYMD + 'T00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </h2>
-
-          {/* Lista de turnos */}
-          <div className="space-y-3">
-            {daySessions.length === 0 && (
-              <p className="text-textsec">Sin turnos. Pulsa el botón “+” para crear.</p>
+          <div className="grid gap-3 auto-cols-fr" style={{ gridTemplateColumns: `repeat(${weekDays.length || 1}, minmax(0, 1fr))` }}>
+            {weekDays.length === 0 && (
+              <div className="col-span-full card p-6 text-center text-sm text-textsec">
+                No hay turnos programados en esta semana.
+              </div>
             )}
-
-            {daySessions.map(s => {
-              const start = new Date(s.start_at)
-              const end = new Date(s.end_at)
-              const cap = capacityOf(s.id)
-              const occ = occupiedOf(s.id)
-              const available = Math.max(cap - occ, 0)
-              const isCancelled = s.status === 'cancelled'
+            {weekDays.map(({ date, ymd, sessions }) => {
+              const isSelected = ymd === selectedYMD
+              const dayLabel = date.toLocaleDateString('es', {
+                weekday: 'short',
+              })
+              const dayNumber = date.getDate()
 
               return (
-                <div key={s.id} className="card p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">
-                        {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {' – '}
-                        {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      <div className="text-xs text-textsec mt-1">
-                        {isCancelled ? 'Cancelada' : 'Programada'}
-                      </div>
-                    </div>
+                <div
+                  key={ymd}
+                  className={`card p-3 space-y-2 transition-colors ${
+                    isSelected ? 'ring-2 ring-accent/60' : ''
+                  }`}
+                >
+                  <button
+                    className="flex w-full items-center justify-between text-xs uppercase tracking-wide text-textsec"
+                    onClick={() => setSelectedYMD(ymd)}
+                  >
+                    <span>{dayLabel}</span>
+                    <span className="text-sm text-textpri">{dayNumber}</span>
+                  </button>
 
-                    <div className="flex items-center gap-2">
-                      <span className={`px-3 py-1 rounded-full text-sm ${available > 0 ? 'bg-white/10' : 'bg-danger/20'}`}>
-                        Cupos: {available}
-                      </span>
+                  {sessions.length === 0 && (
+                    <p className="text-[11px] text-textsec/70">Sin turnos</p>
+                  )}
 
-                      <div className="relative">
-                        <button className="btn-ghost !px-3" onClick={() => setOpenCardMenu(prev => prev === s.id ? null : s.id)}>⋮</button>
-                        {openCardMenu === s.id && (
-                          <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-card shadow-xl z-20">
-                            <Link className="block px-3 py-2 hover:bg-white/5" href={`/admin/roster/${s.id}`}>Ver roster</Link>
-                            <Link className="block px-3 py-2 hover:bg-white/5" href={`/admin/sesiones/editar/${s.id}`}>Editar</Link>
-                            <button className="w-full text-left px-3 py-2 hover:bg-white/5" onClick={() => cancelSession(s.id, false)}>
-                              Cancelar turno
-                            </button>
-                            <button className="w-full text-left px-3 py-2 hover:bg-white/5" onClick={() => cancelSession(s.id, true)}>
-                              Cancelar + reembolso
-                            </button>
+                  <div className="space-y-2">
+                    {sessions.map((s) => {
+                      const start = new Date(s.start_at)
+                      const end = new Date(s.end_at)
+                      const cap = capacityOf(s.id)
+                      const occ = occupiedOf(s.id)
+                      const available = Math.max(cap - occ, 0)
+                      const isCancelled = s.status === 'cancelled'
+
+                      return (
+                        <div
+                          key={s.id}
+                          className="rounded-lg border border-white/10 bg-bg/70 p-2 text-[11px]"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-textpri">
+                              {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded ${
+                                isCancelled ? 'bg-danger/20 text-danger' : 'bg-success/20 text-success'
+                              }`}
+                            >
+                              {isCancelled ? 'Cancelada' : 'Programada'}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    </div>
+                          <div className="mt-1 flex items-center justify-between text-[10px] text-textsec">
+                            <span>
+                              Ocupación {occ}/{cap}
+                            </span>
+                            <span className={available > 0 ? 'text-success font-semibold' : 'text-danger font-semibold'}>
+                              {available > 0 ? `${available} libres` : 'Completo'}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-end">
+                            <div className="relative">
+                              <button
+                                className="btn-ghost !px-2 !py-1 text-xs"
+                                onClick={() => setOpenCardMenu((prev) => (prev === s.id ? null : s.id))}
+                              >
+                                ⋮
+                              </button>
+                              {openCardMenu === s.id && (
+                                <div className="absolute right-0 top-6 w-44 rounded-xl border border-white/10 bg-card shadow-xl z-30">
+                                  <Link
+                                    className="block px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
+                                    href={`/admin/roster/${s.id}`}
+                                  >
+                                    📋 Ver roster
+                                  </Link>
+                                  <Link
+                                    className="block px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
+                                    href={`/admin/sesiones/editar/${s.id}`}
+                                  >
+                                    ✏️ Editar
+                                  </Link>
+                                  <button
+                                    className="w-full text-left px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
+                                    onClick={() => cancelSession(s.id, false)}
+                                  >
+                                    ❌ Cancelar turno
+                                  </button>
+                                  <button
+                                    className="w-full text-left px-3 py-2 text-[11px] text-warning hover:bg-white/5 transition-colors"
+                                    onClick={() => cancelSession(s.id, true)}
+                                  >
+                                    💰 Cancelar + reembolso
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
+      </div>
 
-        {/* FAB + (elevado para que quede por encima de otros elementos) */}
-        <button
-          className="fixed bottom-24 right-6 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
-                     flex items-center justify-center shadow-lg hover:brightness-110 z-50"
+      {/* FAB + para crear turno */}
+      <button
+        className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
+                     flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
           title="Nuevo turno"
           onClick={() => router.push('/admin/sesiones/editar/new')}
         >
           +
         </button>
-
-        {/* Botón ancho: copiar semana → siguiente */}
-  <div className="fixed left-0 right-0 bottom-20 z-10 pointer-events-auto">
-          <div className="mx-auto max-w-md px-4">
-            <button className="btn w-full" onClick={copyWeek}>
-              Copiar semana → siguiente
-            </button>
-          </div>
-        </div>
-        </div>
-      </AppContainer>
-      <AdminBottomNav active="turnos" />
-
+      </div>
     </AdminGuard>
   )
 }

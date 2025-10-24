@@ -5,7 +5,6 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
-import AdminBottomNav from '@/components/AdminBottomNav'
 
 type Membership = {
   id: string
@@ -95,18 +94,18 @@ export default function AdminMemberships() {
 
   return (
     <AdminGuard>
-      <div className="min-h-screen flex flex-col">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Membresías</h1>
-          <button className="btn-outline" onClick={load}>Actualizar</button>
+        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8 py-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold">Membresías</h1>
+            <button className="btn-outline" onClick={load}>Actualizar</button>
+          </div>
         </div>
 
-        {/* Contenido */}
-        <div className="flex-1 overflow-y-auto px-4 pb-28">
-          {/* Formulario “rápido” para crear */}
-          {showForm && (
-            <div className="card p-4 mt-4 grid gap-3">
+        {/* Formulario rápido para crear */}
+        {showForm && (
+          <div className="card p-4 grid gap-3">
               <div className="grid gap-2">
                 <label className="text-sm text-textsec">Nombre de la membresía</label>
                 <input className="input" value={name} onChange={e => setName(e.target.value)} />
@@ -130,77 +129,91 @@ export default function AdminMemberships() {
             </div>
           )}
 
-          {/* Lista */}
-          <div className="grid gap-3 mt-4">
-            {loading && <p className="text-textsec">Cargando…</p>}
-            {!loading && list.length === 0 && (
-              <p className="text-textsec">No hay membresías aún. Crea una con el botón “+”.</p>
-            )}
+        {/* Grid de tarjetas de membresías */}
+        <div>
+          {loading && <p className="text-textsec">Cargando…</p>}
+          {!loading && list.length === 0 && (
+            <div className="card p-8 text-center">
+              <p className="text-textsec mb-4">No hay membresías aún</p>
+              <button className="btn" onClick={() => setShowForm(true)}>
+                + Crear primera membresía
+              </button>
+            </div>
+          )}
 
-            {list.map(m => (
-              <div key={m.id} className="card p-4">
-                {editingId === m.id ? (
-                  <div className="grid gap-3">
-                    <div className="grid gap-2">
-                      <label className="text-sm text-textsec">Nombre</label>
-                      <input className="input" value={editName} onChange={e => setEditName(e.target.value)} />
+          {!loading && list.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {list.map(m => (
+                <div key={m.id} className="card p-4 hover:bg-white/5 transition-colors">
+                  {editingId === m.id ? (
+                    <div className="grid gap-3">
+                      <div className="grid gap-2">
+                        <label className="text-xs text-textsec">Nombre</label>
+                        <input className="input text-sm" value={editName} onChange={e => setEditName(e.target.value)} />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-xs text-textsec">Clases</label>
+                        <input
+                          className="input w-full text-sm"
+                          type="number"
+                          min={0}
+                          value={editClasses}
+                          onChange={e => setEditClasses(Number(e.target.value || 0))}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-xs text-textsec">Estado</label>
+                        <select
+                          className="input w-full text-sm"
+                          value={String(editActive)}
+                          onChange={e => setEditActive(e.target.value === 'true')}
+                        >
+                          <option value="true">Activa</option>
+                          <option value="false">Inactiva</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="btn text-xs flex-1" onClick={saveEdit}>Guardar</button>
+                        <button className="btn-outline text-xs flex-1" onClick={() => setEditingId(null)}>Cancelar</button>
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm text-textsec">Clases predeterminadas</label>
-                      <input
-                        className="input w-32"
-                        type="number"
-                        min={0}
-                        value={editClasses}
-                        onChange={e => setEditClasses(Number(e.target.value || 0))}
-                      />
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <div className="text-center">
+                        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-accent/20 text-accent text-2xl font-bold mb-2">
+                          {m.default_classes}
+                        </div>
+                        <p className="font-medium text-lg">{m.name}</p>
+                        <p className="text-sm text-textsec mt-1">{m.default_classes} clases</p>
+                        <span className={`inline-block mt-2 text-xs px-3 py-1 rounded-full ${
+                          m.is_active ? 'bg-success/20 text-success' : 'bg-danger/20 text-danger'
+                        }`}>
+                          {m.is_active ? '● Activa' : '● Inactiva'}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="btn-outline text-xs flex-1" onClick={() => startEdit(m)}>Editar</button>
+                        <button className="btn-outline text-xs flex-1 text-danger" onClick={() => remove(m.id)}>Eliminar</button>
+                      </div>
                     </div>
-                    <div className="grid gap-2">
-                      <label className="text-sm text-textsec">Estado</label>
-                      <select
-                        className="input w-40"
-                        value={String(editActive)}
-                        onChange={e => setEditActive(e.target.value === 'true')}
-                      >
-                        <option value="true">Activa</option>
-                        <option value="false">Inactiva</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <button className="btn" onClick={saveEdit}>Guardar cambios</button>
-                      <button className="btn-outline" onClick={() => setEditingId(null)}>Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{m.name}</p>
-                      <p className="text-sm text-textsec">Clases: {m.default_classes} · {m.is_active ? 'Activa' : 'Inactiva'}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button className="btn-outline" onClick={() => startEdit(m)}>Editar</button>
-                      <button className="btn-outline" onClick={() => remove(m.id)}>Eliminar</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* FAB + */}
         {!showForm && (
           <button
-            className="fixed bottom-20 right-6 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
-                       flex items-center justify-center shadow-lg hover:brightness-110"
+            className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
+                       flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
             title="Nueva membresía"
             onClick={() => setShowForm(true)}
           >
             +
           </button>
         )}
-
-        <AdminBottomNav active="membresias" />
       </div>
     </AdminGuard>
   )

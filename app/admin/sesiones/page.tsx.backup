@@ -1,0 +1,401 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useToast } from '@/components/ui/ToastProvider'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
+
+import AdminGuard from '@/components/AdminGuard'
+
+type Session = {
+  id: string
+  start_at: string
+  end_at: string
+  status: 'scheduled' | 'cancelled'
+}
+
+type RosterLine = {
+  session_id: string
+  distance_m: number
+  targets: number
+  reserved_count: number
+}
+
+/* ======== helpers (LOCAL, NO UTC) ======== */
+// yyyy-mm-dd en HORA LOCAL
+function ymdLocal(date: Date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+// ISO preservando hora local para consultar en DB
+function isoLocal(date: Date) {
+  return new Date(
+    Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      date.getHours(),
+      date.getMinutes(),
+      date.getSeconds(),
+      date.getMilliseconds()
+    )
+  ).toISOString()
+}
+function monthBoundsLocal(y: number, m: number) {
+  const start = new Date(y, m, 1, 0, 0, 0, 0)
+  const end = new Date(y, m + 1, 0, 23, 59, 59, 999)
+  return { startISO: isoLocal(start), endISO: isoLocal(end) }
+}
+function mondayOf(ymd: string) {
+  const d = new Date(ymd + 'T00:00')
+  const iso = d.getDay() === 0 ? 7 : d.getDay()
+  d.setDate(d.getDate() - (iso - 1))
+  return d
+}
+function sundayOf(ymd: string) {
+  const m = mondayOf(ymd)
+  const s = new Date(m)
+  s.setDate(m.getDate() + 6)
+  return s
+}
+
+export default function AdminSessionsCalendar() {
+  const router = useRouter()
+  const toast = useToast()
+  const confirm = useConfirm()
+  const today = new Date()
+  const [year, setYear] = useState<number>(today.getFullYear())
+  const [month, setMonth] = useState<number>(today.getMonth())
+  const [selectedYMD, setSelectedYMD] = useState<string>(ymdLocal(today))
+
+  // data del mes y del día
+  const [monthSessions, setMonthSessions] = useState<Session[]>([])
+  const [daySessions, setDaySessions] = useState<Session[]>([])
+  const [dayRoster, setDayRoster] = useState<Record<string, RosterLine[]>>({})
+
+  // UI menus
+  const [openMonthMenu, setOpenMonthMenu] = useState(false)
+  const [openCardMenu, setOpenCardMenu] = useState<string | null>(null)
+
+  /* ----- cargar sesiones del mes ----- */
+  const loadMonth = async (y = year, m = month) => {
+    const { startISO, endISO } = monthBoundsLocal(y, m)
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('id,start_at,end_at,status')
+      .gte('start_at', startISO)
+      .lte('start_at', endISO)
+      .order('start_at', { ascending: true })
+    if (error) {
+      toast.push({ message: error.message, type: 'error' })
+      return
+    }
+    setMonthSessions((data || []) as Session[])
+  }
+  useEffect(() => {
+    loadMonth()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month])
+
+  /* ----- cargar sesiones/roster del día ----- */
+  useEffect(() => {
+    const y = Number(selectedYMD.slice(0, 4))
+    const m = Number(selectedYMD.slice(5, 7)) - 1
+    const d = Number(selectedYMD.slice(8, 10))
+    const start = new Date(y, m, d, 0, 0, 0, 0)
+    const end = new Date(y, m, d, 23, 59, 59, 999)
+    ;(async () => {
+      const { data: ses, error: e1 } = await supabase
+        .from('sessions')
+        .select('id,start_at,end_at,status')
+        .gte('start_at', isoLocal(start))
+        .lte('start_at', isoLocal(end))
+        .order('start_at', { ascending: true })
+      if (e1) {
+        toast.push({ message: e1.message, type: 'error' })
+        return
+      }
+      setDaySessions((ses || []) as Session[])
+
+      const ids = (ses || []).map((s) => s.id)
+      if (!ids.length) {
+        setDayRoster({})
+        return
+      }
+      const { data: rr, error: e2 } = await supabase
+        .from('admin_roster_by_distance')
+        .select('session_id,distance_m,targets,reserved_count')
+        .in('session_id', ids as string[])
+      if (e2) {
+        toast.push({ message: e2.message, type: 'error' })
+        return
+      }
+      const grouped: Record<string, RosterLine[]> = {}
+      ;(rr || []).forEach((r: any) => {
+        if (!grouped[r.session_id]) grouped[r.session_id] = []
+        grouped[r.session_id].push(r as RosterLine)
+      })
+      Object.values(grouped).forEach((arr) =>
+        arr.sort((a, b) => a.distance_m - b.distance_m)
+      )
+      setDayRoster(grouped)
+    })()
+  }, [selectedYMD, monthSessions])
+
+  /* ----- resumen por día (para marcar calendario) ----- */
+  const daySummary = useMemo(() => {
+    const map: Record<string, { scheduled: number; cancelled: number }> = {}
+    monthSessions.forEach((s) => {
+      // ¡LOCAL! no uses toISOString aqui
+      const dt = new Date(s.start_at)
+      const ymd = ymdLocal(dt)
+      if (!map[ymd]) map[ymd] = { scheduled: 0, cancelled: 0 }
+      if (s.status === 'scheduled') map[ymd].scheduled++
+      else map[ymd].cancelled++
+    })
+    return map
+  }, [monthSessions])
+
+  /* ----- grilla 6 semanas ----- */
+  const gridDays = useMemo(() => {
+    const first = new Date(year, month, 1)
+    const startIndex = first.getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const cells: { ymd: string; inMonth: boolean; isToday: boolean }[] = []
+    for (let i = 0; i < startIndex; i++) {
+      const d = new Date(year, month, i - startIndex + 1)
+      cells.push({ ymd: ymdLocal(d), inMonth: false, isToday: false })
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(year, month, d)
+      const isToday = ymdLocal(dt) === ymdLocal(new Date())
+      cells.push({ ymd: ymdLocal(dt), inMonth: true, isToday })
+    }
+    while (cells.length < 42) {
+      const last = new Date(cells[cells.length - 1].ymd + 'T00:00')
+      last.setDate(last.getDate() + 1)
+      cells.push({ ymd: ymdLocal(last), inMonth: false, isToday: false })
+    }
+    return cells
+  }, [year, month])
+
+  /* ----- acciones ----- */
+  const goPrevMonth = () => {
+    const d = new Date(year, month - 1, 1)
+    setYear(d.getFullYear())
+    setMonth(d.getMonth())
+  }
+  const goNextMonth = () => {
+    const d = new Date(year, month + 1, 1)
+    setYear(d.getFullYear())
+    setMonth(d.getMonth())
+  }
+
+  const cancelSession = async (sessionId: string, refund: boolean) => {
+    const ok = await confirm(`¿Cancelar esta sesión${refund ? ' con reembolso' : ''}?`)
+    if (!ok) return
+    const { data, error } = await supabase.rpc('admin_cancel_session', {
+      p_session: sessionId,
+      p_refund: refund,
+    })
+    if (error) return toast.push({ message: error.message, type: 'error' })
+    toast.push({ message: `Sesión cancelada. Reservas afectadas: ${data ?? 0}`, type: 'success' })
+    setOpenCardMenu(null)
+    await loadMonth()
+  }
+
+  const copyWeek = async () => {
+    const mon = mondayOf(selectedYMD)
+    const sun = sundayOf(selectedYMD)
+    const fmt = (d: Date) => ymdLocal(d)
+    if (!(await confirm(`¿Copiar los turnos de la semana ${fmt(mon)} a ${fmt(sun)} hacia la semana siguiente?`))) return
+    const { data, error } = await supabase.rpc('admin_copy_week', {
+      p_ref_date: selectedYMD,
+    })
+    if (error) return toast.push({ message: error.message, type: 'error' })
+    setOpenMonthMenu(false)
+    toast.push({ message: `Semana copiada. Turnos creados: ${data ?? 0}`, type: 'success' })
+    await loadMonth()
+  }
+
+  const monthLabel = new Date(year, month, 1).toLocaleDateString('es', {
+    month: 'long',
+    year: 'numeric',
+  })
+
+  /* ----- util ocupación/cupos ----- */
+  const capacityOf = (sessionId: string) =>
+    (dayRoster[sessionId] || []).reduce((t, r) => t + r.targets * 4, 0)
+  const occupiedOf = (sessionId: string) =>
+    (dayRoster[sessionId] || []).reduce((t, r) => t + r.reserved_count, 0)
+
+  /* ============ UI ============ */
+  return (
+    <AdminGuard>
+      <AppContainer title="Turnos">
+        <div className="flex flex-col">
+
+        {/* Top bar */}
+        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center gap-3">
+          <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>←</button>
+          <h1 className="text-lg font-semibold">Turnos</h1>
+        </div>
+
+        {/* Contenido scroll */}
+        <div className="flex-1 overflow-y-auto px-4 pb-36">
+
+          {/* Calendario compacto */}
+          <div className="card p-4 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <button className="btn-ghost" onClick={goPrevMonth}>‹</button>
+              <div className="font-medium capitalize">{monthLabel}</div>
+              <div className="relative">
+                <button className="btn-ghost" onClick={() => setOpenMonthMenu(v => !v)}>⋮</button>
+                {openMonthMenu && (
+                  <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-card shadow-xl z-20">
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-white/5"
+                      onClick={copyWeek}
+                    >
+                      Copiar semana → siguiente
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button className="btn-ghost" onClick={goNextMonth}>›</button>
+            </div>
+
+            {/* cabecera días */}
+            <div className="grid grid-cols-7 text-center text-xs text-textsec pb-2">
+              {['D','L','M','M','J','V','S'].map(d => <div key={d}>{d}</div>)}
+            </div>
+
+            {/* celdas */}
+            <div className="grid grid-cols-7 gap-2">
+              {gridDays.map(cell => {
+                const sum = daySummary[cell.ymd] || { scheduled: 0, cancelled: 0 }
+                const isSelected = cell.ymd === selectedYMD
+                const hasProg = sum.scheduled > 0
+                const hasCanc = !hasProg && sum.cancelled > 0
+
+                const base = 'rounded-xl p-2 text-left border transition'
+                const offMonth = 'bg-transparent border-transparent text-textsec/50'
+                const neutral = 'bg-card border-white/5'
+                const blue = 'bg-info/10 border-info/30'
+                const red = 'bg-danger/10 border-danger/30'
+                const cls =
+                  (cell.inMonth ? (hasProg ? blue : hasCanc ? red : neutral) : offMonth) +
+                  (isSelected ? ' ring-2 ring-accent/60' : '')
+
+                return (
+                  <button
+                    key={cell.ymd}
+                    onClick={() => setSelectedYMD(cell.ymd)}
+                    className={base + ' ' + cls}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{Number(cell.ymd.slice(8,10))}</span>
+                      {cell.isToday && (
+                        <span className="text-[10px] px-1 rounded bg-accent text-black">hoy</span>
+                      )}
+                    </div>
+                    <div className="mt-1 space-y-1">
+                      {sum.scheduled > 0 && (<div className="text-[10px] text-info">● {sum.scheduled} prog.</div>)}
+                      {sum.cancelled > 0 && (<div className="text-[10px] text-danger">● {sum.cancelled} canc.</div>)}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Título del día */}
+          <h2 className="mt-6 mb-2 font-semibold">
+            {new Date(selectedYMD + 'T00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </h2>
+
+          {/* Lista de turnos */}
+          <div className="space-y-3">
+            {daySessions.length === 0 && (
+              <p className="text-textsec">Sin turnos. Pulsa el botón “+” para crear.</p>
+            )}
+
+            {daySessions.map(s => {
+              const start = new Date(s.start_at)
+              const end = new Date(s.end_at)
+              const cap = capacityOf(s.id)
+              const occ = occupiedOf(s.id)
+              const available = Math.max(cap - occ, 0)
+              const isCancelled = s.status === 'cancelled'
+
+              return (
+                <div key={s.id} className="card p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium">
+                        {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {' – '}
+                        {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="text-xs text-textsec mt-1">
+                        {isCancelled ? 'Cancelada' : 'Programada'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-full text-sm ${available > 0 ? 'bg-white/10' : 'bg-danger/20'}`}>
+                        Cupos: {available}
+                      </span>
+
+                      <div className="relative">
+                        <button className="btn-ghost !px-3" onClick={() => setOpenCardMenu(prev => prev === s.id ? null : s.id)}>⋮</button>
+                        {openCardMenu === s.id && (
+                          <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-card shadow-xl z-20">
+                            <Link className="block px-3 py-2 hover:bg-white/5" href={`/admin/roster/${s.id}`}>Ver roster</Link>
+                            <Link className="block px-3 py-2 hover:bg-white/5" href={`/admin/sesiones/editar/${s.id}`}>Editar</Link>
+                            <button className="w-full text-left px-3 py-2 hover:bg-white/5" onClick={() => cancelSession(s.id, false)}>
+                              Cancelar turno
+                            </button>
+                            <button className="w-full text-left px-3 py-2 hover:bg-white/5" onClick={() => cancelSession(s.id, true)}>
+                              Cancelar + reembolso
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* FAB + (elevado para que quede por encima de otros elementos) */}
+        <button
+          className="fixed bottom-24 right-6 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
+                     flex items-center justify-center shadow-lg hover:brightness-110 z-50"
+          title="Nuevo turno"
+          onClick={() => router.push('/admin/sesiones/editar/new')}
+        >
+          +
+        </button>
+
+        {/* Botón ancho: copiar semana → siguiente */}
+  <div className="fixed left-0 right-0 bottom-20 z-10 pointer-events-auto">
+          <div className="mx-auto max-w-md px-4">
+            <button className="btn w-full" onClick={copyWeek}>
+              Copiar semana → siguiente
+            </button>
+          </div>
+        </div>
+        </div>
+      </AppContainer>
+      <AdminBottomNav active="turnos" />
+
+    </AdminGuard>
+  )
+}

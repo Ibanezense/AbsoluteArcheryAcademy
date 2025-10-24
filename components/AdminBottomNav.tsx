@@ -45,9 +45,9 @@ const AdminBottomNav = memo(function AdminBottomNav({ active }: Props) {
     <nav
       role="navigation"
       aria-label="Admin bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[430px] border-t border-white/10 bg-card/95 backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-card/95 backdrop-blur"
     >
-      <div className="flex px-4 py-2">
+      <div className="mx-auto flex max-w-7xl px-4 py-2 lg:px-8">
         {items.map(({ key, href, Icon, label }) => (
           <NavItem key={key} href={href} Icon={Icon} label={label} active={active === key} />
         ))}

@@ -196,7 +196,7 @@ $$;
 
 grant execute on function book_session(uuid) to authenticated;
 
--- RPC: cancel_booking (si cancela con 12h de anticipación, devuelve crédito)
+-- RPC: cancel_booking (siempre devuelve crédito al cancelar)
 create or replace function cancel_booking(p_booking uuid)
 returns bookings
 language plpgsql
@@ -223,9 +223,8 @@ begin
 
   update bookings set status = 'cancelled' where id = p_booking returning * into v_booking;
 
-  if v_session.start_at - interval '12 hours' > now() then
-    update profiles set classes_remaining = classes_remaining + 1 where id = v_user;
-  end if;
+  -- Siempre devolver el crédito al cancelar (sin restricción de tiempo)
+  update profiles set classes_remaining = classes_remaining + 1 where id = v_user;
 
   return v_booking;
 end;

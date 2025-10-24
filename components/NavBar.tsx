@@ -1,9 +1,8 @@
 "use client"
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { supabase } from '@/lib/supabaseClient'
-import { useToast } from '@/components/ui/ToastProvider'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { Home, CalendarDays, List, LogOut, type LucideProps } from 'lucide-react'
 import type { ComponentType } from 'react'
 
@@ -15,17 +14,7 @@ const items: { href: string; label: string; Icon: ComponentType<LucideProps> }[]
 
 export default function NavBar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const toast = useToast()
-
-  const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) {
-      toast.push({ message: error.message, type: 'error' })
-      return
-    }
-    router.replace('/login')
-  }
+  const { signOut } = useAuth()
 
   return (
     <nav
@@ -60,7 +49,7 @@ export default function NavBar() {
         {/* Logout button */}
         <li>
           <button
-            onClick={handleSignOut}
+            onClick={signOut}
             className={clsx('flex flex-col items-center justify-center py-3 text-sm transition text-textsec hover:text-textpri gap-1')}
             aria-label="Cerrar sesión"
           >

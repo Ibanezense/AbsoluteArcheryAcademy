@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation'
 import AdminBottomNav, { type Tab } from '@/components/AdminBottomNav'
-import Providers from '@/components/Providers'
 import { useMemo } from 'react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -17,8 +16,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [pathname])
 
   return (
-    <Providers>
-      <>
+    <>
       {/* Ocultar SIEMPRE la barra pública dentro de /admin (CSS + refuerzo JS) */}
       <style jsx global>{`
         #global-nav { display: none !important; }
@@ -29,13 +27,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {`(function(){try{const el=document.getElementById('global-nav');if(el){el.style.display='none';el.setAttribute('aria-hidden','true');}}catch(e){}})()`}
       </script>
 
-      {/* Contenido del admin con ancho móvil y padding para la barra */}
-        <div className="mx-auto w-full max-w-[480px] px-4 pb-24">
+      {/* Contenido del admin con ancho completo */}
+      <main className="w-full px-4 pb-24 lg:px-8 lg:pb-28">
+        <div className="mx-auto max-w-7xl">
           {children}
         </div>
+      </main>
 
-        <AdminBottomNav active={active} />
-      </>
-    </Providers>
+      <AdminBottomNav active={active} />
+    </>
   )
 }

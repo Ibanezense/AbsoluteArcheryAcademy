@@ -10,6 +10,8 @@ type Profile = {
   has_own_bow: boolean
   assigned_bow: boolean
   current_distance: number | null
+  classes_remaining: number | null
+  membership_end: string | null
 }
 
 type SessionRow = {
@@ -64,7 +66,7 @@ export default function ReservarPage() {
       // perfil
       const { data: p, error: e1 } = await supabase
         .from('profiles')
-        .select('group_type, has_own_bow, assigned_bow, current_distance')
+        .select('group_type, has_own_bow, assigned_bow, current_distance, classes_remaining, membership_end')
         .eq('id', user.id)
         .single()
       if (e1) { alert(e1.message); return }
@@ -172,9 +174,31 @@ export default function ReservarPage() {
   if (loading) return <div className="p-5">Cargando…</div>
 
   const monthName = month.toLocaleDateString('es', { month: 'long', year: 'numeric' })
+  
+  // Validar membresía vencida o sin clases
+  const isExpired = profile?.membership_end ? new Date(profile.membership_end) < new Date() : false
+  const hasNoClasses = (profile?.classes_remaining ?? 0) <= 0
+  const cannotBook = isExpired || hasNoClasses
 
   return (
     <div className="p-5 space-y-5">
+      {/* Alerta si no puede reservar */}
+      {cannotBook && (
+        <div className="rounded-2xl border border-warning/30 px-5 py-4 bg-warning/10">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="font-semibold text-warning">No puedes reservar clases</p>
+              <p className="text-sm text-textsec mt-1">
+                {isExpired 
+                  ? 'Tu membresía ha vencido. Contacta al administrador para renovarla.'
+                  : 'No tienes clases disponibles. Contacta al administrador para agregar más clases.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Reservar Clase</h1>
         <div className="flex gap-2">
@@ -246,7 +270,7 @@ export default function ReservarPage() {
             const end = new Date(s.end_at)
             const spots = spotsForUser(s)
             const isPast = start.getTime() <= Date.now()
-            const disabled = s.status !== 'scheduled' || spots <= 0 || isPast
+            const disabled = s.status !== 'scheduled' || spots <= 0 || isPast || cannotBook
 
             return (
               <div key={s.id} className="card p-4 flex items-center justify-between">
@@ -264,6 +288,7 @@ export default function ReservarPage() {
                 <button
                   className={`btn ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => reservar(s.id)}
+                  disabled={disabled}
                 >
                   Reservar
                 </button>

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import { supabase } from '@/lib/supabaseClient'
 import AdminBottomNav from '@/components/AdminBottomNav'
+import { parseDateFromSupabase } from '@/lib/utils/dateUtils'
 
 type GroupType = 'children' | 'youth' | 'adult' | 'assigned' | 'ownbow'
 
@@ -15,6 +16,7 @@ type Profile = {
   email?: string | null
   phone?: string | null
   group_type?: GroupType | null
+  distance_m?: number | null
   is_active?: boolean | null
   classes_remaining?: number | null
   membership_type?: string | null
@@ -50,6 +52,8 @@ const GRUPOS: { value: GroupType; label: string }[] = [
   { value: 'ownbow',   label: 'Arco propio' },
 ]
 
+const DISTANCIAS = [10, 15, 20, 30, 40, 50, 60, 70] as const
+
 export default function AlumnoEditor() {
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
@@ -60,6 +64,7 @@ export default function AlumnoEditor() {
     email: '',
     phone: '',
     group_type: 'adult',
+    distance_m: null,
     is_active: true,
     classes_remaining: 0,
     membership_type: '',
@@ -112,11 +117,13 @@ export default function AlumnoEditor() {
         email: p.email || '',
         phone: p.phone || '',
         group_type: (p.group_type as GroupType) || 'adult',
+        distance_m: p.distance_m ?? null,
         is_active: p.is_active ?? true,
         classes_remaining: p.classes_remaining ?? 0,
         membership_type: p.membership_type || '',
-        membership_start: p.membership_start || '',
-        membership_end: p.membership_end || '',
+        // Parsear fechas correctamente desde Supabase para evitar problemas de timezone
+        membership_start: parseDateFromSupabase(p.membership_start),
+        membership_end: parseDateFromSupabase(p.membership_end),
         avatar_url: p.avatar_url || '',
       })
       await loadProfileMemberships(p.id!)
@@ -146,14 +153,19 @@ export default function AlumnoEditor() {
       setSaving(false)
       return
     }
-    const payload: Partial<Profile> = {
+    // Preparar payload - enviar fechas como strings en formato YYYY-MM-DD
+    // para evitar conversiones de zona horaria
+    const payload: Partial<Profile> & { membership_start?: string; membership_end?: string } = {
       full_name: form.full_name,
       email: form.email || null,
       phone: form.phone || null,
       group_type: form.group_type || null,
+      distance_m: form.distance_m ?? null,
       is_active: form.is_active ?? true,
       classes_remaining: form.classes_remaining ?? 0,
       membership_type: form.membership_type || null,
+      // Las fechas ya vienen en formato YYYY-MM-DD del input type="date"
+      // Se envían como strings para que PostgreSQL las interprete como date sin conversión
       membership_start: form.membership_start || null,
       membership_end: form.membership_end || null,
       avatar_url: form.avatar_url || null,
@@ -172,7 +184,10 @@ export default function AlumnoEditor() {
   const [addTemplateId, setAddTemplateId] = useState<string>('')
   const [addName, setAddName] = useState('')
   const [addClasses, setAddClasses] = useState<number>(0)
-  const [addStart, setAddStart] = useState<string>(new Date().toISOString().slice(0,10))
+  const [addStart, setAddStart] = useState<string>(() => {
+    const today = new Date()
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  })
   const [addEnd, setAddEnd] = useState<string>('')
   const [addActive, setAddActive] = useState(true)
   const [addSaving, setAddSaving] = useState(false)
@@ -230,8 +245,9 @@ export default function AlumnoEditor() {
     setEditId(pm.id)
     setEditName(pm.name)
     setEditClasses(pm.classes_total)
-    setEditStart(pm.start_date)
-    setEditEnd(pm.end_date || '')
+    // Parsear fechas correctamente desde Supabase
+    setEditStart(parseDateFromSupabase(pm.start_date))
+    setEditEnd(parseDateFromSupabase(pm.end_date))
     setEditStatus(pm.status)
   }
 
@@ -331,8 +347,8 @@ export default function AlumnoEditor() {
                 />
               </div>
 
-              {/* Grupo + Estado */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Grupo + Distancia + Estado */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="grid gap-2">
                   <label className="text-sm text-textsec">Grupo</label>
                   <select
@@ -341,6 +357,18 @@ export default function AlumnoEditor() {
                     onChange={e => setForm(f => ({ ...f, group_type: e.target.value as GroupType }))}
                   >
                     {GRUPOS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm text-textsec">Distancia de práctica</label>
+                  <select
+                    className="input"
+                    value={form.distance_m ?? ''}
+                    onChange={e => setForm(f => ({ ...f, distance_m: e.target.value ? Number(e.target.value) : null }))}
+                  >
+                    <option value="">Sin asignar</option>
+                    {DISTANCIAS.map(d => <option key={d} value={d}>{d}m</option>)}
                   </select>
                 </div>
 
@@ -536,7 +564,7 @@ export default function AlumnoEditor() {
                               <p className="font-medium">{pm.name}</p>
                               <p className="text-sm text-textsec">
                                 {pm.status === 'active' ? 'Activa' : pm.status} · Clases: {pm.classes_total}
-                                {pm.start_date ? ` · ${pm.start_date}` : ''}{pm.end_date ? ` → ${pm.end_date}` : ''}
+                                {pm.start_date ? ` · ${parseDateFromSupabase(pm.start_date)}` : ''}{pm.end_date ? ` → ${parseDateFromSupabase(pm.end_date)}` : ''}
                               </p>
                             </div>
                             <div className="flex gap-2">
