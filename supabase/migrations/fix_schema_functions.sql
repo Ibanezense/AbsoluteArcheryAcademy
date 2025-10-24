@@ -80,7 +80,7 @@ BEGIN
   SELECT COUNT(*) INTO v_reserved_group
   FROM bookings
   WHERE session_id = p_session_id
-    AND group_type = p_group_type
+    AND group_type::text = p_group_type
     AND status = 'reserved';
 
   IF v_reserved_group >= v_capacity_group THEN

@@ -119,7 +119,7 @@ BEGIN
   -- Obtener límite de equipamiento para el grupo
   SELECT * INTO v_equipment
   FROM equipment_by_group
-  WHERE group_type = p_group_type;
+  WHERE group_type::text = p_group_type;
 
   IF v_equipment IS NULL THEN
     RETURN jsonb_build_object(
@@ -142,7 +142,7 @@ BEGIN
   WHERE session_id = p_session_id
     AND status = 'reserved'
     AND distance_m = p_distance_m
-    AND group_type = p_group_type;
+    AND group_type::text = p_group_type;
 
   -- Calcular capacidades
   v_total_capacity := v_infra.lanes * v_infra.spots_per_lane;

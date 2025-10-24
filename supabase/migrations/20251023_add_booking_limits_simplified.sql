@@ -112,7 +112,7 @@ BEGIN
   FROM bookings
   WHERE session_id = p_session_id
     AND status = 'reserved'
-    AND group_type = p_group_type;
+    AND group_type::text = p_group_type;
 
   -- Calcular disponibilidad
   v_available_distance := v_capacity_distance - v_reserved_distance;
