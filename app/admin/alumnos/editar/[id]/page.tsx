@@ -64,7 +64,7 @@ export default function AlumnoEditor() {
     email: '',
     phone: '',
     group_type: 'adult',
-    distance_m: null,
+    distance_m: undefined,
     is_active: true,
     classes_remaining: 0,
     membership_type: '',
@@ -157,18 +157,18 @@ export default function AlumnoEditor() {
     // para evitar conversiones de zona horaria
     const payload: Partial<Profile> & { membership_start?: string; membership_end?: string } = {
       full_name: form.full_name,
-      email: form.email || null,
-      phone: form.phone || null,
-      group_type: form.group_type || null,
-      distance_m: form.distance_m ?? null,
+      email: form.email || undefined,
+      phone: form.phone || undefined,
+      group_type: form.group_type || undefined,
+      distance_m: form.distance_m ?? undefined,
       is_active: form.is_active ?? true,
       classes_remaining: form.classes_remaining ?? 0,
-      membership_type: form.membership_type || null,
+      membership_type: form.membership_type || undefined,
       // Las fechas ya vienen en formato YYYY-MM-DD del input type="date"
       // Se envían como strings para que PostgreSQL las interprete como date sin conversión
-      membership_start: form.membership_start || null,
-      membership_end: form.membership_end || null,
-      avatar_url: form.avatar_url || null,
+      membership_start: form.membership_start || undefined,
+      membership_end: form.membership_end || undefined,
+      avatar_url: form.avatar_url || undefined,
     }
     const { error } = await supabase.from('profiles').update(payload).eq('id', form.id)
     setSaving(false)
@@ -208,11 +208,11 @@ export default function AlumnoEditor() {
     setAddSaving(true)
     const { error } = await supabase.rpc('admin_add_membership', {
       p_profile: form.id,
-      p_membership: addTemplateId || null,
+      p_membership: addTemplateId || undefined,
       p_name: addName.trim(),
       p_classes: addClasses,
       p_start: addStart,
-      p_end: addEnd || null,
+      p_end: addEnd || undefined,
       p_make_active: addActive,
     })
   setAddSaving(false)
@@ -261,7 +261,7 @@ export default function AlumnoEditor() {
       p_name: editName.trim(),
       p_classes: editClasses,
       p_start: editStart,
-      p_end: editEnd || null,
+      p_end: editEnd || undefined,
       p_status: editStatus,
     })
   setEditSaving(false)
