@@ -8,6 +8,7 @@ import AdminGuard from '@/components/AdminGuard'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Avatar from '@/components/ui/Avatar'
+import { formatDateOnly } from '@/lib/utils/dateUtils'
 
 type Profile = {
   id: string
@@ -274,25 +275,13 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                   <div>
                     <p className="text-xs text-textsec">Inicio</p>
                     <p className="text-base font-medium mt-1">
-                      {profile.membership_start 
-                        ? new Date(profile.membership_start).toLocaleDateString('es', { 
-                            day: 'numeric', 
-                            month: 'long', 
-                            year: 'numeric' 
-                          })
-                        : '—'}
+                      {formatDateOnly(profile.membership_start) || '—'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-textsec">Vencimiento</p>
                     <p className="text-base font-medium mt-1">
-                      {profile.membership_end 
-                        ? new Date(profile.membership_end).toLocaleDateString('es', { 
-                            day: 'numeric', 
-                            month: 'long', 
-                            year: 'numeric' 
-                          })
-                        : '—'}
+                      {formatDateOnly(profile.membership_end) || '—'}
                     </p>
                   </div>
                 </div>

@@ -144,3 +144,31 @@ export function isFuture(dateISO: string): boolean {
 export function isPast(dateISO: string): boolean {
   return new Date(dateISO) < new Date()
 }
+
+/**
+ * Formatea una fecha YYYY-MM-DD (date de PostgreSQL) sin problemas de timezone
+ * Uso: Para mostrar membership_start, membership_end, etc.
+ */
+export function formatDateOnly(dateString: string | null | undefined): string {
+  if (!dateString) return ''
+  
+  // Si es YYYY-MM-DD, parsear manualmente sin timezone
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const [, year, month, day] = match
+    // Crear fecha local sin conversión de timezone
+    const date = new Date(Number(year), Number(month) - 1, Number(day))
+    return date.toLocaleDateString('es', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric' 
+    })
+  }
+  
+  // Fallback para otros formatos
+  return new Date(dateString).toLocaleDateString('es', { 
+    day: 'numeric', 
+    month: 'short', 
+    year: 'numeric' 
+  })
+}
