@@ -16,6 +16,8 @@ export interface AdminBooking {
   capacity: number
   coach_name: string
   current_reservations: number
+  admin_notes?: string | null
+  group_type?: string | null
 }
 
 export interface AdminStudent {
@@ -82,12 +84,50 @@ export function useAdminBookings() {
   return useQuery({
     queryKey: ['admin-bookings'],
     queryFn: async () => {
+      // Query manual con joins para obtener toda la información
       const { data, error } = await supabase
-        .from('admin_bookings_view')
-        .select('*')
+        .from('bookings')
+        .select(`
+          id,
+          status,
+          created_at,
+          distance_m,
+          group_type,
+          admin_notes,
+          user:profiles!bookings_user_id_fkey(
+            id,
+            full_name,
+            classes_remaining
+          ),
+          session:sessions!bookings_session_id_fkey(
+            id,
+            start_at,
+            end_at,
+            coach:profiles!sessions_coach_id_fkey(full_name)
+          )
+        `)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
-      return data as AdminBooking[]
+
+      // Mapear a AdminBooking
+      return (data || []).map((booking: any) => ({
+        booking_id: booking.id,
+        status: booking.status,
+        booking_created: booking.created_at,
+        student_id: booking.user?.id,
+        student_name: booking.user?.full_name,
+        classes_remaining: booking.user?.classes_remaining || 0,
+        session_id: booking.session?.id,
+        start_at: booking.session?.start_at,
+        end_at: booking.session?.end_at,
+        distance: booking.distance_m,
+        capacity: 0, // Se puede calcular desde allocations si es necesario
+        coach_name: booking.session?.coach?.full_name,
+        current_reservations: 0, // Se puede calcular si es necesario
+        admin_notes: booking.admin_notes,
+        group_type: booking.group_type,
+      })) as AdminBooking[]
     },
   })
 }

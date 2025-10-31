@@ -109,13 +109,29 @@ export default function AdminBookingsManager() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
-                        <div>
+                        <div className="flex-1">
                           <div className="font-medium text-white">
                             {booking.student_name}
                           </div>
                           <div className="text-sm text-slate-300">
                             {formatDateTime(booking.start_at)} • {booking.distance}m
                           </div>
+                          {/* Mostrar categoría/grupo si está disponible */}
+                          {booking.group_type && (
+                            <div className="text-xs text-purple-400 mt-1">
+                              {booking.group_type === 'children' ? '👶 Niños' :
+                               booking.group_type === 'youth' ? '🧒 Jóvenes' :
+                               booking.group_type === 'adult' ? '🧑 Adultos' :
+                               booking.group_type === 'assigned' ? '🎯 Asignados' :
+                               booking.group_type === 'ownbow' ? '🏹 Arco propio' : booking.group_type}
+                            </div>
+                          )}
+                          {/* Mostrar notas del admin si existen */}
+                          {booking.admin_notes && (
+                            <div className="text-xs text-amber-400 mt-1 italic">
+                              📝 {booking.admin_notes}
+                            </div>
+                          )}
                           <div className="text-xs text-slate-400 mt-1">
                             Instructor: {booking.coach_name || 'Sin asignar'}
                             <span className="ml-3">
