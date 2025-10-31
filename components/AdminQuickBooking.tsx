@@ -25,6 +25,7 @@ export default function AdminQuickBooking() {
   const [selectedStudent, setSelectedStudent] = useState<string>('')
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedSession, setSelectedSession] = useState<string>('')
+  const [adminNotes, setAdminNotes] = useState<string>('')
 
   // Queries
   const { data: students = [], isLoading: studentsLoading } = useAdminStudents()
@@ -131,12 +132,14 @@ export default function AdminQuickBooking() {
       await bookSessionMutation.mutateAsync({
         sessionId: selectedSession,
         studentId: selectedStudent,
+        adminNotes: adminNotes.trim() || undefined,
       })
       
       // Limpiar selecciones después del éxito
       setSelectedStudent('')
       setSelectedDate('')
       setSelectedSession('')
+      setAdminNotes('')
       
       // Mostrar mensaje de éxito
       alert('Reserva creada exitosamente!')
@@ -290,8 +293,6 @@ export default function AdminQuickBooking() {
               </option>
             ))}
           </select>
-        </div>
-
         {/* Información de la sesión seleccionada */}
         {selectedSessionGroup && (
           <div className="bg-slate-800 rounded-lg p-3">
@@ -313,12 +314,33 @@ export default function AdminQuickBooking() {
           </div>
         )}
 
+        {/* Campo de Notas del Admin */}
+        <div>
+          <Label htmlFor="admin-notes" className="text-slate-300">
+            4. Notas (opcional)
+          </Label>
+          <textarea
+            id="admin-notes"
+            value={adminNotes}
+            onChange={(e) => setAdminNotes(e.target.value)}
+            placeholder="Ej: Clase de prueba - Juan Pérez, Cliente nuevo - María García, etc."
+            rows={2}
+            className="input mt-1 resize-none"
+            disabled={!selectedStudent || !selectedSession}
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Usa este campo para agregar información adicional (ej: nombre de cliente en clase de prueba)
+          </p>
+        </div>
+
         {/* Botón de reserva */}
         <Button
           onClick={handleBooking}
           disabled={!selectedStudent || !selectedSession || bookSessionMutation.isPending}
           className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-600"
         >
+          {bookSessionMutation.isPending ? 'Reservando...' : 'Reservar Clase'}
+        </Button>
           {bookSessionMutation.isPending ? 'Reservando...' : 'Reservar Clase'}
         </Button>
 

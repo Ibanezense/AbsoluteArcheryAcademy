@@ -97,10 +97,19 @@ export function useAdminBookSession() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ sessionId, studentId }: { sessionId: string; studentId: string }) => {
+    mutationFn: async ({ 
+      sessionId, 
+      studentId, 
+      adminNotes 
+    }: { 
+      sessionId: string; 
+      studentId: string; 
+      adminNotes?: string 
+    }) => {
       const { data, error } = await supabase.rpc('admin_book_session', {
         p_session_id: sessionId,
         p_student_id: studentId,
+        p_admin_notes: adminNotes || null,
       })
 
       if (error) throw error

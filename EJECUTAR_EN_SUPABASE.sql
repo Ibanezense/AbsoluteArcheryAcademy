@@ -73,7 +73,19 @@ END $$;
 DROP TRIGGER IF EXISTS trg_default_distance_alloc ON sessions;
 DROP FUNCTION IF EXISTS set_default_distance_allocations();
 
--- 0.d ASEGURAR COLUMNAS DE CAPACIDAD POR GRUPO EN SESSIONS
+-- 0.d AGREGAR COLUMNA admin_notes A BOOKINGS
+-- Para que el admin pueda dejar comentarios al crear reservas (ej: nombre de cliente en clase de prueba)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='bookings' AND column_name='admin_notes'
+  ) THEN
+    ALTER TABLE public.bookings ADD COLUMN admin_notes text;
+  END IF;
+END $$;
+
+-- 0.e ASEGURAR COLUMNAS DE CAPACIDAD POR GRUPO EN SESSIONS
 -- Algunas instalaciones tienen una única columna "capacity" en lugar de las desglosadas.
 -- Este bloque agrega las columnas nuevas si faltan y, si existe la antigua, migra su valor a capacity_adult.
 DO $$
@@ -355,13 +367,15 @@ $$;
 GRANT EXECUTE ON FUNCTION public.book_session(uuid) TO authenticated;
 
 -- ====================================================================
--- 3. RECREAR admin_book_session CON VALIDACIÓN DE MEMBRESÍA
+-- 3. RECREAR admin_book_session CON VALIDACIÓN DE MEMBRESÍA Y NOTAS
 -- ====================================================================
 DROP FUNCTION IF EXISTS public.admin_book_session(uuid, uuid);
+DROP FUNCTION IF EXISTS public.admin_book_session(uuid, uuid, text);
 
 CREATE OR REPLACE FUNCTION public.admin_book_session(
   p_session_id uuid,
-  p_student_id uuid
+  p_student_id uuid,
+  p_admin_notes text DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -434,15 +448,13 @@ BEGIN
     p_session_id, 
     v_profile.distance_m, 
     v_profile.group_type::text
-  );
-
   IF (v_availability->>'available')::boolean = FALSE THEN
     RAISE EXCEPTION '%', v_availability->>'message';
   END IF;
 
-  -- Crear la reserva
-  INSERT INTO bookings(user_id, session_id, status, distance_m, group_type) 
-  VALUES (p_student_id, p_session_id, 'reserved', v_profile.distance_m, v_profile.group_type);
+  -- Crear la reserva con notas del admin
+  INSERT INTO bookings(user_id, session_id, status, distance_m, group_type, admin_notes) 
+  VALUES (p_student_id, p_session_id, 'reserved', v_profile.distance_m, v_profile.group_type, p_admin_notes);
 
   -- Descontar clase
   UPDATE profiles 
@@ -450,6 +462,8 @@ BEGIN
   WHERE id = p_student_id;
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid, text) TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid) TO authenticated;
 
