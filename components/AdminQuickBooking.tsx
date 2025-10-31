@@ -293,6 +293,8 @@ export default function AdminQuickBooking() {
               </option>
             ))}
           </select>
+        </div>
+
         {/* Información de la sesión seleccionada */}
         {selectedSessionGroup && (
           <div className="bg-slate-800 rounded-lg p-3">
@@ -339,8 +341,6 @@ export default function AdminQuickBooking() {
           disabled={!selectedStudent || !selectedSession || bookSessionMutation.isPending}
           className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-600"
         >
-          {bookSessionMutation.isPending ? 'Reservando...' : 'Reservar Clase'}
-        </Button>
           {bookSessionMutation.isPending ? 'Reservando...' : 'Reservar Clase'}
         </Button>
 
