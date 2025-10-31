@@ -37,8 +37,11 @@ function isoLocal(date: Date) {
   return date.toISOString()
 }
 function monthBoundsLocal(y: number, m: number) {
+  // Inicio: primer día del mes a las 00:00 local
   const start = new Date(y, m, 1, 0, 0, 0, 0)
-  const end = new Date(y, m + 1, 0, 23, 59, 59, 999)
+  // Fin: primer día del mes SIGUIENTE a las 00:00 local (no inclusive)
+  // Esto cubre TODO el mes hasta 23:59:59.999 del último día
+  const end = new Date(y, m + 1, 1, 0, 0, 0, 0)
   return { startISO: isoLocal(start), endISO: isoLocal(end) }
 }
 function mondayOf(ymd: string) {
@@ -79,7 +82,7 @@ export default function AdminSessionsCalendar() {
       .from('sessions')
       .select('id,start_at,end_at,status')
       .gte('start_at', startISO)
-      .lte('start_at', endISO)
+      .lt('start_at', endISO)
       .order('start_at', { ascending: true })
     if (error) {
       toast.push({ message: error.message, type: 'error' })
