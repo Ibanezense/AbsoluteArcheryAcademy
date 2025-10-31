@@ -31,19 +31,10 @@ function ymdLocal(date: Date) {
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
-// ISO preservando hora local para consultar en DB
+// Convierte Date local a ISO string UTC (respetando conversión de zona horaria)
+// Ejemplo: si tienes 2025-11-01 00:00:00 local (UTC-5), se convierte a 2025-11-01T05:00:00Z
 function isoLocal(date: Date) {
-  return new Date(
-    Date.UTC(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-      date.getHours(),
-      date.getMinutes(),
-      date.getSeconds(),
-      date.getMilliseconds()
-    )
-  ).toISOString()
+  return date.toISOString()
 }
 function monthBoundsLocal(y: number, m: number) {
   const start = new Date(y, m, 1, 0, 0, 0, 0)
