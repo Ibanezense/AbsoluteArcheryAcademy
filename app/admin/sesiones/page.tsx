@@ -74,6 +74,7 @@ export default function AdminSessionsCalendar() {
   /* ----- cargar sesiones del mes ----- */
   const loadMonth = async (y = year, m = month) => {
     const { startISO, endISO } = monthBoundsLocal(y, m)
+    console.log('🔍 Cargando sesiones del mes:', { year: y, month: m, startISO, endISO })
     const { data, error } = await supabase
       .from('sessions')
       .select('id,start_at,end_at,status')
@@ -84,6 +85,7 @@ export default function AdminSessionsCalendar() {
       toast.push({ message: error.message, type: 'error' })
       return
     }
+    console.log('📅 Sesiones cargadas:', data?.length || 0, data)
     setMonthSessions((data || []) as Session[])
   }
   useEffect(() => {
@@ -93,23 +95,41 @@ export default function AdminSessionsCalendar() {
 
   /* ----- sesiones de la semana (derivado del mes) ----- */
   const weekSessionsMap = useMemo(() => {
-    if (!monthSessions.length) return {}
+    if (!monthSessions.length) {
+      console.log('⚠️ No hay sesiones del mes para filtrar')
+      return {}
+    }
     const monday = mondayOf(selectedYMD)
     const sunday = sundayOf(selectedYMD)
     const startDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime()
     const endDay = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate()).getTime()
+    console.log('📆 Filtrando semana:', { 
+      selectedYMD, 
+      monday: ymdLocal(monday), 
+      sunday: ymdLocal(sunday),
+      startDay: new Date(startDay).toISOString(),
+      endDay: new Date(endDay).toISOString()
+    })
     const byDay: Record<string, Session[]> = {}
     monthSessions.forEach((session) => {
       const dt = new Date(session.start_at)
       const dayStamp = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime()
-      if (dayStamp < startDay || dayStamp > endDay) return
       const ymd = ymdLocal(dt)
+      console.log('  🔹 Sesión:', { 
+        id: session.id.slice(0,8), 
+        start_at: session.start_at,
+        ymd,
+        dayStamp: new Date(dayStamp).toISOString(),
+        inRange: dayStamp >= startDay && dayStamp <= endDay
+      })
+      if (dayStamp < startDay || dayStamp > endDay) return
       if (!byDay[ymd]) byDay[ymd] = []
       byDay[ymd].push(session)
     })
     Object.values(byDay).forEach((list) =>
       list.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
     )
+    console.log('✅ Sesiones agrupadas por día:', byDay)
     return byDay
   }, [monthSessions, selectedYMD])
 
