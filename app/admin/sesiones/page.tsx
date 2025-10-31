@@ -74,10 +74,17 @@ export default function AdminSessionsCalendar() {
   const [openMonthMenu, setOpenMonthMenu] = useState(false)
   const [openCardMenu, setOpenCardMenu] = useState<string | null>(null)
 
-  /* ----- cargar sesiones del mes ----- */
+  /* ----- cargar sesiones del mes Y semanas adyacentes ----- */
   const loadMonth = async (y = year, m = month) => {
-    const { startISO, endISO } = monthBoundsLocal(y, m)
-    console.log('🔍 Cargando sesiones del mes:', { year: y, month: m, startISO, endISO })
+    // Calcular inicio del mes
+    const monthStart = new Date(y, m, 1, 0, 0, 0, 0)
+    // Calcular fin: incluir hasta 7 días en el mes siguiente para capturar semanas que cruzan meses
+    const monthEnd = new Date(y, m + 1, 8, 0, 0, 0, 0)
+    
+    const startISO = monthStart.toISOString()
+    const endISO = monthEnd.toISOString()
+    
+    console.log('🔍 Cargando sesiones del mes + semanas:', { year: y, month: m, startISO, endISO })
     const { data, error } = await supabase
       .from('sessions')
       .select('id,start_at,end_at,status')
