@@ -163,31 +163,34 @@ export default function EditarSesion() {
       return
     }
 
-    if (toUpsert.length) {
-      const { error: ea } = await supabase
-        .from('session_distance_allocations')
-        .upsert(toUpsert, { onConflict: 'session_id,distance_m' })
-      if (ea) {
-        setSaving(false)
-        console.error('Error al upsert allocations', { toUpsert, error: ea })
-        alert(ea.message)
-        return
-      }
+    // Estrategia más simple: borrar todas las allocations de esta sesión y volver a insertarlas
+    // Esto evita problemas con upsert y constraints
+    const { error: delErr } = await supabase
+      .from('session_distance_allocations')
+      .delete()
+      .eq('session_id', sid)
+    
+    if (delErr) {
+      console.error('Error al limpiar allocations anteriores:', delErr)
+      setSaving(false)
+      alert('Error al actualizar asignaciones de distancias')
+      return
     }
 
-    // 3) Borrar allocations que quedaron en 0
-    const zeros = DISTANCES.filter((d) => (alloc[d] ?? 0) === 0)
-    if (zeros.length) {
-      const { error: ed } = await supabase
+    // Ahora insertar las nuevas (solo las que tienen targets > 0)
+    if (toUpsert.length) {
+      const { error: insErr } = await supabase
         .from('session_distance_allocations')
-        .delete()
-        .eq('session_id', sid)
-        .in('distance_m', zeros as number[])
-      if (ed) {
+        .insert(toUpsert)
+      
+      if (insErr) {
         setSaving(false)
-        alert(ed.message)
+        console.error('❌ Error al insertar allocations:', { toUpsert, error: insErr })
+        alert(`Error: ${insErr.message}`)
         return
       }
+      
+      console.log('✅ Allocations guardadas correctamente')
     }
 
     setSaving(false)
