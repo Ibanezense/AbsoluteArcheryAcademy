@@ -68,7 +68,12 @@ BEGIN
   END LOOP;
 END $$;
 
--- 0.c ASEGURAR COLUMNAS DE CAPACIDAD POR GRUPO EN SESSIONS
+-- 0.c ELIMINAR TRIGGER Y FUNCIÓN LEGACY QUE CAUSAN ERRORES
+-- Si existe un trigger que crea allocations automáticas con distancias incorrectas, lo eliminamos
+DROP TRIGGER IF EXISTS trg_default_distance_alloc ON sessions;
+DROP FUNCTION IF EXISTS set_default_distance_allocations();
+
+-- 0.d ASEGURAR COLUMNAS DE CAPACIDAD POR GRUPO EN SESSIONS
 -- Algunas instalaciones tienen una única columna "capacity" en lugar de las desglosadas.
 -- Este bloque agrega las columnas nuevas si faltan y, si existe la antigua, migra su valor a capacity_adult.
 DO $$
