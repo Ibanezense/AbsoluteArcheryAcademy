@@ -68,6 +68,58 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 0.c ASEGURAR COLUMNAS DE CAPACIDAD POR GRUPO EN SESSIONS
+-- Algunas instalaciones tienen una única columna "capacity" en lugar de las desglosadas.
+-- Este bloque agrega las columnas nuevas si faltan y, si existe la antigua, migra su valor a capacity_adult.
+DO $$
+BEGIN
+  -- Agregar columnas si no existen
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity_children'
+  ) THEN
+    ALTER TABLE public.sessions ADD COLUMN capacity_children integer DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity_youth'
+  ) THEN
+    ALTER TABLE public.sessions ADD COLUMN capacity_youth integer DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity_adult'
+  ) THEN
+    ALTER TABLE public.sessions ADD COLUMN capacity_adult integer DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity_assigned'
+  ) THEN
+    ALTER TABLE public.sessions ADD COLUMN capacity_assigned integer DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity_ownbow'
+  ) THEN
+    ALTER TABLE public.sessions ADD COLUMN capacity_ownbow integer DEFAULT 0;
+  END IF;
+
+  -- Migrar valor de la columna legacy "capacity" si existe, solo cuando las nuevas estén en cero
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='sessions' AND column_name='capacity'
+  ) THEN
+    UPDATE public.sessions
+    SET capacity_adult = COALESCE(NULLIF(capacity_adult, 0), capacity)
+    WHERE capacity IS NOT NULL;
+  END IF;
+END $$;
+
 -- Limpiar filas que violen los nuevos checks antes de crearlos
 -- 1) Eliminar asignaciones con distancias no permitidas
 DELETE FROM public.session_distance_allocations
