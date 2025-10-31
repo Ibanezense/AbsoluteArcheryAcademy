@@ -120,13 +120,8 @@ export default function EditarSesion() {
     let sret: any | null = null
     let es: any | null = null
     if (isNew) {
-      // Debug: payload que se enviará al INSERT
-      console.log('🛰️ Enviando sesión (INSERT)', {
-        payload: sessPayload,
-        isNew,
-        start_at_local: session.start_at,
-        end_at_local: session.end_at,
-      })
+      // Debug: payload exacto que se enviará al INSERT
+      console.log('🛰️ INSERT sessPayload:', JSON.stringify(sessPayload, null, 2))
       const { data, error } = await supabase
         .from('sessions')
         .insert(sessPayload)
@@ -134,15 +129,12 @@ export default function EditarSesion() {
         .single()
       sret = data
       es = error
+      if (error) {
+        console.error('❌ Error en INSERT:', error)
+      }
     } else {
-      // Debug: payload que se enviará al UPDATE
-      console.log('🛰️ Enviando sesión (UPDATE)', {
-        payload: sessPayload,
-        isNew,
-        id,
-        start_at_local: session.start_at,
-        end_at_local: session.end_at,
-      })
+      // Debug: payload exacto que se enviará al UPDATE
+      console.log('🛰️ UPDATE sessPayload (id=' + id + '):', JSON.stringify(sessPayload, null, 2))
       const { data, error } = await supabase
         .from('sessions')
         .update(sessPayload)
@@ -151,6 +143,9 @@ export default function EditarSesion() {
         .single()
       sret = data
       es = error
+      if (error) {
+        console.error('❌ Error en UPDATE:', error)
+      }
     }
     if (es) {
       setSaving(false)
