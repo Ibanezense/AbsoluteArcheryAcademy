@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import { supabase } from '@/lib/supabaseClient'
+import { toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/utils/dateUtils'
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
 const ALLOWED_DISTANCES = new Set<number>(DISTANCES as unknown as number[])
@@ -57,8 +58,8 @@ export default function EditarSesion() {
       }
       setSession({
         ...s,
-        start_at: new Date(s.start_at).toISOString().slice(0, 16),
-        end_at: new Date(s.end_at).toISOString().slice(0, 16),
+        start_at: toLocalDateTimeInput(s.start_at),
+        end_at: toLocalDateTimeInput(s.end_at),
       })
       const { data: a, error: e2 } = await supabase
         .from('session_distance_allocations')
@@ -107,8 +108,8 @@ export default function EditarSesion() {
 
     // 1) Guardar sesión (insert o update explícito para evitar 400 con upsert)
     const sessPayload = {
-      start_at: new Date(session.start_at).toISOString(),
-      end_at: new Date(session.end_at).toISOString(),
+      start_at: fromLocalDateTimeInput(session.start_at),
+      end_at: fromLocalDateTimeInput(session.end_at),
       status: session.status,
       capacity_children: session.capacity_children ?? 0,
       capacity_youth: session.capacity_youth ?? 0,

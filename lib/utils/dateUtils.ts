@@ -172,3 +172,29 @@ export function formatDateOnly(dateString: string | null | undefined): string {
     year: 'numeric' 
   })
 }
+
+/**
+ * Convierte un ISO timestamp de Supabase a formato datetime-local para input
+ * Ejemplo: "2025-11-01T16:00:00+00:00" → "2025-11-01T11:00" (si estás en UTC-5)
+ */
+export function toLocalDateTimeInput(isoString: string): string {
+  const d = new Date(isoString)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+/**
+ * Convierte un datetime-local de input a ISO string para Supabase
+ * Ejemplo: "2025-11-01T11:00" → "2025-11-01T16:00:00.000Z" (si estás en UTC-5)
+ * Preserva la hora local del usuario al convertir a UTC
+ */
+export function fromLocalDateTimeInput(localString: string): string {
+  // El input datetime-local da formato "YYYY-MM-DDTHH:mm"
+  // Agregamos segundos y creamos Date que interpreta como hora local
+  const d = new Date(localString + ':00')
+  return d.toISOString()
+}
