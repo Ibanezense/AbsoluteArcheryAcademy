@@ -448,6 +448,8 @@ BEGIN
     p_session_id, 
     v_profile.distance_m, 
     v_profile.group_type::text
+  );
+
   IF (v_availability->>'available')::boolean = FALSE THEN
     RAISE EXCEPTION '%', v_availability->>'message';
   END IF;
@@ -464,8 +466,6 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid, text) TO authenticated;
-
-GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid) TO authenticated;
 
 -- ====================================================================
 -- VERIFICACIÓN
