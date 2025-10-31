@@ -5,6 +5,7 @@ import AdminGuard from '@/components/AdminGuard'
 import { supabase } from '@/lib/supabaseClient'
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
+const ALLOWED_DISTANCES = new Set<number>(DISTANCES as unknown as number[])
 type Dist = typeof DISTANCES[number]
 
 type Session = {
@@ -130,11 +131,24 @@ export default function EditarSesion() {
     const sid = sret.id as string
 
     // 2) Upsert allocations con targets > 0
-    const toUpsert = DISTANCES.filter((d) => (alloc[d] ?? 0) > 0).map((d) => ({
-      session_id: sid,
-      distance_m: d,
-      targets: alloc[d] ?? 0,
-    }))
+    const toUpsert = DISTANCES
+      .filter((d) => (alloc[d] ?? 0) > 0)
+      .map((d) => ({
+        session_id: sid,
+        distance_m: Number(d),
+        targets: Math.max(0, Math.min(8, Number(alloc[d] ?? 0))),
+      }))
+
+    // Validación extra: distancias permitidas y targets 0..8
+    const invalid = toUpsert.filter(
+      (r) => !ALLOWED_DISTANCES.has(r.distance_m) || r.targets < 0 || r.targets > 8
+    )
+    if (invalid.length) {
+      console.error('Asignaciones inválidas:', invalid)
+      alert('Hay distancias o cantidades de pacas inválidas (máximo 8 por distancia).')
+      setSaving(false)
+      return
+    }
 
     if (toUpsert.length) {
       const { error: ea } = await supabase
@@ -142,6 +156,7 @@ export default function EditarSesion() {
         .upsert(toUpsert, { onConflict: 'session_id,distance_m' })
       if (ea) {
         setSaving(false)
+        console.error('Error al upsert allocations', { toUpsert, error: ea })
         alert(ea.message)
         return
       }
@@ -273,12 +288,13 @@ export default function EditarSesion() {
                     <input
                       type="number"
                       min={0}
+                      max={8}
                       className="input w-24 text-right"
                       value={alloc[d] ?? 0}
                       onChange={(e) =>
                         setAlloc((prev) => ({
                           ...prev,
-                          [d]: Number(e.target.value || 0),
+                          [d]: Math.max(0, Math.min(8, Number(e.target.value || 0))),
                         }))
                       }
                     />
