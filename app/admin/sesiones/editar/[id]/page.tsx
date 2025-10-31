@@ -167,15 +167,15 @@ export default function EditarSesion() {
       })
       .filter((r) => ALLOWED_DISTANCES.has(r.distance_m) && r.targets > 0 && r.targets <= 8)
 
-    // Log para debugging
-    console.log('📊 Asignaciones a guardar:', toUpsert)
+    // Log para debugging - JSON exacto que se enviará
+    console.log('📊 Allocations a insertar:', JSON.stringify(toUpsert, null, 2))
 
     // Validación extra: asegurarse de que todo sea válido
     const invalid = toUpsert.filter(
       (r) => !ALLOWED_DISTANCES.has(r.distance_m) || r.targets < 1 || r.targets > 8
     )
     if (invalid.length) {
-      console.error('❌ Asignaciones inválidas detectadas:', invalid)
+      console.error('❌ Asignaciones inválidas detectadas:', JSON.stringify(invalid, null, 2))
       alert('Error: Hay valores inválidos. Revisa la consola del navegador (F12).')
       setSaving(false)
       return
@@ -203,14 +203,21 @@ export default function EditarSesion() {
 
     // Ahora insertar las nuevas (solo las que tienen targets > 0)
     if (toUpsert.length) {
+      console.log('🔄 Insertando allocations en DB...')
       const { error: insErr } = await supabase
         .from('session_distance_allocations')
         .insert(toUpsert)
       
       if (insErr) {
         setSaving(false)
-        console.error('❌ Error al insertar allocations:', { toUpsert, error: insErr })
-        alert(`Error: ${insErr.message}`)
+        console.error('❌ Error al insertar allocations:', {
+          payload: JSON.stringify(toUpsert, null, 2),
+          error: insErr,
+          code: insErr.code,
+          details: insErr.details,
+          hint: insErr.hint
+        })
+        alert(`Error al guardar asignaciones de distancias: ${insErr.message}\n\nRevisa la consola (F12) para más detalles.`)
         return
       }
       
