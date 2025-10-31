@@ -133,19 +133,32 @@ export default function EditarSesion() {
     // 2) Upsert allocations con targets > 0
     const toUpsert = DISTANCES
       .filter((d) => (alloc[d] ?? 0) > 0)
-      .map((d) => ({
-        session_id: sid,
-        distance_m: Number(d),
-        targets: Math.max(0, Math.min(8, Number(alloc[d] ?? 0))),
-      }))
+      .map((d) => {
+        const targets = Math.max(0, Math.min(8, Number(alloc[d] ?? 0)))
+        return {
+          session_id: sid,
+          distance_m: Number(d),
+          targets: targets,
+        }
+      })
+      .filter((r) => ALLOWED_DISTANCES.has(r.distance_m) && r.targets > 0 && r.targets <= 8)
 
-    // Validación extra: distancias permitidas y targets 0..8
+    // Log para debugging
+    console.log('📊 Asignaciones a guardar:', toUpsert)
+
+    // Validación extra: asegurarse de que todo sea válido
     const invalid = toUpsert.filter(
-      (r) => !ALLOWED_DISTANCES.has(r.distance_m) || r.targets < 0 || r.targets > 8
+      (r) => !ALLOWED_DISTANCES.has(r.distance_m) || r.targets < 1 || r.targets > 8
     )
     if (invalid.length) {
-      console.error('Asignaciones inválidas:', invalid)
-      alert('Hay distancias o cantidades de pacas inválidas (máximo 8 por distancia).')
+      console.error('❌ Asignaciones inválidas detectadas:', invalid)
+      alert('Error: Hay valores inválidos. Revisa la consola del navegador (F12).')
+      setSaving(false)
+      return
+    }
+
+    if (toUpsert.length === 0) {
+      alert('Define al menos una paca en alguna distancia')
       setSaving(false)
       return
     }
