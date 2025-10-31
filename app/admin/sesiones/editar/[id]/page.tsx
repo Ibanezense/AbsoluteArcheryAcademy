@@ -105,9 +105,8 @@ export default function EditarSesion() {
 
     setSaving(true)
 
-    // 1) Upsert session
+    // 1) Guardar sesión (insert o update explícito para evitar 400 con upsert)
     const sessPayload = {
-      id: isNew ? undefined : id,
       start_at: new Date(session.start_at).toISOString(),
       end_at: new Date(session.end_at).toISOString(),
       status: session.status,
@@ -118,11 +117,26 @@ export default function EditarSesion() {
       capacity_ownbow: session.capacity_ownbow ?? 0,
     }
 
-    const { data: sret, error: es } = await supabase
-      .from('sessions')
-      .upsert(sessPayload, { onConflict: 'id' })
-      .select()
-      .single()
+    let sret: any | null = null
+    let es: any | null = null
+    if (isNew) {
+      const { data, error } = await supabase
+        .from('sessions')
+        .insert(sessPayload)
+        .select()
+        .single()
+      sret = data
+      es = error
+    } else {
+      const { data, error } = await supabase
+        .from('sessions')
+        .update(sessPayload)
+        .eq('id', id)
+        .select()
+        .single()
+      sret = data
+      es = error
+    }
     if (es) {
       setSaving(false)
       alert(es.message)
