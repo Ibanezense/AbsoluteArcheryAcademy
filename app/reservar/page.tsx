@@ -141,9 +141,16 @@ export default function ReservarPage() {
     const dist = profile.current_distance ?? null
     const distSp = dist ? (distSpots[s.id] ?? Infinity) : Infinity
     
+    // DEBUG: Ver qué está pasando con los cupos
+    console.log('🎯 Session:', new Date(s.start_at).toLocaleTimeString(), 
+                'session_id:', s.id, 
+                'distSp:', distSp, 
+                'found in map:', distSpots[s.id],
+                'user distance:', dist)
+    
     // Si tiene arco propio, solo aplica límite por distancia (pacas)
     if (profile.has_own_bow || profile.group_type === 'ownbow') {
-      return distSp
+      return distSp === Infinity ? 0 : distSp
     }
     
     // Si tiene arco asignado o pertenece a un grupo, aplica ambos límites
@@ -160,7 +167,8 @@ export default function ReservarPage() {
     }
     
     // Cupo real = mínimo entre cupo de su grupo (arcos disponibles) y cupo de distancia (pacas)
-    return Math.min(groupSpots, distSp)
+    const result = distSp === Infinity ? groupSpots : Math.min(groupSpots, distSp)
+    return result
   }
 
   async function reservar(sessionId: string) {
