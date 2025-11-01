@@ -540,9 +540,10 @@ FROM sessions s
 JOIN session_distance_allocations sda ON sda.session_id = s.id;
 
 -- ====================================================================
--- VERIFICACIÓN
+-- VERIFICACIÓN Y DIAGNÓSTICO
 -- ====================================================================
--- Verifica que las funciones se crearon correctamente:
+
+-- 1. Verifica que las funciones se crearon correctamente:
 SELECT 
   routine_name, 
   routine_schema,
@@ -552,9 +553,52 @@ WHERE routine_name IN ('check_session_availability_v2', 'book_session', 'admin_b
   AND routine_schema = 'public'
 ORDER BY routine_name;
 
+-- 2. Verifica las vistas
+SELECT 
+  table_name,
+  table_type
+FROM information_schema.tables
+WHERE table_schema = 'public' 
+  AND table_name IN ('sessions_with_availability', 'session_distance_availability')
+ORDER BY table_name;
+
+-- 3. ⚠️ REVISAR CONFIGURACIÓN DE PACAS (TARGETS)
+-- Si ves "capacity_distance = 4" cuando debería ser 16, significa que tienes 1 target en lugar de 4
+SELECT 
+  s.start_at,
+  sda.distance_m,
+  sda.targets AS pacas_configuradas,
+  (sda.targets * 4) AS cupos_totales,
+  COUNT(b.id) AS reservas_actuales,
+  ((sda.targets * 4) - COUNT(b.id)) AS cupos_disponibles
+FROM session_distance_allocations sda
+JOIN sessions s ON s.id = sda.session_id
+LEFT JOIN bookings b ON b.session_id = sda.session_id 
+  AND b.distance_m = sda.distance_m 
+  AND b.status = 'reserved'
+WHERE s.start_at >= NOW()
+GROUP BY s.start_at, sda.distance_m, sda.targets
+ORDER BY s.start_at, sda.distance_m
+LIMIT 20;
+
+-- 4. 🔧 CORREGIR TARGETS SI ES NECESARIO
+-- Si tus sesiones normalmente tienen 4 pacas por distancia pero están en 1:
+-- DESCOMENTAR Y EJECUTAR ESTAS LÍNEAS:
+
+-- UPDATE session_distance_allocations
+-- SET targets = 4
+-- WHERE targets = 1;
+
+-- Si tienes otra configuración específica (ej: 10m tiene 3 pacas, 20m tiene 4):
+-- UPDATE session_distance_allocations SET targets = 3 WHERE distance_m = 10;
+-- UPDATE session_distance_allocations SET targets = 4 WHERE distance_m = 20;
+-- UPDATE session_distance_allocations SET targets = 4 WHERE distance_m = 30;
+-- (etc.)
+
 -- ====================================================================
 -- ✅ LISTO
 -- ====================================================================
--- Si ves las 3 funciones listadas arriba, todo está correcto.
--- Ahora puedes probar hacer una reserva desde la app.
+-- Si ves las 3 funciones y las 2 vistas listadas arriba, todo está correcto.
+-- Revisa la sección 3 para verificar que los TARGETS estén correctos.
+-- Si ves "cupos_totales = 4" cuando debería ser 16, ejecuta el UPDATE de la sección 4.
 -- ====================================================================
