@@ -75,15 +75,20 @@ export default function ReservarPage() {
 
       // sesiones del mes (view con status y spots por grupo)
       const mStart = startOfMonth(month)
-      const mEnd = endOfMonth(month)
+      const mEnd = new Date(month.getFullYear(), month.getMonth() + 1, 8, 0, 0, 0) // incluir 8 días del mes siguiente
       const { data: s, error: e2 } = await supabase
         .from('sessions_with_availability')
         .select('*')
         .gte('start_at', toISOStart(mStart))
-        .lte('start_at', toISOEnd(mEnd))
+        .lt('start_at', mEnd.toISOString())
         .order('start_at', { ascending: true })
       if (e2) { alert(e2.message); return }
-      setSessions((s || []) as SessionRow[])
+      // Filtrar solo las sesiones que realmente pertenecen al mes mostrado
+      const filteredSessions = (s || []).filter((session: any) => {
+        const sessionDate = new Date(session.start_at)
+        return sessionDate.getMonth() === month.getMonth() && sessionDate.getFullYear() === month.getFullYear()
+      })
+      setSessions(filteredSessions as SessionRow[])
 
       // spots por distancia SOLO para la distancia del alumno
       if (prof?.current_distance) {
@@ -92,10 +97,16 @@ export default function ReservarPage() {
           .select('session_id,distance_m,spots_distance')
           .eq('distance_m', prof.current_distance)
           .gte('start_at', toISOStart(mStart))
-          .lte('start_at', toISOEnd(mEnd))
+          .lt('start_at', mEnd.toISOString())
         if (e3) { alert(e3.message); return }
         const map: Record<string, number> = {}
-        ;(dists || []).forEach((r: any) => { map[r.session_id] = r.spots_distance })
+        // Filtrar solo las sesiones del mes actual
+        ;(dists || []).forEach((r: any) => { 
+          const distSession = filteredSessions.find((fs: any) => fs.id === r.session_id)
+          if (distSession) {
+            map[r.session_id] = r.spots_distance 
+          }
+        })
         setDistSpots(map)
       } else {
         setDistSpots({})
