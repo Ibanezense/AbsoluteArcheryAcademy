@@ -73,6 +73,12 @@ export default function AdminSessionsCalendar() {
   // UI menus
   const [openMonthMenu, setOpenMonthMenu] = useState(false)
   const [openCardMenu, setOpenCardMenu] = useState<string | null>(null)
+  
+  // Modal roster
+  const [rosterModalOpen, setRosterModalOpen] = useState(false)
+  const [rosterModalSession, setRosterModalSession] = useState<Session | null>(null)
+  const [rosterModalData, setRosterModalData] = useState<any[]>([])
+  const [loadingRoster, setLoadingRoster] = useState(false)
 
   /* ----- cargar sesiones del mes Y semanas adyacentes ----- */
   const loadMonth = async (y = year, m = month) => {
@@ -237,6 +243,36 @@ export default function AdminSessionsCalendar() {
     const d = new Date(year, month + 1, 1)
     setYear(d.getFullYear())
     setMonth(d.getMonth())
+  }
+
+  const openRosterModal = async (session: Session) => {
+    setRosterModalSession(session)
+    setRosterModalOpen(true)
+    setLoadingRoster(true)
+    
+    // Cargar reservas de esta sesión
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        status,
+        distance_m,
+        group_type,
+        admin_notes,
+        user_id,
+        profiles!inner(full_name, email, phone)
+      `)
+      .eq('session_id', session.id)
+      .eq('status', 'reserved')
+      .order('distance_m', { ascending: true })
+    
+    setLoadingRoster(false)
+    if (error) {
+      toast.push({ message: error.message, type: 'error' })
+      return
+    }
+    
+    setRosterModalData(data || [])
   }
 
   const cancelSession = async (sessionId: string, refund: boolean) => {
@@ -459,12 +495,15 @@ export default function AdminSessionsCalendar() {
                               </button>
                               {openCardMenu === s.id && (
                                 <div className="absolute right-0 top-6 w-44 rounded-xl border border-white/10 bg-card shadow-xl z-30">
-                                  <Link
-                                    className="block px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
-                                    href={`/admin/roster/${s.id}`}
+                                  <button
+                                    className="w-full text-left px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
+                                    onClick={() => {
+                                      setOpenCardMenu(null)
+                                      openRosterModal(s)
+                                    }}
                                   >
                                     📋 Ver roster
-                                  </Link>
+                                  </button>
                                   <Link
                                     className="block px-3 py-2 text-[11px] hover:bg-white/5 transition-colors"
                                     href={`/admin/sesiones/editar/${s.id}`}
@@ -507,6 +546,108 @@ export default function AdminSessionsCalendar() {
         >
           +
         </button>
+
+      {/* Modal Roster */}
+      {rosterModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          onClick={() => setRosterModalOpen(false)}
+        >
+          <div 
+            className="bg-card rounded-2xl border border-white/10 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <div>
+                <h3 className="font-semibold text-lg">📋 Roster del Turno</h3>
+                {rosterModalSession && (
+                  <p className="text-sm text-textsec mt-1">
+                    {new Date(rosterModalSession.start_at).toLocaleDateString('es', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setRosterModalOpen(false)}
+                className="text-textsec hover:text-textpri transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingRoster ? (
+                <div className="text-center py-8 text-textsec">Cargando reservas...</div>
+              ) : rosterModalData.length === 0 ? (
+                <div className="text-center py-8 text-textsec">No hay reservas para este turno</div>
+              ) : (
+                <div className="space-y-3">
+                  {rosterModalData.map((booking: any) => (
+                    <div 
+                      key={booking.id} 
+                      className="bg-bg rounded-lg p-4 border border-white/5"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium">{booking.profiles.full_name}</div>
+                          <div className="text-sm text-textsec mt-1">
+                            📧 {booking.profiles.email}
+                            {booking.profiles.phone && (
+                              <span className="ml-3">📱 {booking.profiles.phone}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-2 text-xs">
+                            <span className="bg-info/20 text-info px-2 py-1 rounded">
+                              📏 {booking.distance_m}m
+                            </span>
+                            {booking.group_type && (
+                              <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded">
+                                {booking.group_type === 'children' ? '👶 Niños' :
+                                 booking.group_type === 'youth' ? '🧒 Jóvenes' :
+                                 booking.group_type === 'adult' ? '🧑 Adultos' :
+                                 booking.group_type === 'assigned' ? '🎯 Asignados' :
+                                 booking.group_type === 'ownbow' ? '🏹 Arco propio' : booking.group_type}
+                              </span>
+                            )}
+                          </div>
+                          {booking.admin_notes && (
+                            <div className="mt-2 text-xs text-amber-400 italic">
+                              📝 {booking.admin_notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-textsec">
+                  Total: <span className="text-textpri font-medium">{rosterModalData.length}</span> reservas
+                </span>
+                <button
+                  onClick={() => setRosterModalOpen(false)}
+                  className="btn-outline !py-2"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </AdminGuard>
   )
