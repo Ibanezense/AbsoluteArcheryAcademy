@@ -137,22 +137,29 @@ export default function ReservarPage() {
   // 4) Cálculo de cupos para ESTE usuario (grupo + distancia)
   function spotsForUser(s: SessionRow): number {
     if (!profile) return 0
+    
+    const dist = profile.current_distance ?? null
+    const distSp = dist ? (distSpots[s.id] ?? Infinity) : Infinity
+    
+    // Si tiene arco propio, solo aplica límite por distancia (pacas)
+    if (profile.has_own_bow || profile.group_type === 'ownbow') {
+      return distSp
+    }
+    
+    // Si tiene arco asignado o pertenece a un grupo, aplica ambos límites
     let groupSpots = 0
-    if (profile.has_own_bow) groupSpots = s.spots_ownbow
-    else if (profile.assigned_bow) groupSpots = s.spots_assigned
-    else {
+    if (profile.assigned_bow || profile.group_type === 'assigned') {
+      groupSpots = s.spots_assigned
+    } else {
       switch (profile.group_type) {
         case 'children': groupSpots = s.spots_children; break
         case 'youth': groupSpots = s.spots_youth; break
         case 'adult': groupSpots = s.spots_adult; break
-        case 'ownbow': groupSpots = s.spots_ownbow; break
-        case 'assigned': groupSpots = s.spots_assigned; break
         default: groupSpots = 0
       }
     }
-    const dist = profile.current_distance ?? null
-    const distSp = dist ? (distSpots[s.id] ?? Infinity) : Infinity
-    // cupo real = mínimo entre cupo de su grupo y cupo de su distancia
+    
+    // Cupo real = mínimo entre cupo de su grupo (arcos disponibles) y cupo de distancia (pacas)
     return Math.min(groupSpots, distSp)
   }
 
