@@ -10,16 +10,25 @@ import {
   type AdminBooking 
 } from '@/lib/adminBookingQueries'
 
+const ITEMS_PER_PAGE = 10
+
 export default function AdminBookingsManager() {
   const confirm = useConfirm()
+  const [currentPage, setCurrentPage] = useState(1)
 
   const { data: bookings = [], isLoading } = useAdminBookings()
   const cancelBookingMutation = useAdminCancelBooking()
 
   // Filtrar solo reservas activas (no canceladas ni pasadas)
-  const activeBookings = bookings.filter(b => 
+  const allActiveBookings = bookings.filter(b => 
     b.status === 'reserved' && new Date(b.start_at) > new Date()
-  ).slice(0, 10) // Mostrar solo las próximas 10
+  )
+  
+  // Paginación
+  const totalPages = Math.ceil(allActiveBookings.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const activeBookings = allActiveBookings.slice(startIndex, endIndex)
 
   const handleCancelBooking = async (bookingId: string) => {
     const confirmed = await confirm(
@@ -177,10 +186,44 @@ export default function AdminBookingsManager() {
             </div>
           )}
 
-          {bookings.length > activeBookings.length && (
-            <div className="text-center">
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-700">
               <div className="text-xs text-slate-400">
-                Mostrando {activeBookings.length} de {bookings.length} reservas
+                Mostrando {startIndex + 1}-{Math.min(endIndex, allActiveBookings.length)} de {allActiveBookings.length} reservas
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="!px-3 !py-1 text-xs"
+                >
+                  ← Anterior
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 text-xs rounded ${
+                        page === currentPage 
+                          ? 'bg-accent text-white font-medium' 
+                          : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="!px-3 !py-1 text-xs"
+                >
+                  Siguiente →
+                </Button>
               </div>
             </div>
           )}
