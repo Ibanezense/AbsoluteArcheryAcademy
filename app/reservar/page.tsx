@@ -141,13 +141,6 @@ export default function ReservarPage() {
     const dist = profile.current_distance ?? null
     const distSp = dist ? (distSpots[s.id] ?? Infinity) : Infinity
     
-    // DEBUG: Ver qué está pasando con los cupos
-    console.log('🎯 Session:', new Date(s.start_at).toLocaleTimeString(), 
-                'session_id:', s.id, 
-                'distSp:', distSp, 
-                'found in map:', distSpots[s.id],
-                'user distance:', dist)
-    
     // Si tiene arco propio, solo aplica límite por distancia (pacas)
     if (profile.has_own_bow || profile.group_type === 'ownbow') {
       return distSp === Infinity ? 0 : distSp
@@ -190,12 +183,8 @@ export default function ReservarPage() {
   }
   // días del mes actual
   for (let d = 1; d <= last.getDate(); d++) grid.push(new Date(month.getFullYear(), month.getMonth(), d))
-  // completar hasta 42
-  while (grid.length < 42) {
-    const d = new Date(grid[grid.length-1])
-    d.setDate(d.getDate() + 1)
-    grid.push(d)
-  }
+  // NO completar con días del mes siguiente - mantener solo hasta el último día del mes
+  // Los espacios vacíos quedarán sin botones
 
   if (loading) return <div className="p-5">Cargando…</div>
 
@@ -245,6 +234,12 @@ export default function ReservarPage() {
         <div className="grid grid-cols-7 gap-2">
           {grid.map((d, idx) => {
             const inMonth = d.getMonth() === month.getMonth()
+            
+            // No renderizar días fuera del mes actual
+            if (!inMonth) {
+              return <div key={idx} className="h-10"></div>
+            }
+
             const key = d.toISOString().slice(0,10)
             const info = dayInfo[key]
             const isToday = sameYMD(d, today)
@@ -252,10 +247,10 @@ export default function ReservarPage() {
 
             let bg = 'bg-card'
             let ring = ''
-            let text = inMonth ? 'text-textpri' : 'text-textsec/40'
-            if (inMonth && info?.cancelled && !info?.scheduled) {
+            let text = 'text-textpri'
+            if (info?.cancelled && !info?.scheduled) {
               bg = 'bg-danger/20'
-            } else if (inMonth && info?.scheduled) {
+            } else if (info?.scheduled) {
               bg = 'bg-info/20'
             }
             if (isToday) {
