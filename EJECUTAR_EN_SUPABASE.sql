@@ -468,6 +468,78 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid, text) TO authenticated;
 
 -- ====================================================================
+-- 4. RECREAR VISTA sessions_with_availability CON CAPACIDADES POR GRUPO
+-- ====================================================================
+DROP VIEW IF EXISTS sessions_with_availability CASCADE;
+
+CREATE OR REPLACE VIEW sessions_with_availability AS
+SELECT
+  s.id,
+  s.start_at,
+  s.end_at,
+  s.status,
+  s.coach_id,
+  s.capacity_children,
+  s.capacity_youth,
+  s.capacity_adult,
+  s.capacity_assigned,
+  s.capacity_ownbow,
+  -- Calcular cupos disponibles por grupo
+  (s.capacity_children - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.status = 'reserved' 
+      AND b.group_type = 'children'
+  ), 0))::int AS spots_children,
+  (s.capacity_youth - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.status = 'reserved' 
+      AND b.group_type = 'youth'
+  ), 0))::int AS spots_youth,
+  (s.capacity_adult - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.status = 'reserved' 
+      AND b.group_type = 'adult'
+  ), 0))::int AS spots_adult,
+  (s.capacity_assigned - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.status = 'reserved' 
+      AND b.group_type = 'assigned'
+  ), 0))::int AS spots_assigned,
+  (s.capacity_ownbow - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.status = 'reserved' 
+      AND b.group_type = 'ownbow'
+  ), 0))::int AS spots_ownbow
+FROM sessions s;
+
+-- ====================================================================
+-- 5. RECREAR VISTA session_distance_availability
+-- ====================================================================
+DROP VIEW IF EXISTS session_distance_availability CASCADE;
+
+CREATE OR REPLACE VIEW session_distance_availability AS
+SELECT
+  s.id AS session_id,
+  s.start_at,
+  s.end_at,
+  sda.distance_m,
+  sda.targets,
+  (sda.targets * 4) AS capacity_distance,
+  ((sda.targets * 4) - COALESCE((
+    SELECT COUNT(*) FROM bookings b 
+    WHERE b.session_id = s.id 
+      AND b.distance_m = sda.distance_m 
+      AND b.status = 'reserved'
+  ), 0))::int AS spots_distance
+FROM sessions s
+JOIN session_distance_allocations sda ON sda.session_id = s.id;
+
+-- ====================================================================
 -- VERIFICACIÓN
 -- ====================================================================
 -- Verifica que las funciones se crearon correctamente:
