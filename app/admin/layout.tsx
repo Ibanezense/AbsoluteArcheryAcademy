@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import AdminBottomNav, { type Tab } from '@/components/AdminBottomNav'
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -15,17 +15,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return 'dashboard'
   }, [pathname])
 
+  // Ocultar nav público - usando useEffect en lugar de script inline para evitar problemas con CSP
+  useEffect(() => {
+    const el = document.getElementById('global-nav')
+    if (el) {
+      el.style.display = 'none'
+      el.setAttribute('aria-hidden', 'true')
+    }
+  }, [])
+
   return (
     <>
-      {/* Ocultar SIEMPRE la barra pública dentro de /admin (CSS + refuerzo JS) */}
+      {/* Ocultar SIEMPRE la barra pública dentro de /admin */}
       <style jsx global>{`
         #global-nav { display: none !important; }
       `}</style>
-
-      {/* Refuerzo: si por algún motivo el nav público sigue en el DOM, ocultarlo y marcar aria-hidden */}
-      <script suppressHydrationWarning>
-        {`(function(){try{const el=document.getElementById('global-nav');if(el){el.style.display='none';el.setAttribute('aria-hidden','true');}}catch(e){}})()`}
-      </script>
 
       {/* Contenido del admin con ancho completo */}
       <main className="w-full px-4 pb-24 lg:px-8 lg:pb-28">
