@@ -90,9 +90,11 @@ export default function AdminSessionsCalendar() {
   const toast = useToast()
   const confirm = useConfirm()
   const today = new Date()
-  const [year, setYear] = useState<number>(today.getFullYear())
-  const [month, setMonth] = useState<number>(today.getMonth())
-  const [selectedYMD, setSelectedYMD] = useState<string>(ymdLocal(today))
+  // Inicializar con el lunes de la semana actual
+  const mondayOfCurrentWeek = mondayOf(ymdLocal(today))
+  const [year, setYear] = useState<number>(mondayOfCurrentWeek.getFullYear())
+  const [month, setMonth] = useState<number>(mondayOfCurrentWeek.getMonth())
+  const [selectedYMD, setSelectedYMD] = useState<string>(ymdLocal(mondayOfCurrentWeek))
 
   // data del mes y del día
   const [monthSessions, setMonthSessions] = useState<Session[]>([])
@@ -385,7 +387,8 @@ export default function AdminSessionsCalendar() {
                 {openMonthMenu && (
                   <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-card shadow-xl z-20">
                     <button
-                      className="w-full text-left px-3 py-2 hover:bg-white/5"
+                      disabled
+                      className="w-full text-left px-3 py-2 hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={copyWeek}
                     >
                       Copiar semana → siguiente
@@ -441,7 +444,7 @@ export default function AdminSessionsCalendar() {
 
             {/* Botón copiar semana - dentro del card */}
             <div className="mt-4 pt-4 border-t border-white/10">
-              <button className="btn w-full" onClick={copyWeek}>
+              <button disabled className="btn w-full disabled:opacity-50 disabled:cursor-not-allowed" onClick={copyWeek}>
                 Copiar semana → siguiente
               </button>
             </div>
