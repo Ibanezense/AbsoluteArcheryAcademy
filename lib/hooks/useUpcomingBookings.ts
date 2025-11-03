@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import type { Profile } from './useProfile'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 export type UpcomingBooking = {
   booking_id: string
@@ -35,16 +41,16 @@ export function useUpcomingBookings(profile: Profile | null) {
           throw new Error(bookingsError.message)
         }
 
-        const now = Date.now()
+        const now = dayjs()
         const upcomingBookings = (rows || [])
           .map((r: any) => ({ ...r, start_at: r.start_at }))
           .filter((r: any) => 
             r.start_at && 
-            new Date(r.start_at).getTime() >= now && 
+            dayjs(r.start_at).isAfter(now) && 
             r.status === 'reserved'
           )
           .sort((a: any, b: any) => 
-            new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+            dayjs(a.start_at).valueOf() - dayjs(b.start_at).valueOf()
           )
 
         setBookings(upcomingBookings as UpcomingBooking[])

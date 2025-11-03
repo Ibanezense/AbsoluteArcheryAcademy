@@ -5,6 +5,15 @@ import AppContainer from '@/components/AppContainer'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
 import { useUpcomingBookings } from '@/lib/hooks/useUpcomingBookings'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+import 'dayjs/locale/es'
+
+// Configurar dayjs
+dayjs.extend(utc)
+dayjs.extend(timezone)
+dayjs.locale('es')
 
 const groupLabels: Record<string, string> = {
   children: 'Niños',
@@ -56,8 +65,10 @@ export default function Home() {
     )
   }
 
+  const now = dayjs()
+  const expiryDate = dayjs(profile.membership_end)
   const daysUntilExpiry = profile.membership_end 
-    ? Math.ceil((new Date(profile.membership_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    ? expiryDate.diff(now, 'day') 
     : null
 
   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0
@@ -159,10 +170,10 @@ export default function Home() {
                     <div key={booking.booking_id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
                       <div>
                         <p className="font-medium">
-                          {new Date(booking.start_at).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          {dayjs(booking.start_at).format('ddd, D [de] MMM')}
                         </p>
                         <p className="text-sm text-textsec">
-                          {new Date(booking.start_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'})}
+                          {dayjs(booking.start_at).format('hh:mm A')}
                           {booking.distance_m && ` · ${booking.distance_m}m`}
                         </p>
                       </div>
