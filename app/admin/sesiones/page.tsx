@@ -485,10 +485,18 @@ export default function AdminSessionsCalendar() {
                 console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
                 e.stopPropagation()
                 try {
+                  console.log('⏳ Intentando router.push...')
                   router.push('/admin/sesiones/editar/new')
                   console.log('✅ router.push ejecutado')
+                  
+                  // Fallback con window.location si router.push no funciona
+                  setTimeout(() => {
+                    console.log('⚠️ Router.push no navegó, usando window.location como fallback')
+                    window.location.href = '/admin/sesiones/editar/new'
+                  }, 500)
                 } catch (err) {
                   console.error('❌ Error en router.push:', err)
+                  window.location.href = '/admin/sesiones/editar/new'
                 }
               }}
             >
@@ -625,10 +633,18 @@ export default function AdminSessionsCalendar() {
           console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
           e.stopPropagation()
           try {
+            console.log('⏳ Intentando router.push desde FAB...')
             router.push('/admin/sesiones/editar/new')
             console.log('✅ router.push ejecutado desde FAB')
+            
+            // Fallback con window.location si router.push no funciona
+            setTimeout(() => {
+              console.log('⚠️ Router.push no navegó, usando window.location como fallback')
+              window.location.href = '/admin/sesiones/editar/new'
+            }, 500)
           } catch (err) {
             console.error('❌ Error en router.push desde FAB:', err)
+            window.location.href = '/admin/sesiones/editar/new'
           }
         }}
       >
