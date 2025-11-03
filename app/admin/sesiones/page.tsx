@@ -89,6 +89,9 @@ export default function AdminSessionsCalendar() {
   const router = useRouter()
   const toast = useToast()
   const confirm = useConfirm()
+  
+  console.log('🚀 AdminSessionsCalendar renderizado, router:', !!router, 'toast:', !!toast, 'confirm:', !!confirm)
+  
   const today = new Date()
   // Inicializar con el lunes de la semana actual
   const mondayOfCurrentWeek = mondayOf(ymdLocal(today))
@@ -113,6 +116,25 @@ export default function AdminSessionsCalendar() {
   // Señal mínima para confirmar que la ruta hidrata correctamente en cliente
   useEffect(() => {
     console.log('✅ AdminSessionsCalendar hidratado en cliente')
+    
+    // Listener global para detectar TODOS los clicks
+    const globalClickListener = (e: MouseEvent) => {
+      console.log('🌍 Click global capturado:', {
+        target: e.target,
+        tagName: (e.target as HTMLElement).tagName,
+        className: (e.target as HTMLElement).className,
+        id: (e.target as HTMLElement).id,
+        defaultPrevented: e.defaultPrevented,
+        bubbles: e.bubbles,
+        cancelable: e.cancelable
+      })
+    }
+    
+    document.addEventListener('click', globalClickListener, true)
+    
+    return () => {
+      document.removeEventListener('click', globalClickListener, true)
+    }
   }, [])
 
   /* ----- cargar sesiones del mes Y semanas adyacentes ----- */
@@ -455,16 +477,21 @@ export default function AdminSessionsCalendar() {
         <div className="lg:col-span-7 xl:col-span-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
-            <button className="btn-outline text-sm" onClick={() => {
-              console.log('🔘 Click en Nuevo turno')
-              console.log('🧭 Router disponible:', !!router)
-              try {
-                router.push('/admin/sesiones/editar/new')
-                console.log('✅ router.push ejecutado')
-              } catch (e) {
-                console.error('❌ Error en router.push:', e)
-              }
-            }}>
+            <button 
+              className="btn-outline text-sm" 
+              onClick={(e) => {
+                console.log('🔘 Click CAPTURADO en Nuevo turno', e)
+                console.log('🧭 Router disponible:', !!router)
+                console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
+                e.stopPropagation()
+                try {
+                  router.push('/admin/sesiones/editar/new')
+                  console.log('✅ router.push ejecutado')
+                } catch (err) {
+                  console.error('❌ Error en router.push:', err)
+                }
+              }}
+            >
               + Nuevo turno
             </button>
           </div>
@@ -591,20 +618,22 @@ export default function AdminSessionsCalendar() {
       <button
         className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
                      flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
-          title="Nuevo turno"
-          onClick={() => {
-            console.log('🔘 Click en FAB +')
-            console.log('🧭 Router disponible:', !!router)
-            try {
-              router.push('/admin/sesiones/editar/new')
-              console.log('✅ router.push ejecutado desde FAB')
-            } catch (e) {
-              console.error('❌ Error en router.push desde FAB:', e)
-            }
-          }}
-        >
-          +
-        </button>
+        title="Nuevo turno"
+        onClick={(e) => {
+          console.log('🔘 Click CAPTURADO en FAB +', e)
+          console.log('🧭 Router disponible:', !!router)
+          console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
+          e.stopPropagation()
+          try {
+            router.push('/admin/sesiones/editar/new')
+            console.log('✅ router.push ejecutado desde FAB')
+          } catch (err) {
+            console.error('❌ Error en router.push desde FAB:', err)
+          }
+        }}
+      >
+        +
+      </button>
 
       {/* Modal Roster */}
       {rosterModalOpen && (
