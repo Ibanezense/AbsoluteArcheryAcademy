@@ -1,6 +1,6 @@
-'use client'
+"use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Link from 'next/link'
@@ -57,6 +57,34 @@ function sundayOf(ymd: string) {
   return s
 }
 
+class PageErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // Log detallado para diagnosticar bloqueos de eventos/hidratación
+    console.error('⚠️ AdminSessions error boundary capturó un error', { error, info })
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-4">
+          <div className="card p-4 border border-danger/30 bg-danger/10 text-danger">
+            <h2 className="font-semibold mb-1">Se produjo un error en Turnos</h2>
+            <p className="text-sm opacity-90">Intenta recargar la página. Si persiste, comparte la consola con el error.</p>
+            <button className="btn mt-3" onClick={() => (location.href = '/admin/sesiones')}>Recargar</button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function AdminSessionsCalendar() {
   const router = useRouter()
   const toast = useToast()
@@ -79,6 +107,11 @@ export default function AdminSessionsCalendar() {
   const [rosterModalSession, setRosterModalSession] = useState<Session | null>(null)
   const [rosterModalData, setRosterModalData] = useState<any[]>([])
   const [loadingRoster, setLoadingRoster] = useState(false)
+
+  // Señal mínima para confirmar que la ruta hidrata correctamente en cliente
+  useEffect(() => {
+    console.log('✅ AdminSessionsCalendar hidratado en cliente')
+  }, [])
 
   /* ----- cargar sesiones del mes Y semanas adyacentes ----- */
   const loadMonth = async (y = year, m = month) => {
@@ -117,8 +150,10 @@ export default function AdminSessionsCalendar() {
     }
     const monday = mondayOf(selectedYMD)
     const sunday = sundayOf(selectedYMD)
-    const startDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate()).getTime()
-    const endDay = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate()).getTime()
+    // Inicio de lunes a las 00:00 local
+    const startDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0).getTime()
+    // Fin de domingo a las 23:59:59.999 local (inclusive)
+    const endDay = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate(), 23, 59, 59, 999).getTime()
     console.log('📆 Filtrando semana:', { 
       selectedYMD, 
       monday: ymdLocal(monday), 
@@ -128,17 +163,19 @@ export default function AdminSessionsCalendar() {
     })
     const byDay: Record<string, Session[]> = {}
     monthSessions.forEach((session) => {
+      // Convertir start_at (UTC string) a Date object y obtener timestamp local
       const dt = new Date(session.start_at)
-      const dayStamp = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime()
+      const sessionTime = dt.getTime()
       const ymd = ymdLocal(dt)
       console.log('  🔹 Sesión:', { 
         id: session.id.slice(0,8), 
         start_at: session.start_at,
         ymd,
-        dayStamp: new Date(dayStamp).toISOString(),
-        inRange: dayStamp >= startDay && dayStamp <= endDay
+        sessionTime: new Date(sessionTime).toISOString(),
+        inRange: sessionTime >= startDay && sessionTime <= endDay
       })
-      if (dayStamp < startDay || dayStamp > endDay) return
+      // Comparar el timestamp completo de la sesión contra inicio/fin de semana
+      if (sessionTime < startDay || sessionTime > endDay) return
       if (!byDay[ymd]) byDay[ymd] = []
       byDay[ymd].push(session)
     })
@@ -323,6 +360,7 @@ export default function AdminSessionsCalendar() {
 
   /* ============ UI ============ */
   return (
+    <PageErrorBoundary>
     <AdminGuard>
       <div className="space-y-6">
         {/* Top bar */}
@@ -414,7 +452,16 @@ export default function AdminSessionsCalendar() {
         <div className="lg:col-span-7 xl:col-span-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
-            <button className="btn-outline text-sm" onClick={() => router.push('/admin/sesiones/editar/new')}>
+            <button className="btn-outline text-sm" onClick={() => {
+              console.log('🔘 Click en Nuevo turno')
+              console.log('🧭 Router disponible:', !!router)
+              try {
+                router.push('/admin/sesiones/editar/new')
+                console.log('✅ router.push ejecutado')
+              } catch (e) {
+                console.error('❌ Error en router.push:', e)
+              }
+            }}>
               + Nuevo turno
             </button>
           </div>
@@ -542,7 +589,16 @@ export default function AdminSessionsCalendar() {
         className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
                      flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
           title="Nuevo turno"
-          onClick={() => router.push('/admin/sesiones/editar/new')}
+          onClick={() => {
+            console.log('🔘 Click en FAB +')
+            console.log('🧭 Router disponible:', !!router)
+            try {
+              router.push('/admin/sesiones/editar/new')
+              console.log('✅ router.push ejecutado desde FAB')
+            } catch (e) {
+              console.error('❌ Error en router.push desde FAB:', e)
+            }
+          }}
         >
           +
         </button>
@@ -650,5 +706,6 @@ export default function AdminSessionsCalendar() {
       )}
       </div>
     </AdminGuard>
+    </PageErrorBoundary>
   )
 }
