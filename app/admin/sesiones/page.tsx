@@ -6,6 +6,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import dayjs from 'dayjs'
 
 import AdminGuard from '@/components/AdminGuard'
 
@@ -21,40 +22,6 @@ type RosterLine = {
   distance_m: number
   targets: number
   reserved_count: number
-}
-
-/* ======== helpers (LOCAL, NO UTC) ======== */
-// yyyy-mm-dd en HORA LOCAL
-function ymdLocal(date: Date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-// Convierte Date local a ISO string UTC (respetando conversión de zona horaria)
-// Ejemplo: si tienes 2025-11-01 00:00:00 local (UTC-5), se convierte a 2025-11-01T05:00:00Z
-function isoLocal(date: Date) {
-  return date.toISOString()
-}
-function monthBoundsLocal(y: number, m: number) {
-  // Inicio: primer día del mes a las 00:00 local
-  const start = new Date(y, m, 1, 0, 0, 0, 0)
-  // Fin: primer día del mes SIGUIENTE a las 00:00 local (no inclusive)
-  // Esto cubre TODO el mes hasta 23:59:59.999 del último día
-  const end = new Date(y, m + 1, 1, 0, 0, 0, 0)
-  return { startISO: isoLocal(start), endISO: isoLocal(end) }
-}
-function mondayOf(ymd: string) {
-  const d = new Date(ymd + 'T00:00')
-  const iso = d.getDay() === 0 ? 7 : d.getDay()
-  d.setDate(d.getDate() - (iso - 1))
-  return d
-}
-function sundayOf(ymd: string) {
-  const m = mondayOf(ymd)
-  const s = new Date(m)
-  s.setDate(m.getDate() + 6)
-  return s
 }
 
 class PageErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -92,12 +59,12 @@ export default function AdminSessionsCalendar() {
   
   console.log('🚀 AdminSessionsCalendar renderizado, router:', !!router, 'toast:', !!toast, 'confirm:', !!confirm)
   
-  const today = new Date()
-  // Inicializar con el lunes de la semana actual
-  const mondayOfCurrentWeek = mondayOf(ymdLocal(today))
-  const [year, setYear] = useState<number>(mondayOfCurrentWeek.getFullYear())
-  const [month, setMonth] = useState<number>(mondayOfCurrentWeek.getMonth())
-  const [selectedYMD, setSelectedYMD] = useState<string>(ymdLocal(mondayOfCurrentWeek))
+  // Inicializar con el lunes de la semana actual usando dayjs
+  const today = dayjs()
+  const mondayOfCurrentWeek = today.startOf('week').add(1, 'day') // startOf('week') es domingo, +1 día = lunes
+  const [year, setYear] = useState<number>(mondayOfCurrentWeek.year())
+  const [month, setMonth] = useState<number>(mondayOfCurrentWeek.month())
+  const [selectedYMD, setSelectedYMD] = useState<string>(mondayOfCurrentWeek.format('YYYY-MM-DD'))
 
   // data del mes y del día
   const [monthSessions, setMonthSessions] = useState<Session[]>([])
@@ -116,33 +83,13 @@ export default function AdminSessionsCalendar() {
   // Señal mínima para confirmar que la ruta hidrata correctamente en cliente
   useEffect(() => {
     console.log('✅ AdminSessionsCalendar hidratado en cliente')
-    
-    // Listener global para detectar TODOS los clicks
-    const globalClickListener = (e: MouseEvent) => {
-      console.log('🌍 Click global capturado:', {
-        target: e.target,
-        tagName: (e.target as HTMLElement).tagName,
-        className: (e.target as HTMLElement).className,
-        id: (e.target as HTMLElement).id,
-        defaultPrevented: e.defaultPrevented,
-        bubbles: e.bubbles,
-        cancelable: e.cancelable
-      })
-    }
-    
-    document.addEventListener('click', globalClickListener, true)
-    
-    return () => {
-      document.removeEventListener('click', globalClickListener, true)
-    }
   }, [])
 
   /* ----- cargar sesiones del mes Y semanas adyacentes ----- */
   const loadMonth = async (y = year, m = month) => {
-    // Calcular inicio del mes
-    const monthStart = new Date(y, m, 1, 0, 0, 0, 0)
-    // Calcular fin: incluir hasta 7 días en el mes siguiente para capturar semanas que cruzan meses
-    const monthEnd = new Date(y, m + 1, 8, 0, 0, 0, 0)
+    // Usar dayjs para calcular inicio y fin del mes + 7 días extra
+    const monthStart = dayjs().year(y).month(m).startOf('month')
+    const monthEnd = dayjs().year(y).month(m + 1).date(8).startOf('day')
     
     const startISO = monthStart.toISOString()
     const endISO = monthEnd.toISOString()
@@ -172,39 +119,44 @@ export default function AdminSessionsCalendar() {
       console.log('⚠️ No hay sesiones del mes para filtrar')
       return {}
     }
-    const monday = mondayOf(selectedYMD)
-    const sunday = sundayOf(selectedYMD)
-    // Inicio de lunes a las 00:00 local
-    const startDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate(), 0, 0, 0, 0).getTime()
-    // Fin de domingo a las 23:59:59.999 local (inclusive)
-    const endDay = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate(), 23, 59, 59, 999).getTime()
+    
+    // Calcular lunes y domingo de la semana seleccionada usando dayjs
+    const selected = dayjs(selectedYMD)
+    const monday = selected.startOf('week').add(1, 'day') // Lunes
+    const sunday = monday.add(6, 'day') // Domingo
+    
+    const startDay = monday.startOf('day').valueOf()
+    const endDay = sunday.endOf('day').valueOf()
+    
     console.log('📆 Filtrando semana:', { 
       selectedYMD, 
-      monday: ymdLocal(monday), 
-      sunday: ymdLocal(sunday),
-      startDay: new Date(startDay).toISOString(),
-      endDay: new Date(endDay).toISOString()
+      monday: monday.format('YYYY-MM-DD'), 
+      sunday: sunday.format('YYYY-MM-DD'),
+      startDay: dayjs(startDay).toISOString(),
+      endDay: dayjs(endDay).toISOString()
     })
+    
     const byDay: Record<string, Session[]> = {}
     monthSessions.forEach((session) => {
-      // Convertir start_at (UTC string) a Date object y obtener timestamp local
-      const dt = new Date(session.start_at)
-      const sessionTime = dt.getTime()
-      const ymd = ymdLocal(dt)
+      const dt = dayjs(session.start_at)
+      const sessionTime = dt.valueOf()
+      const ymd = dt.format('YYYY-MM-DD')
+      
       console.log('  🔹 Sesión:', { 
         id: session.id.slice(0,8), 
         start_at: session.start_at,
         ymd,
-        sessionTime: new Date(sessionTime).toISOString(),
+        sessionTime: dt.toISOString(),
         inRange: sessionTime >= startDay && sessionTime <= endDay
       })
-      // Comparar el timestamp completo de la sesión contra inicio/fin de semana
+      
       if (sessionTime < startDay || sessionTime > endDay) return
       if (!byDay[ymd]) byDay[ymd] = []
       byDay[ymd].push(session)
     })
+    
     Object.values(byDay).forEach((list) =>
-      list.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+      list.sort((a, b) => dayjs(a.start_at).valueOf() - dayjs(b.start_at).valueOf())
     )
     console.log('✅ Sesiones agrupadas por día:', byDay)
     return byDay
@@ -243,13 +195,14 @@ export default function AdminSessionsCalendar() {
   }, [weekSessionIds, toast])
 
   const weekDays = useMemo(() => {
-    const monday = mondayOf(selectedYMD)
+    const selected = dayjs(selectedYMD)
+    const monday = selected.startOf('week').add(1, 'day')
+    
     const days = Array.from({ length: 7 }, (_, idx) => {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + idx)
-      const ymd = ymdLocal(date)
+      const date = monday.add(idx, 'day')
+      const ymd = date.format('YYYY-MM-DD')
       return {
-        date,
+        date: date.toDate(), // Convertir a Date para compatibilidad con toLocaleDateString
         ymd,
         sessions: weekSessionsMap[ymd] || [],
       }
@@ -261,9 +214,7 @@ export default function AdminSessionsCalendar() {
   const daySummary = useMemo(() => {
     const map: Record<string, { scheduled: number; cancelled: number }> = {}
     monthSessions.forEach((s) => {
-      // ¡LOCAL! no uses toISOString aqui
-      const dt = new Date(s.start_at)
-      const ymd = ymdLocal(dt)
+      const ymd = dayjs(s.start_at).format('YYYY-MM-DD')
       if (!map[ymd]) map[ymd] = { scheduled: 0, cancelled: 0 }
       if (s.status === 'scheduled') map[ymd].scheduled++
       else map[ymd].cancelled++
@@ -273,37 +224,46 @@ export default function AdminSessionsCalendar() {
 
   /* ----- grilla 6 semanas ----- */
   const gridDays = useMemo(() => {
-    const first = new Date(year, month, 1)
-    const startIndex = first.getDay()
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const firstDay = dayjs().year(year).month(month).startOf('month')
+    const startIndex = firstDay.day() // 0 = domingo
+    const daysInMonth = firstDay.daysInMonth()
+    const todayYMD = dayjs().format('YYYY-MM-DD')
+    
     const cells: { ymd: string; inMonth: boolean; isToday: boolean }[] = []
+    
+    // Días del mes anterior
     for (let i = 0; i < startIndex; i++) {
-      const d = new Date(year, month, i - startIndex + 1)
-      cells.push({ ymd: ymdLocal(d), inMonth: false, isToday: false })
+      const d = firstDay.subtract(startIndex - i, 'day')
+      cells.push({ ymd: d.format('YYYY-MM-DD'), inMonth: false, isToday: false })
     }
+    
+    // Días del mes actual
     for (let d = 1; d <= daysInMonth; d++) {
-      const dt = new Date(year, month, d)
-      const isToday = ymdLocal(dt) === ymdLocal(new Date())
-      cells.push({ ymd: ymdLocal(dt), inMonth: true, isToday })
+      const dt = dayjs().year(year).month(month).date(d)
+      const ymd = dt.format('YYYY-MM-DD')
+      cells.push({ ymd, inMonth: true, isToday: ymd === todayYMD })
     }
+    
+    // Días del mes siguiente para completar 42 celdas (6 semanas)
     while (cells.length < 42) {
-      const last = new Date(cells[cells.length - 1].ymd + 'T00:00')
-      last.setDate(last.getDate() + 1)
-      cells.push({ ymd: ymdLocal(last), inMonth: false, isToday: false })
+      const lastDate = dayjs(cells[cells.length - 1].ymd)
+      const nextDate = lastDate.add(1, 'day')
+      cells.push({ ymd: nextDate.format('YYYY-MM-DD'), inMonth: false, isToday: false })
     }
+    
     return cells
   }, [year, month])
 
   /* ----- acciones ----- */
   const goPrevMonth = () => {
-    const d = new Date(year, month - 1, 1)
-    setYear(d.getFullYear())
-    setMonth(d.getMonth())
+    const d = dayjs().year(year).month(month).subtract(1, 'month')
+    setYear(d.year())
+    setMonth(d.month())
   }
   const goNextMonth = () => {
-    const d = new Date(year, month + 1, 1)
-    setYear(d.getFullYear())
-    setMonth(d.getMonth())
+    const d = dayjs().year(year).month(month).add(1, 'month')
+    setYear(d.year())
+    setMonth(d.month())
   }
 
   const openRosterModal = async (session: Session) => {
@@ -350,10 +310,13 @@ export default function AdminSessionsCalendar() {
   }
 
   const copyWeek = async () => {
-    const mon = mondayOf(selectedYMD)
-    const sun = sundayOf(selectedYMD)
-    const fmt = (d: Date) => ymdLocal(d)
-    if (!(await confirm(`¿Copiar los turnos de la semana ${fmt(mon)} a ${fmt(sun)} hacia la semana siguiente?`))) return
+    const selected = dayjs(selectedYMD)
+    const monday = selected.startOf('week').add(1, 'day')
+    const sunday = monday.add(6, 'day')
+    const fmt = (d: dayjs.Dayjs) => d.format('YYYY-MM-DD')
+    
+    if (!(await confirm(`¿Copiar los turnos de la semana ${fmt(monday)} a ${fmt(sunday)} hacia la semana siguiente?`))) return
+    
     const { data, error } = await supabase.rpc('admin_copy_week', {
       p_ref_date: selectedYMD,
     })
@@ -363,10 +326,7 @@ export default function AdminSessionsCalendar() {
     await loadMonth()
   }
 
-  const monthLabel = new Date(year, month, 1).toLocaleDateString('es', {
-    month: 'long',
-    year: 'numeric',
-  })
+  const monthLabel = dayjs().year(year).month(month).format('MMMM YYYY')
 
   /* ----- util ocupación/cupos ----- */
   const capacityOf = (sessionId: string) =>
@@ -375,10 +335,10 @@ export default function AdminSessionsCalendar() {
     (weekRoster[sessionId] || []).reduce((t, r) => t + r.reserved_count, 0)
 
   const weekRangeLabel = useMemo(() => {
-    const monday = mondayOf(selectedYMD)
-    const sunday = sundayOf(selectedYMD)
-    const fmt = (d: Date) =>
-      d.toLocaleDateString('es', { day: 'numeric', month: 'short' }).replace('.', '')
+    const selected = dayjs(selectedYMD)
+    const monday = selected.startOf('week').add(1, 'day')
+    const sunday = monday.add(6, 'day')
+    const fmt = (d: dayjs.Dayjs) => d.format('D MMM')
     return `${fmt(monday)} – ${fmt(sunday)}`
   }, [selectedYMD])
 
@@ -479,26 +439,7 @@ export default function AdminSessionsCalendar() {
             <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
             <button 
               className="btn-outline text-sm" 
-              onClick={(e) => {
-                console.log('🔘 Click CAPTURADO en Nuevo turno', e)
-                console.log('🧭 Router disponible:', !!router)
-                console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
-                e.stopPropagation()
-                try {
-                  console.log('⏳ Intentando router.push...')
-                  router.push('/admin/sesiones/editar/new')
-                  console.log('✅ router.push ejecutado')
-                  
-                  // Fallback con window.location si router.push no funciona
-                  setTimeout(() => {
-                    console.log('⚠️ Router.push no navegó, usando window.location como fallback')
-                    window.location.href = '/admin/sesiones/editar/new'
-                  }, 500)
-                } catch (err) {
-                  console.error('❌ Error en router.push:', err)
-                  window.location.href = '/admin/sesiones/editar/new'
-                }
-              }}
+              onClick={() => router.push('/admin/sesiones/editar/new')}
             >
               + Nuevo turno
             </button>
@@ -627,26 +568,7 @@ export default function AdminSessionsCalendar() {
         className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
                      flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
         title="Nuevo turno"
-        onClick={(e) => {
-          console.log('🔘 Click CAPTURADO en FAB +', e)
-          console.log('🧭 Router disponible:', !!router)
-          console.log('🎯 Event target:', e.target, 'currentTarget:', e.currentTarget)
-          e.stopPropagation()
-          try {
-            console.log('⏳ Intentando router.push desde FAB...')
-            router.push('/admin/sesiones/editar/new')
-            console.log('✅ router.push ejecutado desde FAB')
-            
-            // Fallback con window.location si router.push no funciona
-            setTimeout(() => {
-              console.log('⚠️ Router.push no navegó, usando window.location como fallback')
-              window.location.href = '/admin/sesiones/editar/new'
-            }, 500)
-          } catch (err) {
-            console.error('❌ Error en router.push desde FAB:', err)
-            window.location.href = '/admin/sesiones/editar/new'
-          }
-        }}
+        onClick={() => router.push('/admin/sesiones/editar/new')}
       >
         +
       </button>
