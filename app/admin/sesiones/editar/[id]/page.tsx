@@ -1,50 +1,9 @@
 'use client'
-import { useEffect, useMemo, useState, Component, type ErrorInfo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import { supabase } from '@/lib/supabaseClient'
 import { toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/utils/dateUtils'
-
-// Error Boundary para capturar errores de renderizado
-class ErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean; error: Error | null }
-> {
-  constructor(props: { children: ReactNode }) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    console.error('🔴 ErrorBoundary capturó error:', error)
-    return { hasError: true, error }
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('🔴 ErrorBoundary detalles:', { error, errorInfo })
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-8">
-          <h1 className="text-xl font-bold text-red-500 mb-4">Error al cargar la página</h1>
-          <pre className="bg-red-50 p-4 rounded text-sm">
-            {this.state.error?.message}
-          </pre>
-          <button 
-            onClick={() => window.location.href = '/admin/sesiones'}
-            className="mt-4 btn-outline"
-          >
-            Volver a Turnos
-          </button>
-        </div>
-      )
-    }
-
-    return this.props.children
-  }
-}
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
 const ALLOWED_DISTANCES = new Set<number>(DISTANCES as unknown as number[])
@@ -64,17 +23,10 @@ type Session = {
 
 type Allocation = { session_id?: string; distance_m: Dist; targets: number }
 
-function EditarSesionInner() {
-  console.log('🟢 EditarSesionInner función ejecutándose')
-  
+export default function EditarSesion() {
   const router = useRouter()
-  console.log('🟢 useRouter obtenido')
-  
   const { id } = useParams<{ id: string }>()
-  console.log('🟢 useParams obtenido:', { id })
-  
   const isNew = id === 'new'
-  console.log('📄 EditarSesion cargando:', { id, isNew })
 
   const [session, setSession] = useState<Session>({
     start_at: new Date(Date.now() + 3600e3).toISOString().slice(0, 16), // yyyy-mm-ddThh:mm
@@ -414,14 +366,5 @@ function EditarSesionInner() {
         </div>
       </div>
     </AdminGuard>
-  )
-}
-
-export default function EditarSesion() {
-  console.log('🟡 EditarSesion wrapper ejecutándose')
-  return (
-    <ErrorBoundary>
-      <EditarSesionInner />
-    </ErrorBoundary>
   )
 }

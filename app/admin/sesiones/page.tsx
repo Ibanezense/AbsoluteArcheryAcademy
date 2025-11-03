@@ -289,20 +289,14 @@ export default function AdminSessionsCalendar() {
   }
 
   const copyWeek = async () => {
-    console.log('🔵 Click en Copiar semana siguiente')
     const mon = mondayOf(selectedYMD)
     const sun = sundayOf(selectedYMD)
     const fmt = (d: Date) => ymdLocal(d)
     if (!(await confirm(`¿Copiar los turnos de la semana ${fmt(mon)} a ${fmt(sun)} hacia la semana siguiente?`))) return
-    console.log('📋 Copiando semana con ref_date:', selectedYMD)
     const { data, error } = await supabase.rpc('admin_copy_week', {
       p_ref_date: selectedYMD,
     })
-    if (error) {
-      console.error('❌ Error al copiar semana:', error)
-      return toast.push({ message: error.message, type: 'error' })
-    }
-    console.log('✅ Semana copiada. Turnos creados:', data)
+    if (error) return toast.push({ message: error.message, type: 'error' })
     setOpenMonthMenu(false)
     toast.push({ message: `Semana copiada. Turnos creados: ${data ?? 0}`, type: 'success' })
     await loadMonth()
@@ -420,16 +414,7 @@ export default function AdminSessionsCalendar() {
         <div className="lg:col-span-7 xl:col-span-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
-            <button className="btn-outline text-sm" onClick={() => {
-              console.log('🔵 Click en botón Nuevo turno')
-              console.log('🚀 Navegando a:', '/admin/sesiones/editar/new')
-              try {
-                router.push('/admin/sesiones/editar/new')
-                console.log('✅ router.push ejecutado')
-              } catch (error) {
-                console.error('❌ Error en router.push:', error)
-              }
-            }}>
+            <button className="btn-outline text-sm" onClick={() => router.push('/admin/sesiones/editar/new')}>
               + Nuevo turno
             </button>
           </div>
@@ -557,16 +542,7 @@ export default function AdminSessionsCalendar() {
         className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
                      flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
           title="Nuevo turno"
-          onClick={() => {
-            console.log('🔵 Click en botón FAB +')
-            console.log('🚀 Navegando a:', '/admin/sesiones/editar/new')
-            try {
-              router.push('/admin/sesiones/editar/new')
-              console.log('✅ router.push ejecutado')
-            } catch (error) {
-              console.error('❌ Error en router.push:', error)
-            }
-          }}
+          onClick={() => router.push('/admin/sesiones/editar/new')}
         >
           +
         </button>
