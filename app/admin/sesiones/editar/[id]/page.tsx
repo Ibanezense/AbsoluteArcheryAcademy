@@ -28,6 +28,8 @@ export default function EditarSesion() {
   const { id } = useParams<{ id: string }>()
   const isNew = id === 'new'
 
+  console.log('📄 EditarSesion cargando:', { id, isNew })
+
   const [session, setSession] = useState<Session>({
     start_at: new Date(Date.now() + 3600e3).toISOString().slice(0, 16), // yyyy-mm-ddThh:mm
     end_at: new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 16),

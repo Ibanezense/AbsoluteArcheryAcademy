@@ -422,7 +422,13 @@ export default function AdminSessionsCalendar() {
             <h2 className="text-xl font-semibold">Semana {weekRangeLabel}</h2>
             <button className="btn-outline text-sm" onClick={() => {
               console.log('🔵 Click en botón Nuevo turno')
-              router.push('/admin/sesiones/editar/new')
+              console.log('🚀 Navegando a:', '/admin/sesiones/editar/new')
+              try {
+                router.push('/admin/sesiones/editar/new')
+                console.log('✅ router.push ejecutado')
+              } catch (error) {
+                console.error('❌ Error en router.push:', error)
+              }
             }}>
               + Nuevo turno
             </button>
@@ -553,7 +559,13 @@ export default function AdminSessionsCalendar() {
           title="Nuevo turno"
           onClick={() => {
             console.log('🔵 Click en botón FAB +')
-            router.push('/admin/sesiones/editar/new')
+            console.log('🚀 Navegando a:', '/admin/sesiones/editar/new')
+            try {
+              router.push('/admin/sesiones/editar/new')
+              console.log('✅ router.push ejecutado')
+            } catch (error) {
+              console.error('❌ Error en router.push:', error)
+            }
           }}
         >
           +
