@@ -1,25 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Avatar from '@/components/ui/Avatar'
 import AppContainer from '@/components/AppContainer'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
-
-type Profile = {
-  id: string
-  full_name: string | null
-  avatar_url: string | null
-  email: string | null
-  membership_type: string | null
-  membership_start: string | null
-  membership_end: string | null
-  classes_remaining: number | null
-  distance_m: number | null
-  group_type: string | null
-  is_active: boolean
-}
+import { useProfile } from '@/lib/hooks/useProfile'
+import { useUpcomingBookings } from '@/lib/hooks/useUpcomingBookings'
 
 const groupLabels: Record<string, string> = {
   children: 'Niños',
@@ -30,56 +15,33 @@ const groupLabels: Record<string, string> = {
 }
 
 export default function Home() {
-  const router = useRouter()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [ready, setReady] = useState(false)
-  const [upcoming, setUpcoming] = useState<any[]>([])
+  const { profile, isLoading: isProfileLoading, error: profileError } = useProfile()
+  const { bookings, isLoading: isBookingsLoading, error: bookingsError } = useUpcomingBookings(profile)
 
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+  // Manejo de estados de carga y error del perfil
+  if (isProfileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-accent border-r-transparent mb-4"></div>
+          <p className="text-textsec">Cargando perfil...</p>
+        </div>
+      </div>
+    )
+  }
 
-      // Si no hay sesión, ir a login
-      if (!user) { router.replace('/login'); return }
-
-      // Si es admin, ir directo al dashboard
-      const { data: admin } = await supabase
-        .from('admin_users')
-        .select('user_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (admin) { router.replace('/admin'); return }
-
-      // Alumno: cargar su perfil completo
-      const { data: p, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (error) console.error(error.message)
-      setProfile(p as Profile)
-
-      // Cargar próximas reservas
-      const { data: rows, error: er } = await supabase
-        .from('user_booking_history')
-        .select('*')
-
-      if (er) console.error('user_booking_history error', er.message)
-
-      const now = Date.now()
-      const next = (rows || [])
-        .map((r: any) => ({ ...r, start_at: r.start_at }))
-        .filter((r: any) => r.start_at && new Date(r.start_at).getTime() >= now && r.status === 'reserved')
-        .sort((a: any,b: any) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-
-      setUpcoming(next)
-      setReady(true)
-    })()
-  }, [router])
-
-  if (!ready) return null
+  if (profileError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="card p-8 text-center max-w-md">
+          <p className="text-danger mb-4">Error al cargar el perfil: {profileError.message}</p>
+          <button className="btn" onClick={() => window.location.reload()}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!profile) {
     return (
@@ -181,29 +143,37 @@ export default function Home() {
             </div>
 
             {/* Próximas reservas */}
-            {upcoming.length > 0 && (
+            {isBookingsLoading ? (
+              <div className="card p-5 text-center">
+                <p className="text-sm text-textsec">Cargando próximas clases...</p>
+              </div>
+            ) : bookingsError ? (
+              <div className="card p-5 text-center">
+                <p className="text-sm text-danger">Error al cargar reservas: {bookingsError.message}</p>
+              </div>
+            ) : bookings.length > 0 ? (
               <div className="card p-5">
                 <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">Próximas Clases</h3>
                 <div className="space-y-3">
-                  {upcoming.map(u => (
-                    <div key={u.booking_id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                  {bookings.map(booking => (
+                    <div key={booking.booking_id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
                       <div>
                         <p className="font-medium">
-                          {new Date(u.start_at).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          {new Date(booking.start_at).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
                         </p>
                         <p className="text-sm text-textsec">
-                          {new Date(u.start_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'})}
-                          {u.distance_m && ` · ${u.distance_m}m`}
+                          {new Date(booking.start_at).toLocaleTimeString('es', {hour:'2-digit', minute:'2-digit'})}
+                          {booking.distance_m && ` · ${booking.distance_m}m`}
                         </p>
                       </div>
-                      <Link className="btn-ghost text-sm px-3 py-1.5" href={`/reserva/${u.booking_id}`}>
+                      <Link className="btn-ghost text-sm px-3 py-1.5" href={`/reserva/${booking.booking_id}`}>
                         Ver
                       </Link>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Grid de información */}
             <div className="grid md:grid-cols-2 gap-4">
