@@ -2,11 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import type { Profile } from './useProfile'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-
-dayjs.extend(utc)
-dayjs.extend(timezone)
 
 export type UpcomingBooking = {
   booking_id: string

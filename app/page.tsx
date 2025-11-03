@@ -2,18 +2,11 @@
 import Link from 'next/link'
 import Avatar from '@/components/ui/Avatar'
 import AppContainer from '@/components/AppContainer'
+import { InfoCard } from '@/components/ui/InfoCard'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
 import { useUpcomingBookings } from '@/lib/hooks/useUpcomingBookings'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-import 'dayjs/locale/es'
-
-// Configurar dayjs
-dayjs.extend(utc)
-dayjs.extend(timezone)
-dayjs.locale('es')
 
 const groupLabels: Record<string, string> = {
   children: 'Niños',
@@ -189,42 +182,36 @@ export default function Home() {
             {/* Grid de información */}
             <div className="grid md:grid-cols-2 gap-4">
               {/* Membresía */}
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">Membresía</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-textsec">Inicio</p>
-                    <p className="text-base font-medium mt-1">
-                      {formatDateOnly(profile.membership_start) || '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-textsec">Vencimiento</p>
-                    <p className="text-base font-medium mt-1">
-                      {formatDateOnly(profile.membership_end) || '—'}
-                    </p>
-                  </div>
+              <InfoCard title="Membresía">
+                <div>
+                  <p className="text-xs text-textsec">Inicio</p>
+                  <p className="text-base font-medium mt-1">
+                    {formatDateOnly(profile.membership_start) || '—'}
+                  </p>
                 </div>
-              </div>
+                <div>
+                  <p className="text-xs text-textsec">Vencimiento</p>
+                  <p className="text-base font-medium mt-1">
+                    {formatDateOnly(profile.membership_end) || '—'}
+                  </p>
+                </div>
+              </InfoCard>
 
               {/* Configuración */}
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">Configuración</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-textsec">Distancia de tiro</p>
-                    <p className="text-base font-medium mt-1">
-                      {profile.distance_m ? `📏 ${profile.distance_m} metros` : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-textsec">Grupo</p>
-                    <p className="text-base font-medium mt-1">
-                      {profile.group_type ? `🎯 ${groupLabels[profile.group_type] || profile.group_type}` : '—'}
-                    </p>
-                  </div>
+              <InfoCard title="Configuración">
+                <div>
+                  <p className="text-xs text-textsec">Distancia de tiro</p>
+                  <p className="text-base font-medium mt-1">
+                    {profile.distance_m ? `📏 ${profile.distance_m} metros` : '—'}
+                  </p>
                 </div>
-              </div>
+                <div>
+                  <p className="text-xs text-textsec">Grupo</p>
+                  <p className="text-base font-medium mt-1">
+                    {profile.group_type ? `🎯 ${groupLabels[profile.group_type] || profile.group_type}` : '—'}
+                  </p>
+                </div>
+              </InfoCard>
             </div>
 
             {/* Botón de acción */}
