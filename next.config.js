@@ -10,13 +10,23 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
+            // Nota: en producción Next.js no usa eval/hot-update, pero permitimos
+            // 'unsafe-eval' y 'unsafe-inline' temporalmente hasta eliminar cualquier dependencia
+            // que lo requiera. Además habilitamos blob:/ws:/wss: y https: para conexiones y workers.
             value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "default-src 'self' https: data: blob:",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https: blob:",
               "style-src 'self' 'unsafe-inline'",
-              "connect-src 'self' https://xgjmgsuggybvsxosgfqi.supabase.co",
-              "img-src 'self' data: https://xgjmgsuggybvsxosgfqi.supabase.co",
-              "font-src 'self'",
+              "img-src 'self' https: data: blob:",
+              "font-src 'self' https: data:",
+              "connect-src 'self' https: wss: ws: https://xgjmgsuggybvsxosgfqi.supabase.co wss://xgjmgsuggybvsxosgfqi.supabase.co",
+              "worker-src 'self' blob:",
+              "frame-src 'self' https:",
+              // opcionalmente forzar https en recursos inseguros
+              'upgrade-insecure-requests'
             ].join('; ')
           }
         ]
