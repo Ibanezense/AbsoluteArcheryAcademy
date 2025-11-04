@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
 import AdminGuard from '@/components/AdminGuard'
@@ -7,11 +8,13 @@ import AdminQuickBooking from '@/components/AdminQuickBooking'
 import AdminBookingsManager from '@/components/AdminBookingsManager'
 import { useDashboardStats } from '@/lib/hooks/useDashboardStats'
 import { StatCard } from '@/components/ui/StatCard'
+import { Modal } from '@/components/ui/Modal'
 
 export default function AdminDashboard() {
   const router = useRouter()
   const { signOut } = useAuth()
   const { stats, isLoading: statsLoading, error: statsError, refetch } = useDashboardStats()
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
     <AdminGuard>
@@ -116,7 +119,17 @@ export default function AdminDashboard() {
 
           {/* Reserva Rápida y Gestión en grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <AdminQuickBooking />
+            <div className="card p-5 flex flex-col justify-between">
+              <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">
+                Acciones Rápidas
+              </h3>
+              <button 
+                className="btn w-full" 
+                onClick={() => setIsModalOpen(true)}
+              >
+                + Reserva Rápida
+              </button>
+            </div>
             <AdminBookingsManager />
           </div>
 
@@ -126,6 +139,15 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Modal de Reserva Rápida */}
+      <Modal 
+        title="Reserva Rápida" 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)}
+      >
+        <AdminQuickBooking />
+      </Modal>
     </AdminGuard>
   )
 }
