@@ -2,31 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
-import Avatar from '@/components/ui/Avatar'
+import { ProfileHeader } from '@/components/ui/ProfileHeader'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { InfoCard } from '@/components/ui/InfoCard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
+import type { Profile } from '@/lib/hooks/useProfile'
 import dayjs from 'dayjs'
-
-type Profile = {
-  id: string
-  full_name: string | null
-  avatar_url: string | null
-  email: string | null
-  phone: string | null
-  membership_type: string | null
-  membership_start: string | null
-  membership_end: string | null
-  classes_remaining: number | null
-  distance_m: number | null
-  group_type: string | null
-  is_active: boolean
-}
 
 type Booking = {
   id: string
@@ -165,61 +150,8 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
   return (
     <AdminGuard>
       <div className="min-h-screen bg-gradient-to-b from-bg to-bg/50">
-        {/* Header sticky */}
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button 
-              onClick={() => router.back()} 
-              className="btn-ghost !px-3"
-              aria-label="Volver"
-            >
-              ←
-            </button>
-            <h1 className="flex-1 text-center font-semibold">Perfil del Estudiante</h1>
-            <Link 
-              href={`/admin/alumnos/editar/${id}`} 
-              className="btn-ghost !px-3"
-              title="Editar perfil"
-            >
-              ✏️
-            </Link>
-          </div>
-        </div>
-
         {/* Header con avatar */}
-        <div className="relative pt-16 pb-20">
-          <div className="relative max-w-4xl mx-auto px-4">
-            <div className="flex flex-col items-center text-center">
-              <Avatar 
-                name={profile.full_name || 'Usuario'} 
-                url={profile.avatar_url} 
-                size="lg"
-              />
-              <h2 className="mt-4 text-2xl font-bold">{profile.full_name || 'Usuario'}</h2>
-              {profile.email && (
-                <p className="mt-1 text-sm text-textsec">{profile.email}</p>
-              )}
-              {profile.phone && (
-                <p className="text-sm text-textsec">{profile.phone}</p>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                  profile.is_active 
-                    ? 'bg-success/20 text-success' 
-                    : 'bg-danger/20 text-danger'
-                }`}>
-                  <span className={`h-2 w-2 rounded-full ${profile.is_active ? 'bg-success' : 'bg-danger'}`}></span>
-                  {profile.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-                {profile.membership_type && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-info/20 text-info">
-                    {profile.membership_type}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProfileHeader profile={profile} isAdmin={true} onBack={() => router.back()} />
 
         {/* Contenido principal */}
         <div className="max-w-4xl mx-auto px-4 -mt-8 pb-24">

@@ -5,20 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import Avatar from '@/components/ui/Avatar'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
-
-type Profile = {
-  id: string
-  full_name: string | null
-  avatar_url: string | null
-  email: string | null
-  membership_type: string | null
-  membership_start: string | null
-  membership_end: string | null
-  classes_remaining: number | null
-  distance_m: number | null
-  group_type: string | null
-  is_active: boolean
-}
+import type { Profile } from '@/lib/hooks/useProfile'
 
 const groupLabels: Record<string, string> = {
   children: 'Niños',

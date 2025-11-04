@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
-import Avatar from '@/components/ui/Avatar'
 import AppContainer from '@/components/AppContainer'
+import { ProfileHeader } from '@/components/ui/ProfileHeader'
 import { InfoCard } from '@/components/ui/InfoCard'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
@@ -64,36 +64,7 @@ export default function Home() {
     <AppContainer>
       <div className="min-h-screen bg-gradient-to-b from-bg to-bg/50">
         {/* Header con avatar */}
-        <div className="relative pt-20 pb-24">
-          <div className="relative max-w-4xl mx-auto px-5">
-            <div className="flex flex-col items-center text-center">
-              <Avatar 
-                name={profile.full_name || 'Usuario'} 
-                url={profile.avatar_url} 
-                size="lg"
-              />
-              <h1 className="mt-4 text-3xl font-bold">{profile.full_name || 'Arquero'}</h1>
-              {profile.email && (
-                <p className="mt-1 text-sm text-textsec">{profile.email}</p>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                  profile.is_active 
-                    ? 'bg-success/20 text-success' 
-                    : 'bg-danger/20 text-danger'
-                }`}>
-                  <span className={`h-2 w-2 rounded-full ${profile.is_active ? 'bg-success' : 'bg-danger'}`}></span>
-                  {profile.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-                {profile.membership_type && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-info/20 text-info">
-                    {profile.membership_type}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProfileHeader profile={profile} isAdmin={false} />
 
         {/* Contenido principal */}
         <div className="max-w-4xl mx-auto px-5 -mt-12 pb-24">

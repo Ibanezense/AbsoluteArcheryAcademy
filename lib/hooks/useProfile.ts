@@ -7,6 +7,7 @@ export type Profile = {
   full_name: string | null
   avatar_url: string | null
   email: string | null
+  phone: string | null
   membership_type: string | null
   membership_start: string | null
   membership_end: string | null
