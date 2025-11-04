@@ -35,9 +35,11 @@ export function useDashboardStats() {
       const { data, error: rpcError } = await supabase.rpc('get_dashboard_stats')
       if (rpcError) throw rpcError
       
-      // La RPC devuelve el JSON en 'data'
-      setStats(data as DashboardStats)
+      // La RPC devuelve el JSON, puede venir como string o como objeto
+      const parsedData = typeof data === 'string' ? JSON.parse(data) : data
+      setStats(parsedData as DashboardStats)
     } catch (err) {
+      console.error('Error en useDashboardStats:', err)
       setError(err instanceof Error ? err.message : 'Error al cargar estadísticas')
     } finally {
       setIsLoading(false)

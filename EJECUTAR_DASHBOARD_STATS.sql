@@ -1,14 +1,16 @@
 -- ============================================================================
--- Función: get_dashboard_stats
--- Fecha: 2025-11-04
--- Descripción: Calcula métricas clave del dashboard para administradores
---              Retorna JSON con 4 métricas principales
+-- EJECUTAR ESTE SQL EN SUPABASE - Dashboard Stats Actualizado
+-- ============================================================================
+-- Instrucciones:
+-- 1. Ir a Supabase Dashboard → SQL Editor
+-- 2. Copiar y pegar TODO este contenido
+-- 3. Hacer clic en "Run"
 -- ============================================================================
 
--- Eliminar función anterior si existe
+-- Eliminar función anterior
 DROP FUNCTION IF EXISTS get_dashboard_stats();
 
--- Crear función que retorna las estadísticas del dashboard
+-- Crear función actualizada con 6 métricas
 CREATE OR REPLACE FUNCTION get_dashboard_stats()
 RETURNS JSON
 LANGUAGE plpgsql
@@ -30,7 +32,6 @@ BEGIN
   WHERE is_active = true;
 
   -- 2. Facturación del mes actual (America/Lima timezone)
-  -- Suma los pagos del mes calendario actual
   SELECT COALESCE(SUM(amount_paid), 0)::INTEGER
   INTO v_facturacion_mes_actual
   FROM profile_memberships
@@ -38,7 +39,6 @@ BEGIN
     AND created_at < date_trunc('month', NOW() AT TIME ZONE 'America/Lima') + INTERVAL '1 month';
 
   -- 3. Membresías por vencer (próximos 7 días)
-  -- Cuenta perfiles activos cuya membresía vence entre hoy y hoy+7 días
   SELECT COUNT(*)::INTEGER
   INTO v_membresias_por_vencer
   FROM profiles
@@ -48,15 +48,13 @@ BEGIN
     AND membership_end <= CURRENT_DATE + INTERVAL '7 days';
 
   -- 4. Alumnos sin clases disponibles
-  -- Cuenta perfiles activos con 0 o menos clases restantes
   SELECT COUNT(*)::INTEGER
   INTO v_alumnos_sin_clases
   FROM profiles
   WHERE is_active = true
     AND COALESCE(classes_remaining, 0) <= 0;
 
-  -- 5. Ocupación de la semana actual (Lunes a Domingo, America/Lima)
-  -- Calcula el porcentaje de plazas ocupadas vs capacidad total de la semana
+  -- 5. Ocupación de la semana actual (Lunes a Domingo)
   WITH semana_actual AS (
     SELECT 
       date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date AS lunes,
@@ -83,7 +81,6 @@ BEGIN
   FROM capacidad_semanal;
 
   -- 6. Turnos disponibles en la semana (con cupos libres)
-  -- Cuenta sesiones de la semana que tienen al menos 1 cupo disponible
   WITH semana_actual AS (
     SELECT 
       date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date AS lunes,
@@ -117,50 +114,13 @@ BEGIN
 END;
 $$;
 
--- Otorgar permisos de ejecución a usuarios autenticados
+-- Otorgar permisos
 GRANT EXECUTE ON FUNCTION get_dashboard_stats TO authenticated;
 
--- Comentario descriptivo
-COMMENT ON FUNCTION get_dashboard_stats IS 
-  'Retorna métricas clave del dashboard: alumnos activos, facturación mensual, membresías por vencer, alumnos sin clases, ocupación semanal y turnos disponibles. 
-   Timezone: America/Lima (UTC-5). Semana: Lunes a Domingo.';
+-- Comentario
+COMMENT ON FUNCTION get_dashboard_stats IS 'Dashboard stats con 6 métricas: alumnos activos, facturación, membresías por vencer, alumnos sin clases, ocupación semanal y turnos disponibles';
 
 -- ============================================================================
--- VERIFICACIÓN Y PRUEBAS
+-- VERIFICACIÓN (ejecutar después para probar)
 -- ============================================================================
-
--- Verificar que la función se creó correctamente:
--- SELECT routine_name, routine_type 
--- FROM information_schema.routines 
--- WHERE routine_name = 'get_dashboard_stats';
-
--- Probar la función (ejecutar como admin):
 -- SELECT * FROM get_dashboard_stats();
-
--- Resultado esperado (ejemplo):
--- {
---   "total_alumnos_activos": 45,
---   "facturacion_mes_actual": 12500,
---   "membresias_por_vencer": 8,
---   "alumnos_sin_clases": 3,
---   "ocupacion_semana_pct": 72,
---   "turnos_disponibles_semana": 15
--- }
-
--- ============================================================================
--- USO EN NEXT.JS
--- ============================================================================
--- 
--- const { data, error } = await supabase.rpc('get_dashboard_stats')
--- 
--- if (error) {
---   console.error('Error:', error)
--- } else {
---   console.log('Total alumnos activos:', data.total_alumnos_activos)
---   console.log('Facturación mes actual: S/.', data.facturacion_mes_actual)
---   console.log('Membresías por vencer:', data.membresias_por_vencer)
---   console.log('Alumnos sin clases:', data.alumnos_sin_clases)
---   console.log('Ocupación semana:', data.ocupacion_semana_pct + '%')
---   console.log('Turnos disponibles semana:', data.turnos_disponibles_semana)
--- }
--- ============================================================================
