@@ -38,3 +38,21 @@ export function formatDateOnly(dateString: string | null | undefined): string {
   // Usamos el .tz() para asegurar que interprete la fecha en la zona horaria local
   return date.tz().format('DD/MM/YYYY')
 }
+
+/**
+ * Parsea una fecha desde Supabase (que puede venir en formato ISO o date)
+ * y la convierte a formato YYYY-MM-DD para uso en inputs de tipo date.
+ * Devuelve cadena vacía si la fecha es nula o inválida.
+ */
+export function parseDateFromSupabase(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return ''
+  }
+  
+  const date = dayjs(dateString)
+  if (!date.isValid()) {
+    return ''
+  }
+  
+  return date.format('YYYY-MM-DD')
+}

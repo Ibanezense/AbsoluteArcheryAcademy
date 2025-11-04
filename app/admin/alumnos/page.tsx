@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import { useStudents, useToggleStudentActive } from '@/lib/queries/studentQueries'
 import Avatar from '@/components/ui/Avatar'
-import { parseDateFromSupabase } from '@/lib/utils/dateUtils'
+import { LegendItem } from '@/components/ui/LegendItem'
+import { norm } from '@/lib/utils/searchUtils'
+import dayjs from 'dayjs'
 
 export default function AdminAlumnos() {
   const router = useRouter()
@@ -18,7 +20,6 @@ export default function AdminAlumnos() {
   const toggleActiveMutation = useToggleStudentActive()
 
   const list = useMemo(() => {
-    const norm = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
     const needle = norm(q)
     return raw.filter(p => {
       const name = norm(p.full_name || '')
@@ -48,19 +49,13 @@ export default function AdminAlumnos() {
 
   // Calcular estadísticas
   const stats = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = dayjs().startOf('day')
     
     const activeStudents = raw.filter(p => p.is_active !== false)
     const noClasses = activeStudents.filter(p => (p.classes_remaining ?? 0) === 0).length
     const expired = activeStudents.filter(p => {
       if (!p.membership_end) return false
-      // Parsear fecha correctamente desde Supabase
-      const dateStr = parseDateFromSupabase(p.membership_end)
-      if (!dateStr) return false
-      const [year, month, day] = dateStr.split('-').map(Number)
-      const membershipDate = new Date(year, month - 1, day)
-      return membershipDate < today
+      return dayjs(p.membership_end).isBefore(today)
     }).length
     
     return { noClasses, expired, total: activeStudents.length }
@@ -98,18 +93,9 @@ export default function AdminAlumnos() {
 
         {/* Leyenda de estados */}
         <div className="card p-3 flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-red-500/60 rounded"></div>
-            <span className="text-textsec">Membresía vencida</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-yellow-500/60 rounded"></div>
-            <span className="text-textsec">Sin clases restantes</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 border-2 border-white/10 rounded"></div>
-            <span className="text-textsec">Normal</span>
-          </div>
+          <LegendItem colorClass="border-2 border-red-500/60" label="Membresía vencida" />
+          <LegendItem colorClass="border-2 border-yellow-500/60" label="Sin clases restantes" />
+          <LegendItem colorClass="border-2 border-white/10" label="Normal" />
         </div>
 
         {/* Grid de tarjetas compactas de alumnos */}
@@ -126,18 +112,11 @@ export default function AdminAlumnos() {
                 const membershipEnd = p.membership_end
                 
                 // Determinar estado de alerta
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
+                const today = dayjs().startOf('day')
                 
-                // Parsear fecha correctamente desde Supabase
                 let isExpired = false
                 if (membershipEnd) {
-                  const dateStr = parseDateFromSupabase(membershipEnd)
-                  if (dateStr) {
-                    const [year, month, day] = dateStr.split('-').map(Number)
-                    const membershipDate = new Date(year, month - 1, day)
-                    isExpired = membershipDate < today
-                  }
+                  isExpired = dayjs(membershipEnd).isBefore(today)
                 }
                 
                 const hasNoClasses = classesRemaining === 0 && active
