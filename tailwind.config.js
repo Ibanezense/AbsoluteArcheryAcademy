@@ -5,15 +5,15 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg: "#0f172a",         // slate-900-ish
-        card: "#111827",       // gray-900
-        accent: "#facc15",     // yellow-400
-        textpri: "#e5e7eb",    // gray-200
-        textsec: "#9ca3af",    // gray-400
-        success: "#22c55e",
-        danger: "#ef4444",
-        warning: "#f59e0b", // <— NUEVO (naranja)
-        info: "#38bdf8",     // celeste
+        bg: '#1C1C22',         // Fondo principal (casi negro)
+        card: '#2A2A30',       // Fondo de las tarjetas (gris oscuro)
+        textpri: '#F0F0F0',    // Texto principal (casi blanco)
+        textsec: '#A0A0A0',    // Texto secundario (gris)
+        accent: '#E53E5F',     // Acento principal (rojo/rosa)
+        success: '#22c55e',
+        danger: '#ef4444',
+        warning: '#f59e0b',
+        info: '#38bdf8',
       },
       borderRadius: { 'xl2': '1.25rem' }
     },

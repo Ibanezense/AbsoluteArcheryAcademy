@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/hooks/useAuth'
 import AdminGuard from '@/components/AdminGuard'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import AdminBookingsManager from '@/components/AdminBookingsManager'
@@ -12,28 +11,24 @@ import { Modal } from '@/components/ui/Modal'
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { signOut } = useAuth()
-  const { stats, isLoading: statsLoading, error: statsError, refetch } = useDashboardStats()
+  const { stats, isLoading: statsLoading, error: statsError } = useDashboardStats()
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
     <AdminGuard>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-bg/80 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8">
-          <div className="flex items-center justify-between py-3">
-            <h1 className="text-lg font-semibold">Panel de Control</h1>
-            <div className="flex items-center gap-2">
-              <button 
-                className="btn-ghost px-3 py-1.5 text-sm"
-                onClick={signOut}
-                title="Cerrar Sesión"
-              >
-                Salir
-              </button>
-              <button className="btn-ghost px-2" onClick={refetch}>⟳</button>
-            </div>
+        {/* Nuevo Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-textpri">Dashboard</h1>
+            <p className="text-sm text-textsec mt-1">Resumen de la actividad de la academia.</p>
           </div>
+          <button 
+            className="bg-accent text-white font-medium px-5 py-2.5 rounded-lg hover:bg-accent/90 transition-colors"
+            onClick={() => setIsModalOpen(true)}
+          >
+            Reserva Rápida
+          </button>
         </div>
 
         <div className="space-y-6">
