@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Spinner } from '@/components/ui/Spinner'
 import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
 import { useMembershipTypes, type MembershipType } from '@/lib/hooks/useMembershipTypes'
@@ -107,8 +108,15 @@ export default function AdminMemberships() {
                 />
               </div>
               <div className="flex gap-2">
-                <button className="btn" onClick={createMembership} disabled={saving}>
-                  {saving ? 'Guardando…' : 'Guardar'}
+                <button className="btn flex items-center justify-center gap-2" onClick={createMembership} disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Spinner />
+                      Guardando…
+                    </>
+                  ) : (
+                    'Guardar'
+                  )}
                 </button>
                 <button className="btn-outline" onClick={() => setShowForm(false)}>Cancelar</button>
               </div>
