@@ -1,24 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
-
-type Membership = {
-  id: string
-  name: string
-  default_classes: number
-  is_active: boolean
-  created_at: string
-}
+import { useMembershipTypes, type MembershipType } from '@/lib/hooks/useMembershipTypes'
 
 export default function AdminMemberships() {
   const toast = useToast()
   const confirm = useConfirm()
-  const [list, setList] = useState<Membership[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: list, isLoading, error, refetch } = useMembershipTypes()
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
   const [classes, setClasses] = useState<number>(4)
@@ -28,19 +20,6 @@ export default function AdminMemberships() {
   const [editName, setEditName] = useState('')
   const [editClasses, setEditClasses] = useState<number>(0)
   const [editActive, setEditActive] = useState<boolean>(true)
-
-  const load = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('memberships')
-      .select('*')
-      .order('created_at', { ascending: false })
-  setLoading(false)
-  if (error) return toast.push({ message: error.message, type: 'error' })
-    setList((data || []) as Membership[])
-  }
-
-  useEffect(() => { load() }, [])
 
   const resetForm = () => {
     setName('')
@@ -58,10 +37,10 @@ export default function AdminMemberships() {
     setSaving(false)
   if (error) return toast.push({ message: error.message, type: 'error' })
     resetForm()
-    await load()
+    refetch()
   }
 
-  const startEdit = (m: Membership) => {
+  const startEdit = (m: MembershipType) => {
     setEditingId(m.id)
     setEditName(m.name)
     setEditClasses(m.default_classes)
@@ -82,14 +61,14 @@ export default function AdminMemberships() {
       .eq('id', editingId)
   if (error) return toast.push({ message: error.message, type: 'error' })
     setEditingId(null)
-    await load()
+    refetch()
   }
 
   const remove = async (id: string) => {
     if (!(await confirm('¿Eliminar esta membresía?'))) return
     const { error } = await supabase.from('memberships').delete().eq('id', id)
     if (error) return toast.push({ message: error.message, type: 'error' })
-    await load()
+    refetch()
   }
 
   return (
@@ -99,9 +78,16 @@ export default function AdminMemberships() {
         <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8 py-3">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold">Membresías</h1>
-            <button className="btn-outline" onClick={load}>Actualizar</button>
+            <button className="btn-outline" onClick={refetch}>Actualizar</button>
           </div>
         </div>
+
+        {/* Estado de error */}
+        {error && (
+          <div className="card p-4 bg-danger/10 border-danger/20">
+            <p className="text-danger text-sm">{error}</p>
+          </div>
+        )}
 
         {/* Formulario rápido para crear */}
         {showForm && (
@@ -131,8 +117,8 @@ export default function AdminMemberships() {
 
         {/* Grid de tarjetas de membresías */}
         <div>
-          {loading && <p className="text-textsec">Cargando…</p>}
-          {!loading && list.length === 0 && (
+          {isLoading && <p className="text-textsec">Cargando…</p>}
+          {!isLoading && list.length === 0 && (
             <div className="card p-8 text-center">
               <p className="text-textsec mb-4">No hay membresías aún</p>
               <button className="btn" onClick={() => setShowForm(true)}>
@@ -141,7 +127,7 @@ export default function AdminMemberships() {
             </div>
           )}
 
-          {!loading && list.length > 0 && (
+          {!isLoading && list.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
               {list.map(m => (
                 <div key={m.id} className="card p-4 hover:bg-white/5 transition-colors">
