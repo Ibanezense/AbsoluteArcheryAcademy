@@ -56,3 +56,74 @@ export function parseDateFromSupabase(dateString: string | null | undefined): st
   
   return date.format('YYYY-MM-DD')
 }
+
+/**
+ * Formatea una hora desde un timestamp o fecha ISO al formato HH:mm
+ */
+export function formatTime(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return '—'
+  }
+  
+  const date = dayjs(dateString)
+  if (!date.isValid()) {
+    return '—'
+  }
+  
+  return date.format('HH:mm')
+}
+
+/**
+ * Convierte una fecha a formato YYYY-MM-DD (local)
+ */
+export function toLocalYMD(date: Date | string): string {
+  return dayjs(date).format('YYYY-MM-DD')
+}
+
+/**
+ * Parsea una fecha en formato YYYY-MM-DD y retorna un objeto Date
+ */
+export function parseLocalYMD(ymd: string): Date {
+  return dayjs(ymd).toDate()
+}
+
+/**
+ * Obtiene el inicio del día en formato ISO para una fecha dada
+ */
+export function startOfDayISO(date: Date | string): string {
+  return dayjs(date).startOf('day').toISOString()
+}
+
+/**
+ * Obtiene el final del día en formato ISO para una fecha dada
+ */
+export function endOfDayISO(date: Date | string): string {
+  return dayjs(date).endOf('day').toISOString()
+}
+
+/**
+ * Convierte un datetime local a formato para input datetime-local (YYYY-MM-DDTHH:mm)
+ */
+export function toLocalDateTimeInput(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return ''
+  }
+  
+  const date = dayjs(dateString)
+  if (!date.isValid()) {
+    return ''
+  }
+  
+  return date.format('YYYY-MM-DDTHH:mm')
+}
+
+/**
+ * Convierte un valor de input datetime-local a formato ISO
+ */
+export function fromLocalDateTimeInput(datetimeLocal: string): string {
+  if (!datetimeLocal) {
+    return ''
+  }
+  
+  return dayjs(datetimeLocal).toISOString()
+}
