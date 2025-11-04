@@ -1,26 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
-import { useToast } from '@/components/ui/ToastProvider'
-import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { ProfileHeader } from '@/components/ui/ProfileHeader'
 import { MembershipAlert } from '@/components/ui/MembershipAlert'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { InfoCard } from '@/components/ui/InfoCard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
-import type { Profile } from '@/lib/hooks/useProfile'
+import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
 import dayjs from 'dayjs'
-
-type Booking = {
-  id: string
-  status: string
-  distance_m: number | null
-  start_at: string | null
-  end_at: string | null
-}
 
 const groupLabels: Record<string, string> = {
   children: 'Niños',
@@ -32,75 +20,11 @@ const groupLabels: Record<string, string> = {
 
 export default function StudentProfile({ params }: { params: { id: string } }) {
   const router = useRouter()
-  const toast = useToast()
-  const confirm = useConfirm()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [reservas, setReservas] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
-  const id = params.id
+  const { id } = params
+  const { profile, bookings, isLoading, error } = useStudentDetail(id)
   const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
 
-  useEffect(() => {
-    let mounted = true
-    
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        
-        const { data: p, error: e1 } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle()
-        
-        if (!mounted) return
-        
-        if (e1) { 
-          toast.push({ message: e1.message, type: 'error' })
-          setLoading(false)
-          return 
-        }
-        
-        setProfile(p as Profile)
-
-        // reservas del alumno (historial)
-        const { data: b, error: e2 } = await supabase
-          .from('bookings')
-          .select('id,status,distance_m,sessions(start_at,end_at)')
-          .eq('user_id', id)
-          .order('created_at', { ascending: false })
-
-        if (!mounted) return
-
-        if (e2) { 
-          toast.push({ message: e2.message, type: 'error' })
-        } else {
-          setReservas((b || []).map((r: any) => ({ 
-            id: r.id, 
-            status: r.status, 
-            start_at: r.sessions?.start_at, 
-            end_at: r.sessions?.end_at, 
-            distance_m: r.distance_m 
-          })))
-        }
-
-        setLoading(false)
-      } catch (err) {
-        if (mounted) {
-          console.error('Error loading student profile:', err)
-          setLoading(false)
-        }
-      }
-    }
-
-    loadData()
-
-    return () => {
-      mounted = false
-    }
-  }, [id])
-
-  if (loading) {
+  if (isLoading) {
     return (
       <AdminGuard>
         <div className="min-h-screen flex items-center justify-center">
@@ -231,11 +155,11 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
             {/* Historial de reservas */}
             <div className="card p-5">
               <h3 className="text-lg font-semibold mb-4">Historial de Reservas</h3>
-              {reservas.length === 0 ? (
+              {bookings.length === 0 ? (
                 <p className="text-sm text-textsec text-center py-8">No tiene reservas registradas</p>
               ) : (
                 <div className="space-y-3">
-                  {reservas.map(r => (
+                  {bookings.map(r => (
                     <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-bg/50 border border-white/5">
                       <div className="flex-1">
                         <div className="font-medium">
