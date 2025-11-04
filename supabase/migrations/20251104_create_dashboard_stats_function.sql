@@ -19,6 +19,8 @@ DECLARE
   v_facturacion_mes_actual INTEGER;
   v_membresias_por_vencer INTEGER;
   v_alumnos_sin_clases INTEGER;
+  v_ocupacion_semana_pct INTEGER;
+  v_turnos_disponibles_semana INTEGER;
   v_result JSON;
 BEGIN
   -- 1. Total de alumnos activos
@@ -53,12 +55,62 @@ BEGIN
   WHERE is_active = true
     AND COALESCE(classes_remaining, 0) <= 0;
 
+  -- 5. Ocupación de la semana actual (Lunes a Domingo, America/Lima)
+  -- Calcula el porcentaje de plazas ocupadas vs capacidad total de la semana
+  WITH semana_actual AS (
+    SELECT 
+      date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date AS lunes,
+      date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date + INTERVAL '6 days' AS domingo
+  ),
+  capacidad_semanal AS (
+    SELECT 
+      COALESCE(SUM(sda.targets * 4), 0) AS total_capacity,
+      COALESCE(SUM(sda.reserved_count), 0) AS total_reserved
+    FROM session_distance_allocations sda
+    JOIN sessions s ON s.id = sda.session_id
+    CROSS JOIN semana_actual
+    WHERE s.start_at >= semana_actual.lunes
+      AND s.start_at < semana_actual.domingo + INTERVAL '1 day'
+      AND s.status = 'scheduled'
+  )
+  SELECT 
+    CASE 
+      WHEN total_capacity > 0 
+      THEN ROUND((total_reserved::NUMERIC / total_capacity::NUMERIC) * 100)::INTEGER
+      ELSE 0
+    END
+  INTO v_ocupacion_semana_pct
+  FROM capacidad_semanal;
+
+  -- 6. Turnos disponibles en la semana (con cupos libres)
+  -- Cuenta sesiones de la semana que tienen al menos 1 cupo disponible
+  WITH semana_actual AS (
+    SELECT 
+      date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date AS lunes,
+      date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date + INTERVAL '6 days' AS domingo
+  )
+  SELECT COUNT(DISTINCT s.id)::INTEGER
+  INTO v_turnos_disponibles_semana
+  FROM sessions s
+  CROSS JOIN semana_actual
+  WHERE s.start_at >= semana_actual.lunes
+    AND s.start_at < semana_actual.domingo + INTERVAL '1 day'
+    AND s.status = 'scheduled'
+    AND EXISTS (
+      SELECT 1 
+      FROM session_distance_allocations sda
+      WHERE sda.session_id = s.id
+        AND (sda.targets * 4) > sda.reserved_count
+    );
+
   -- Construir JSON con todas las métricas
   v_result := json_build_object(
     'total_alumnos_activos', v_total_alumnos_activos,
     'facturacion_mes_actual', v_facturacion_mes_actual,
     'membresias_por_vencer', v_membresias_por_vencer,
-    'alumnos_sin_clases', v_alumnos_sin_clases
+    'alumnos_sin_clases', v_alumnos_sin_clases,
+    'ocupacion_semana_pct', v_ocupacion_semana_pct,
+    'turnos_disponibles_semana', v_turnos_disponibles_semana
   );
 
   RETURN v_result;
@@ -70,8 +122,8 @@ GRANT EXECUTE ON FUNCTION get_dashboard_stats TO authenticated;
 
 -- Comentario descriptivo
 COMMENT ON FUNCTION get_dashboard_stats IS 
-  'Retorna métricas clave del dashboard: alumnos activos, facturación mensual, membresías por vencer y alumnos sin clases. 
-   Timezone: America/Lima (UTC-5)';
+  'Retorna métricas clave del dashboard: alumnos activos, facturación mensual, membresías por vencer, alumnos sin clases, ocupación semanal y turnos disponibles. 
+   Timezone: America/Lima (UTC-5). Semana: Lunes a Domingo.';
 
 -- ============================================================================
 -- VERIFICACIÓN Y PRUEBAS
@@ -90,7 +142,9 @@ COMMENT ON FUNCTION get_dashboard_stats IS
 --   "total_alumnos_activos": 45,
 --   "facturacion_mes_actual": 12500,
 --   "membresias_por_vencer": 8,
---   "alumnos_sin_clases": 3
+--   "alumnos_sin_clases": 3,
+--   "ocupacion_semana_pct": 72,
+--   "turnos_disponibles_semana": 15
 -- }
 
 -- ============================================================================
@@ -106,5 +160,7 @@ COMMENT ON FUNCTION get_dashboard_stats IS
 --   console.log('Facturación mes actual: S/.', data.facturacion_mes_actual)
 --   console.log('Membresías por vencer:', data.membresias_por_vencer)
 --   console.log('Alumnos sin clases:', data.alumnos_sin_clases)
+--   console.log('Ocupación semana:', data.ocupacion_semana_pct + '%')
+--   console.log('Turnos disponibles semana:', data.turnos_disponibles_semana)
 -- }
 -- ============================================================================

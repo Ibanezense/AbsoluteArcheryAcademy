@@ -8,6 +8,8 @@ export type DashboardStats = {
   facturacion_mes_actual: number
   membresias_por_vencer: number
   alumnos_sin_clases: number
+  ocupacion_semana_pct: number
+  turnos_disponibles_semana: number
 }
 
 // Un estado inicial vacío
@@ -16,6 +18,8 @@ const initialState: DashboardStats = {
   facturacion_mes_actual: 0,
   membresias_por_vencer: 0,
   alumnos_sin_clases: 0,
+  ocupacion_semana_pct: 0,
+  turnos_disponibles_semana: 0,
 }
 
 export function useDashboardStats() {
