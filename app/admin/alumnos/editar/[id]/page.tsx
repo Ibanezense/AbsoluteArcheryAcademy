@@ -190,6 +190,7 @@ export default function AlumnoEditor() {
   })
   const [addEnd, setAddEnd] = useState<string>('')
   const [addActive, setAddActive] = useState(true)
+  const [addAmountPaid, setAddAmountPaid] = useState<number>(0)
   const [addSaving, setAddSaving] = useState(false)
 
   // al elegir plantilla, copiar nombre y clases (se puede sobreescribir)
@@ -205,6 +206,7 @@ export default function AlumnoEditor() {
     if (!form.id) return
   if (!addName.trim()) return toast.push({ message: 'Nombre de membresía requerido', type: 'error' })
   if (addClasses < 0) return toast.push({ message: 'Clases debe ser ≥ 0', type: 'error' })
+  if (addAmountPaid < 0) return toast.push({ message: 'Monto pagado debe ser ≥ 0', type: 'error' })
     setAddSaving(true)
     const { error } = await supabase.rpc('admin_add_membership', {
       p_profile: form.id,
@@ -214,6 +216,7 @@ export default function AlumnoEditor() {
       p_start: addStart,
       p_end: addEnd || undefined,
       p_make_active: addActive,
+      p_amount_paid: addAmountPaid,
     })
   setAddSaving(false)
   if (error) return toast.push({ message: error.message, type: 'error' })
@@ -473,7 +476,7 @@ export default function AlumnoEditor() {
                         </div>
                       </div>
 
-                      <div className="grid md:grid-cols-3 gap-3">
+                      <div className="grid md:grid-cols-2 gap-3">
                         <div className="grid gap-2">
                           <label className="text-sm text-textsec">Clases otorgadas</label>
                           <input
@@ -484,6 +487,20 @@ export default function AlumnoEditor() {
                             onChange={e => setAddClasses(Number(e.target.value || 0))}
                           />
                         </div>
+                        <div className="grid gap-2">
+                          <label className="text-sm text-textsec">Monto Pagado (S/.)</label>
+                          <input
+                            className="input"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={addAmountPaid}
+                            onChange={e => setAddAmountPaid(Number(e.target.value || 0))}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-3">
                         <div className="grid gap-2">
                           <label className="text-sm text-textsec">Inicio</label>
                           <input type="date" className="input" value={addStart}
