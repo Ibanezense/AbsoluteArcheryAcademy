@@ -2,6 +2,7 @@
 import Link from 'next/link'
 import AppContainer from '@/components/AppContainer'
 import { ProfileHeader } from '@/components/ui/ProfileHeader'
+import { MembershipAlert } from '@/components/ui/MembershipAlert'
 import { InfoCard } from '@/components/ui/InfoCard'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
@@ -71,35 +72,11 @@ export default function Home() {
           <div className="space-y-6">
             
             {/* Alertas */}
-            {isExpired && (
-              <div className="rounded-2xl border border-danger/30 px-5 py-4 bg-danger/10">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">⚠️</span>
-                  <div>
-                    <p className="font-semibold text-danger">Membresía vencida</p>
-                    <p className="text-sm text-textsec mt-1">
-                      Tu membresía venció hace {Math.abs(daysUntilExpiry!)} día{Math.abs(daysUntilExpiry!) !== 1 ? 's' : ''}. 
-                      Contacta al administrador para renovarla.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isExpiringSoon && (
-              <div className="rounded-2xl border border-warning/30 px-5 py-4 bg-warning/10">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">⏰</span>
-                  <div>
-                    <p className="font-semibold text-warning">Membresía por vencer</p>
-                    <p className="text-sm text-textsec mt-1">
-                      Tu membresía vence en {daysUntilExpiry!} día{daysUntilExpiry! !== 1 ? 's' : ''}. 
-                      Considera renovarla pronto.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+            <MembershipAlert 
+              isExpired={isExpired} 
+              isExpiringSoon={isExpiringSoon} 
+              daysUntilExpiry={daysUntilExpiry} 
+            />
 
             {/* Clases disponibles */}
             <div className="rounded-2xl border border-white/10 px-6 py-5 flex items-center justify-between bg-transparent backdrop-blur">
