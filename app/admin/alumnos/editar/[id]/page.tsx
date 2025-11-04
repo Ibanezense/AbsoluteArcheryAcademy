@@ -41,6 +41,7 @@ type ProfileMembership = {
   start_date: string
   end_date: string | null
   status: 'active' | 'expired' | 'cancelled' | 'historical'
+  amount_paid?: number
   created_at: string
 }
 
@@ -242,6 +243,7 @@ export default function AlumnoEditor() {
   const [editStart, setEditStart] = useState<string>('')
   const [editEnd, setEditEnd] = useState<string>('')
   const [editStatus, setEditStatus] = useState<'active'|'expired'|'cancelled'|'historical'>('active')
+  const [editAmountPaid, setEditAmountPaid] = useState<number>(0)
   const [editSaving, setEditSaving] = useState(false)
 
   const startEdit = (pm: ProfileMembership) => {
@@ -252,12 +254,14 @@ export default function AlumnoEditor() {
     setEditStart(parseDateFromSupabase(pm.start_date))
     setEditEnd(parseDateFromSupabase(pm.end_date))
     setEditStatus(pm.status)
+    setEditAmountPaid(pm.amount_paid ?? 0)
   }
 
   const saveEditMembership = async () => {
     if (!editId) return
   if (!editName.trim()) return toast.push({ message: 'Nombre requerido', type: 'error' })
   if (editClasses < 0) return toast.push({ message: 'Clases debe ser ≥ 0', type: 'error' })
+  if (editAmountPaid < 0) return toast.push({ message: 'Monto pagado debe ser ≥ 0', type: 'error' })
     setEditSaving(true)
     const { error } = await supabase.rpc('admin_update_profile_membership', {
       p_id: editId,
@@ -266,6 +270,7 @@ export default function AlumnoEditor() {
       p_start: editStart,
       p_end: editEnd || undefined,
       p_status: editStatus,
+      p_amount_paid: editAmountPaid,
     })
   setEditSaving(false)
   if (error) return toast.push({ message: error.message, type: 'error' })
@@ -546,16 +551,11 @@ export default function AlumnoEditor() {
                                   onChange={e => setEditClasses(Number(e.target.value || 0))} />
                               </div>
                             </div>
-                            <div className="grid md:grid-cols-3 gap-3">
+                            <div className="grid md:grid-cols-2 gap-3">
                               <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Inicio</label>
-                                <input type="date" className="input" value={editStart}
-                                  onChange={e => setEditStart(e.target.value)} />
-                              </div>
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Fin</label>
-                                <input type="date" className="input" value={editEnd}
-                                  onChange={e => setEditEnd(e.target.value)} />
+                                <label className="text-sm text-textsec">Monto Pagado (S/.)</label>
+                                <input className="input" type="number" min={0} step={1} value={editAmountPaid}
+                                  onChange={e => setEditAmountPaid(Number(e.target.value || 0))} />
                               </div>
                               <div className="grid gap-2">
                                 <label className="text-sm text-textsec">Estado</label>
@@ -566,6 +566,18 @@ export default function AlumnoEditor() {
                                   <option value="cancelled">Cancelada</option>
                                   <option value="historical">Histórica</option>
                                 </select>
+                              </div>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-3">
+                              <div className="grid gap-2">
+                                <label className="text-sm text-textsec">Inicio</label>
+                                <input type="date" className="input" value={editStart}
+                                  onChange={e => setEditStart(e.target.value)} />
+                              </div>
+                              <div className="grid gap-2">
+                                <label className="text-sm text-textsec">Fin</label>
+                                <input type="date" className="input" value={editEnd}
+                                  onChange={e => setEditEnd(e.target.value)} />
                               </div>
                             </div>
                             <div className="flex gap-2">
