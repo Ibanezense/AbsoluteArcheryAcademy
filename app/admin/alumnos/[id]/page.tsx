@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import { ProfileHeader } from '@/components/ui/ProfileHeader'
 import { MembershipAlert } from '@/components/ui/MembershipAlert'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { InfoCard } from '@/components/ui/InfoCard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
@@ -49,26 +50,6 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
           </div>
         </div>
       </AdminGuard>
-    )
-  }
-
-  const statusBadge = (status: string) => {
-    const styles = {
-      attended: 'bg-success/20 text-success',
-      no_show: 'bg-danger/20 text-danger',
-      cancelled: 'bg-textsec/20 text-textsec',
-      reserved: 'bg-warning/20 text-warning',
-    }
-    const labels = {
-      attended: 'Asistió',
-      no_show: 'No asistió',
-      cancelled: 'Cancelada',
-      reserved: 'Reservada',
-    }
-    return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${styles[status as keyof typeof styles] || styles.reserved}`}>
-        {labels[status as keyof typeof labels] || 'Reservada'}
-      </span>
     )
   }
 
@@ -175,7 +156,7 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {statusBadge(r.status)}
+                        <StatusBadge status={r.status} />
                       </div>
                     </div>
                   ))}
