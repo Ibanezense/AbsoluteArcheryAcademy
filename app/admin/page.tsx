@@ -1,17 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { useDashboardStats } from '@/lib/hooks/useDashboardStats'
 import { StatCard } from '@/components/ui/StatCard'
 import { Modal } from '@/components/ui/Modal'
-import { supabase } from '@/lib/supabaseClient'
-import dayjs from 'dayjs'
-import 'dayjs/locale/es'
-
-dayjs.locale('es')
+import { ActiveBookingsWidget } from '@/components/ActiveBookingsWidget'
+import WeeklyOccupancyChart from '@/components/ui/WeeklyOccupancyChart'
 
 // Iconos SVG
 const IconAlumnos = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
@@ -24,52 +21,6 @@ export default function AdminDashboard() {
   const router = useRouter()
   const { stats, isLoading: statsLoading, error: statsError } = useDashboardStats()
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeBookings, setActiveBookings] = useState<any[]>([])
-
-  useEffect(() => {
-    // Cargar reservas activas de la semana
-    const fetchActiveBookings = async () => {
-      const now = new Date()
-      const startOfWeek = new Date(now)
-      startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Lunes
-      startOfWeek.setHours(0, 0, 0, 0)
-      
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6) // Domingo
-      endOfWeek.setHours(23, 59, 59, 999)
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          profile_id,
-          session_id,
-          distance_m,
-          status,
-          sessions!inner (
-            id,
-            start_at,
-            end_at,
-            status
-          ),
-          profiles!inner (
-            id,
-            full_name,
-            email
-          )
-        `)
-        .eq('status', 'reserved')
-        .gte('sessions.start_at', startOfWeek.toISOString())
-        .lte('sessions.start_at', endOfWeek.toISOString())
-        .eq('sessions.status', 'scheduled')
-        .order('sessions.start_at', { ascending: true })
-        .limit(10)
-
-      console.log('📊 Active bookings query:', { data, error })
-      setActiveBookings(data || [])
-    }
-    fetchActiveBookings()
-  }, [])
 
   return (
     <AdminGuard>
@@ -130,54 +81,23 @@ export default function AdminDashboard() {
           )}
         </div>
         
-        {/* --- 3. RESUMEN SEMANAL --- */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3 text-textpri">Resumen de la Semana</h2>
-          {statsLoading && (
-            <div className="text-textsec text-sm">Cargando...</div>
-          )}
-          {!statsLoading && !statsError && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="Ocupación Semanal" value={`${stats.ocupacion_semana_pct}%`}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Lunes a Domingo</span>
-                  <span className="text-info"><IconOcupacion /></span>
-                </div>
-              </StatCard>
-              <StatCard title="Turnos Disponibles" value={stats.turnos_disponibles_semana}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Semana actual con cupos</span>
-                  <span className="text-success"><IconOcupacion /></span>
-                </div>
-              </StatCard>
-              
-              {/* Espacios vacíos para alinear el grid */}
-              <div className="hidden lg:block"></div>
-              <div className="hidden lg:block"></div>
+        {/* --- 3. GRÁFICO Y RESERVAS --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Gráfico de Ocupación (2/3 del ancho) */}
+          <div className="lg:col-span-2">
+            <div className="card p-5">
+              {statsLoading && (
+                <div className="h-[300px] flex items-center justify-center text-textsec">Cargando gráfico...</div>
+              )}
+              {!statsLoading && !statsError && (
+                <WeeklyOccupancyChart data={stats.ocupacion_por_dia} />
+              )}
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* --- 4. RESERVAS ACTIVAS --- */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3 text-textpri">Reservas Activas de la Semana</h2>
-          <div className="card p-4 space-y-3">
-            {activeBookings.length === 0 && (
-              <p className="text-textsec text-sm">No hay reservas activas para esta semana.</p>
-            )}
-            {activeBookings.map((booking: any) => (
-              <div key={booking.id} className="bg-bg p-3 rounded-lg border border-white/10 flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-textpri">{booking.profiles.full_name}</p>
-                  <p className="text-sm text-textsec">
-                    {dayjs(booking.sessions.start_at).format('ddd, D [de] MMM · HH:mm')} · {booking.distance_m}m
-                  </p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded bg-success/10 text-success">
-                  Confirmada
-                </span>
-              </div>
-            ))}
+          {/* Reservas Activas (1/3 del ancho) */}
+          <div className="lg:col-span-1">
+            <ActiveBookingsWidget />
           </div>
         </div>
         

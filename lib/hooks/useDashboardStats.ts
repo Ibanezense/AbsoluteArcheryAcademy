@@ -2,6 +2,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
+export type DailyOccupancy = {
+  day: string
+  ocupacion_pct: number
+}
+
 // Este es el tipo de datos que esperamos de nuestra función RPC
 export type DashboardStats = {
   total_alumnos_activos: number
@@ -10,6 +15,7 @@ export type DashboardStats = {
   alumnos_sin_clases: number
   ocupacion_semana_pct: number
   turnos_disponibles_semana: number
+  ocupacion_por_dia: DailyOccupancy[]
 }
 
 // Un estado inicial vacío
@@ -20,6 +26,7 @@ const initialState: DashboardStats = {
   alumnos_sin_clases: 0,
   ocupacion_semana_pct: 0,
   turnos_disponibles_semana: 0,
+  ocupacion_por_dia: [],
 }
 
 export function useDashboardStats() {
