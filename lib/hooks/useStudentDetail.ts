@@ -10,9 +10,21 @@ export type Booking = {
   end_at: string | null
 }
 
+export type ProfileMembership = {
+  id: string
+  name: string
+  classes_total: number
+  classes_used: number
+  start_date: string
+  end_date: string | null
+  status: string
+  amount_paid: number
+}
+
 export function useStudentDetail(studentId: string) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [memberships, setMemberships] = useState<ProfileMembership[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,6 +74,21 @@ export function useStudentDetail(studentId: string) {
           })))
         }
 
+        // Cargar membresías del alumno
+        const { data: membershipsData, error: membershipsError } = await supabase
+          .from('profile_memberships')
+          .select('id,name,classes_total,classes_used,start_date,end_date,status,amount_paid')
+          .eq('profile_id', studentId)
+          .order('start_date', { ascending: false })
+
+        if (!mounted) return
+
+        if (membershipsError) {
+          setError(membershipsError.message)
+        } else {
+          setMemberships((membershipsData || []) as ProfileMembership[])
+        }
+
         setIsLoading(false)
       } catch (err) {
         if (mounted) {
@@ -79,5 +106,5 @@ export function useStudentDetail(studentId: string) {
     }
   }, [studentId])
 
-  return { profile, bookings, isLoading, error }
+  return { profile, bookings, memberships, isLoading, error }
 }

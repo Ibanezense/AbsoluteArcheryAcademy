@@ -22,7 +22,7 @@ const groupLabels: Record<string, string> = {
 export default function StudentProfile({ params }: { params: { id: string } }) {
   const router = useRouter()
   const { id } = params
-  const { profile, bookings, isLoading, error } = useStudentDetail(id)
+  const { profile, bookings, memberships, isLoading, error } = useStudentDetail(id)
   const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
 
   if (isLoading) {
@@ -132,6 +132,41 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                 </div>
               </div>
             )}
+
+            {/* Historial de membresías */}
+            <div className="card p-5">
+              <h3 className="text-lg font-semibold mb-4">Historial de Membresías</h3>
+              {memberships.length === 0 ? (
+                <p className="text-sm text-textsec text-center py-8">No tiene membresías registradas</p>
+              ) : (
+                <div className="space-y-3">
+                  {memberships.map(m => (
+                    <div key={m.id} className="p-4 rounded-lg bg-bg/50 border border-white/5">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1">
+                          <p className="font-medium">{m.name}</p>
+                          <p className="text-sm text-textsec mt-1">
+                            {m.status === 'active' && '✅ '}
+                            {m.status === 'active' ? 'Activa' : m.status}
+                            {' · '}Clases: {m.classes_used}/{m.classes_total}
+                          </p>
+                        </div>
+                        {m.amount_paid > 0 && (
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-success">S/. {m.amount_paid.toLocaleString()}</p>
+                            <p className="text-xs text-textsec">Pagado</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-textsec">
+                        {formatDateOnly(m.start_date)}
+                        {m.end_date && ` → ${formatDateOnly(m.end_date)}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Historial de reservas */}
             <div className="card p-5">

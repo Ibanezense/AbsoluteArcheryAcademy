@@ -595,6 +595,11 @@ export default function AlumnoEditor() {
                                 {pm.status === 'active' ? 'Activa' : pm.status} · Clases: {pm.classes_total}
                                 {pm.start_date ? ` · ${parseDateFromSupabase(pm.start_date)}` : ''}{pm.end_date ? ` → ${parseDateFromSupabase(pm.end_date)}` : ''}
                               </p>
+                              {pm.amount_paid !== undefined && pm.amount_paid > 0 && (
+                                <p className="text-sm font-medium text-success">
+                                  💰 S/. {pm.amount_paid.toLocaleString()}
+                                </p>
+                              )}
                             </div>
                             <div className="flex gap-2">
                               <button className="btn-outline" onClick={() => startEdit(pm)}>Editar</button>
