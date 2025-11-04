@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Avatar from '@/components/ui/Avatar'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { InfoCard } from '@/components/ui/InfoCard'
+import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import dayjs from 'dayjs'
 
 type Profile = {
@@ -51,6 +52,7 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
   const [reservas, setReservas] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const id = params.id
+  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
 
   useEffect(() => {
     let mounted = true
@@ -139,13 +141,6 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
       </AdminGuard>
     )
   }
-
-  const daysUntilExpiry = profile.membership_end
-    ? dayjs(profile.membership_end).diff(dayjs().startOf('day'), 'day')
-    : null
-
-  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0
-  const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
 
   const statusBadge = (status: string) => {
     const styles = {
@@ -238,7 +233,7 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                   <div>
                     <p className="font-semibold text-danger">Membresía vencida</p>
                     <p className="text-sm text-textsec mt-1">
-                      La membresía venció hace {Math.abs(daysUntilExpiry)} día{Math.abs(daysUntilExpiry) !== 1 ? 's' : ''}.
+                      La membresía venció hace {Math.abs(daysUntilExpiry!)} día{Math.abs(daysUntilExpiry!) !== 1 ? 's' : ''}.
                     </p>
                   </div>
                 </div>
@@ -252,7 +247,7 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                   <div>
                     <p className="font-semibold text-warning">Membresía por vencer</p>
                     <p className="text-sm text-textsec mt-1">
-                      La membresía vence en {daysUntilExpiry} día{daysUntilExpiry !== 1 ? 's' : ''}.
+                      La membresía vence en {daysUntilExpiry!} día{daysUntilExpiry! !== 1 ? 's' : ''}.
                     </p>
                   </div>
                 </div>

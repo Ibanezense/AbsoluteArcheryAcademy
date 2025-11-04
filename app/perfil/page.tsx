@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Avatar from '@/components/ui/Avatar'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
+import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 
 type Profile = {
   id: string
@@ -30,6 +31,7 @@ const groupLabels: Record<string, string> = {
 export default function PerfilPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
 
   useEffect(() => {
     (async () => {
@@ -80,13 +82,6 @@ export default function PerfilPage() {
     )
   }
 
-  const daysUntilExpiry = profile.membership_end 
-    ? Math.ceil((new Date(profile.membership_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null
-
-  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0
-  const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-bg to-bg/50">
       {/* Header con avatar */}
@@ -133,7 +128,7 @@ export default function PerfilPage() {
                 <div>
                   <p className="font-semibold text-danger">Membresía vencida</p>
                   <p className="text-sm text-textsec mt-1">
-                    Tu membresía venció hace {Math.abs(daysUntilExpiry)} día{Math.abs(daysUntilExpiry) !== 1 ? 's' : ''}. 
+                    Tu membresía venció hace {Math.abs(daysUntilExpiry!)} día{Math.abs(daysUntilExpiry!) !== 1 ? 's' : ''}. 
                     Contacta al administrador para renovarla.
                   </p>
                 </div>
@@ -148,7 +143,7 @@ export default function PerfilPage() {
                 <div>
                   <p className="font-semibold text-warning">Membresía por vencer</p>
                   <p className="text-sm text-textsec mt-1">
-                    Tu membresía vence en {daysUntilExpiry} día{daysUntilExpiry !== 1 ? 's' : ''}. 
+                    Tu membresía vence en {daysUntilExpiry!} día{daysUntilExpiry! !== 1 ? 's' : ''}. 
                     Considera renovarla pronto.
                   </p>
                 </div>

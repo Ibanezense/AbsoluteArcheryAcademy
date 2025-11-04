@@ -6,6 +6,7 @@ import { InfoCard } from '@/components/ui/InfoCard'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
 import { useUpcomingBookings } from '@/lib/hooks/useUpcomingBookings'
+import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import dayjs from 'dayjs'
 
 const groupLabels: Record<string, string> = {
@@ -19,6 +20,7 @@ const groupLabels: Record<string, string> = {
 export default function Home() {
   const { profile, isLoading: isProfileLoading, error: profileError } = useProfile()
   const { bookings, isLoading: isBookingsLoading, error: bookingsError } = useUpcomingBookings(profile)
+  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
 
   // Manejo de estados de carga y error del perfil
   if (isProfileLoading) {
@@ -57,15 +59,6 @@ export default function Home() {
       </div>
     )
   }
-
-  const now = dayjs()
-  const expiryDate = dayjs(profile.membership_end)
-  const daysUntilExpiry = profile.membership_end 
-    ? expiryDate.diff(now, 'day') 
-    : null
-
-  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0
-  const isExpired = daysUntilExpiry !== null && daysUntilExpiry <= 0
 
   return (
     <AppContainer>
@@ -114,7 +107,7 @@ export default function Home() {
                   <div>
                     <p className="font-semibold text-danger">Membresía vencida</p>
                     <p className="text-sm text-textsec mt-1">
-                      Tu membresía venció hace {Math.abs(daysUntilExpiry)} día{Math.abs(daysUntilExpiry) !== 1 ? 's' : ''}. 
+                      Tu membresía venció hace {Math.abs(daysUntilExpiry!)} día{Math.abs(daysUntilExpiry!) !== 1 ? 's' : ''}. 
                       Contacta al administrador para renovarla.
                     </p>
                   </div>
@@ -129,7 +122,7 @@ export default function Home() {
                   <div>
                     <p className="font-semibold text-warning">Membresía por vencer</p>
                     <p className="text-sm text-textsec mt-1">
-                      Tu membresía vence en {daysUntilExpiry} día{daysUntilExpiry !== 1 ? 's' : ''}. 
+                      Tu membresía vence en {daysUntilExpiry!} día{daysUntilExpiry! !== 1 ? 's' : ''}. 
                       Considera renovarla pronto.
                     </p>
                   </div>
