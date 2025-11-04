@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Avatar from '@/components/ui/Avatar'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
+import { InfoCard } from '@/components/ui/InfoCard'
+import dayjs from 'dayjs'
 
 type Profile = {
   id: string
@@ -138,8 +140,8 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
     )
   }
 
-  const daysUntilExpiry = profile.membership_end 
-    ? Math.ceil((new Date(profile.membership_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  const daysUntilExpiry = profile.membership_end
+    ? dayjs(profile.membership_end).diff(dayjs().startOf('day'), 'day')
     : null
 
   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0
@@ -269,42 +271,36 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
             {/* Grid de información */}
             <div className="grid md:grid-cols-2 gap-4">
               {/* Membresía */}
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">Membresía</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-textsec">Inicio</p>
-                    <p className="text-base font-medium mt-1">
-                      {formatDateOnly(profile.membership_start) || '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-textsec">Vencimiento</p>
-                    <p className="text-base font-medium mt-1">
-                      {formatDateOnly(profile.membership_end) || '—'}
-                    </p>
-                  </div>
+              <InfoCard title="Membresía">
+                <div>
+                  <p className="text-xs text-textsec">Inicio</p>
+                  <p className="text-base font-medium mt-1">
+                    {formatDateOnly(profile.membership_start) || '—'}
+                  </p>
                 </div>
-              </div>
+                <div>
+                  <p className="text-xs text-textsec">Vencimiento</p>
+                  <p className="text-base font-medium mt-1">
+                    {formatDateOnly(profile.membership_end) || '—'}
+                  </p>
+                </div>
+              </InfoCard>
 
               {/* Configuración */}
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">Configuración</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-xs text-textsec">Distancia de tiro</p>
-                    <p className="text-base font-medium mt-1">
-                      {profile.distance_m ? `📏 ${profile.distance_m} metros` : '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-textsec">Grupo</p>
-                    <p className="text-base font-medium mt-1">
-                      {profile.group_type ? `🎯 ${groupLabels[profile.group_type] || profile.group_type}` : '—'}
-                    </p>
-                  </div>
+              <InfoCard title="Configuración">
+                <div>
+                  <p className="text-xs text-textsec">Distancia de tiro</p>
+                  <p className="text-base font-medium mt-1">
+                    {profile.distance_m ? `📏 ${profile.distance_m} metros` : '—'}
+                  </p>
                 </div>
-              </div>
+                <div>
+                  <p className="text-xs text-textsec">Grupo</p>
+                  <p className="text-base font-medium mt-1">
+                    {profile.group_type ? `🎯 ${groupLabels[profile.group_type] || profile.group_type}` : '—'}
+                  </p>
+                </div>
+              </InfoCard>
             </div>
 
             {/* Nota si falta configuración */}
@@ -338,16 +334,12 @@ export default function StudentProfile({ params }: { params: { id: string } }) {
                       <div className="flex-1">
                         <div className="font-medium">
                           {r.start_at 
-                            ? new Date(r.start_at).toLocaleDateString('es', { 
-                                weekday: 'short', 
-                                day: 'numeric', 
-                                month: 'short' 
-                              })
+                            ? dayjs(r.start_at).format('ddd, D [de] MMM')
                             : '—'}
                         </div>
                         <div className="text-sm text-textsec">
                           {r.start_at 
-                            ? new Date(r.start_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+                            ? dayjs(r.start_at).format('hh:mm A')
                             : '—'}
                           {r.distance_m && ` • ${r.distance_m}m`}
                         </div>
