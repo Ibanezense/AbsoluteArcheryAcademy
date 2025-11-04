@@ -11,6 +11,8 @@ import AdminGuard from '@/components/AdminGuard'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import AdminBookingsManager from '@/components/AdminBookingsManager'
 import Avatar from '@/components/ui/Avatar'
+import { useDashboardStats } from '@/lib/hooks/useDashboardStats'
+import { StatCard } from '@/components/ui/StatCard'
 
 const groupLabel: Record<GroupType, string> = {
   children: 'Niños',
@@ -24,6 +26,7 @@ export default function AdminDashboard() {
   const router = useRouter()
   const toast = useToast()
   const { signOut } = useAuth()
+  const { stats, isLoading: statsLoading, error: statsError, refetch } = useDashboardStats()
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<Session[]>([])
   const [roster, setRoster] = useState<RosterLine[]>([])
@@ -176,12 +179,62 @@ export default function AdminDashboard() {
               >
                 Salir
               </button>
-              <button className="btn-ghost px-2" onClick={() => loadDate(selectedDate)}>⟳</button>
+              <button className="btn-ghost px-2" onClick={() => { loadDate(selectedDate); refetch(); }}>⟳</button>
             </div>
           </div>
         </div>
 
         <div className="space-y-6">
+          {/* Estadísticas del Dashboard */}
+          <div>
+            <h2 className="text-sm font-semibold mb-4">Métricas Generales</h2>
+            
+            {statsLoading && (
+              <div className="text-textsec text-sm">Cargando estadísticas...</div>
+            )}
+            
+            {statsError && (
+              <div className="card p-4 bg-danger/10 border-danger/20 text-danger text-sm">
+                Error: {statsError}
+              </div>
+            )}
+            
+            {!statsLoading && !statsError && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard 
+                  title="Alumnos Activos" 
+                  value={stats.total_alumnos_activos}
+                  icon="👥"
+                >
+                  <p className="text-xs text-textsec">Total de estudiantes activos</p>
+                </StatCard>
+
+                <StatCard 
+                  title="Facturación del Mes" 
+                  value={`S/. ${stats.facturacion_mes_actual.toLocaleString()}`}
+                  icon="💰"
+                >
+                  <p className="text-xs text-textsec">Ingresos mes actual</p>
+                </StatCard>
+
+                <StatCard 
+                  title="Membresías por Vencer" 
+                  value={stats.membresias_por_vencer}
+                  icon="⚠️"
+                >
+                  <p className="text-xs text-textsec">Próximos 7 días</p>
+                </StatCard>
+
+                <StatCard 
+                  title="Alumnos sin Clases" 
+                  value={stats.alumnos_sin_clases}
+                  icon="📉"
+                >
+                  <p className="text-xs text-textsec">Requieren renovación</p>
+                </StatCard>
+              </div>
+            )}
+          </div>
           {/* Reservas de hoy */}
           <div>
             <h2 className="text-sm font-semibold mb-4">Reservas — {parseLocalYMD(selectedDate).toLocaleDateString()}</h2>
