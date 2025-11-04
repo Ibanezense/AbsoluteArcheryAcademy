@@ -27,14 +27,45 @@ export default function AdminDashboard() {
   const [activeBookings, setActiveBookings] = useState<any[]>([])
 
   useEffect(() => {
-    // Cargar reservas activas
+    // Cargar reservas activas de la semana
     const fetchActiveBookings = async () => {
-      const { data } = await supabase
-        .from('user_booking_history')
-        .select('*')
+      const now = new Date()
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay() + 1) // Lunes
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6) // Domingo
+      endOfWeek.setHours(23, 59, 59, 999)
+
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          profile_id,
+          session_id,
+          distance_m,
+          status,
+          sessions!inner (
+            id,
+            start_at,
+            end_at,
+            status
+          ),
+          profiles!inner (
+            id,
+            full_name,
+            email
+          )
+        `)
         .eq('status', 'reserved')
-        .order('start_at', { ascending: true })
-        .limit(3)
+        .gte('sessions.start_at', startOfWeek.toISOString())
+        .lte('sessions.start_at', endOfWeek.toISOString())
+        .eq('sessions.status', 'scheduled')
+        .order('sessions.start_at', { ascending: true })
+        .limit(10)
+
+      console.log('📊 Active bookings query:', { data, error })
       setActiveBookings(data || [])
     }
     fetchActiveBookings()
@@ -129,17 +160,22 @@ export default function AdminDashboard() {
 
         {/* --- 4. RESERVAS ACTIVAS --- */}
         <div>
-          <h2 className="text-lg font-semibold mb-3 text-textpri">Reservas Activas</h2>
+          <h2 className="text-lg font-semibold mb-3 text-textpri">Reservas Activas de la Semana</h2>
           <div className="card p-4 space-y-3">
             {activeBookings.length === 0 && (
-              <p className="text-textsec text-sm">No hay próximas reservas de estudiantes.</p>
+              <p className="text-textsec text-sm">No hay reservas activas para esta semana.</p>
             )}
-            {activeBookings.map((booking) => (
-              <div key={booking.id} className="bg-bg p-3 rounded-lg border border-white/10">
-                <p className="font-medium">{booking.full_name}</p>
-                <p className="text-sm text-textsec">
-                  {dayjs(booking.start_at).format('ddd, D [de] MMM, HH:mm')}
-                </p>
+            {activeBookings.map((booking: any) => (
+              <div key={booking.id} className="bg-bg p-3 rounded-lg border border-white/10 flex justify-between items-center">
+                <div>
+                  <p className="font-medium text-textpri">{booking.profiles.full_name}</p>
+                  <p className="text-sm text-textsec">
+                    {dayjs(booking.sessions.start_at).format('ddd, D [de] MMM · HH:mm')} · {booking.distance_m}m
+                  </p>
+                </div>
+                <span className="text-xs px-2 py-1 rounded bg-success/10 text-success">
+                  Confirmada
+                </span>
               </div>
             ))}
           </div>
