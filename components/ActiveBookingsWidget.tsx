@@ -20,14 +20,8 @@ export function ActiveBookingsWidget() {
     const fetchActiveBookings = async () => {
       setIsLoading(true)
 
-      // Cargar las 5 próximas reservas (que no hayan pasado)
-      const { data, error } = await supabase
-        .from('user_booking_history') // Usamos la vista que tiene el 'full_name'
-        .select('id, full_name, start_at, distance_m')
-        .eq('status', 'reserved')
-        .gte('start_at', dayjs().toISOString()) // Solo desde ahora en adelante
-        .order('start_at', { ascending: true })
-        .limit(5)
+      // Usar RPC function para bypasear RLS
+      const { data, error } = await supabase.rpc('get_active_bookings')
 
       if (error) {
         console.error('Error loading active bookings:', error.message)
