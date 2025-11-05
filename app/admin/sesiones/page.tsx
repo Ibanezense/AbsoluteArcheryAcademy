@@ -563,9 +563,9 @@ export default function AdminSessionsCalendar() {
         </div>
       </div>
 
-      {/* FAB + para crear turno */}
+      {/* FAB + para crear turno (solo móvil) */}
       <button
-        className="fixed bottom-24 right-6 lg:right-8 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
+        className="lg:hidden fixed bottom-24 right-6 h-14 w-14 rounded-full bg-accent text-black text-3xl leading-none
                      flex items-center justify-center shadow-lg hover:brightness-110 transition-all z-50"
         title="Nuevo turno"
         onClick={() => router.push('/admin/sesiones/editar/new')}
