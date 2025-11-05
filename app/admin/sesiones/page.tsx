@@ -445,7 +445,7 @@ export default function AdminSessionsCalendar() {
             </button>
           </div>
 
-          <div className="grid gap-3 auto-cols-fr" style={{ gridTemplateColumns: `repeat(${weekDays.length || 1}, minmax(0, 1fr))` }}>
+          <div className="grid grid-cols-1 lg:grid-cols-7 gap-3">
             {weekDays.length === 0 && (
               <div className="col-span-full card p-6 text-center text-sm text-textsec">
                 No hay turnos programados en esta semana.
