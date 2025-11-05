@@ -36,14 +36,14 @@ export function ActiveBookingsWidget() {
   return (
     <div className="card p-5">
       <h3 className="text-sm font-semibold text-textsec mb-4 uppercase tracking-wide">
-        Próximas Reservas
+        Reservas de la Semana
       </h3>
       <div className="space-y-3">
         {isLoading && (
           <p className="text-textsec text-sm">Cargando reservas...</p>
         )}
         {!isLoading && bookings.length === 0 && (
-          <p className="text-textsec text-sm">No hay próximas reservas de estudiantes.</p>
+          <p className="text-textsec text-sm">No hay reservas esta semana.</p>
         )}
         {!isLoading && bookings.map((booking) => (
           <div key={booking.id} className="bg-bg p-3 rounded-lg border border-white/10">

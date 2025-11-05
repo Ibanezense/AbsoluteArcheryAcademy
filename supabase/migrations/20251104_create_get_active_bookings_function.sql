@@ -19,7 +19,14 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  v_inicio_semana date;
+  v_fin_semana date;
 BEGIN
+  -- Calcular inicio y fin de la semana actual (Lunes a Domingo, America/Lima)
+  v_inicio_semana := date_trunc('week', (NOW() AT TIME ZONE 'America/Lima')::date)::date;
+  v_fin_semana := v_inicio_semana + INTERVAL '6 days';
+
   RETURN QUERY
   SELECT 
     b.id,
@@ -30,7 +37,8 @@ BEGIN
   INNER JOIN profiles p ON b.profile_id = p.id
   INNER JOIN sessions s ON b.session_id = s.id
   WHERE b.status = 'reserved'
-    AND s.start_at >= NOW()
+    AND s.start_at >= v_inicio_semana
+    AND s.start_at < v_fin_semana + INTERVAL '1 day'
   ORDER BY s.start_at ASC
   LIMIT 5;
 END;
@@ -41,8 +49,9 @@ GRANT EXECUTE ON FUNCTION get_active_bookings() TO authenticated;
 
 -- Comentario descriptivo
 COMMENT ON FUNCTION get_active_bookings IS 
-  'Retorna las próximas 5 reservas activas (futuras) con información del alumno y horario.
+  'Retorna las próximas 5 reservas de la semana actual (Lunes a Domingo) con información del alumno y horario.
    Utiliza SECURITY DEFINER para bypasear RLS y permitir acceso desde el cliente.
+   Timezone: America/Lima (UTC-5).
    Retorna: id (uuid), full_name (text), start_at (timestamptz), distance_m (integer).';
 
 -- ============================================================================
