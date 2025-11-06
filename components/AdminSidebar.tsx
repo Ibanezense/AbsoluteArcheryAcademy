@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { memo } from 'react'
-import { LayoutDashboard, CalendarDays, Users, BadgeCheck, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, Users, BadgeCheck, Settings, LogOut, ClipboardCheck } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
 
-export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard'
+export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard' | 'asistencia'
 
 interface AdminSidebarProps {
   isOpen: boolean
@@ -46,6 +46,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const active: Tab = (() => {
     if (pathname.startsWith('/admin/sesiones'))    return 'turnos'
     if (pathname.startsWith('/admin/alumnos'))     return 'alumnos'
+    if (pathname.startsWith('/admin/asistencia'))  return 'asistencia'
     if (pathname.startsWith('/admin/membresias'))  return 'membresias'
     if (pathname.startsWith('/admin/ajustes'))     return 'ajustes'
     return 'dashboard'
@@ -93,6 +94,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           icon={<Users size={20} />} 
           label="Alumnos" 
           active={active === 'alumnos'}
+          onClick={onClose}
+        />
+        <NavItem 
+          href="/admin/asistencia" 
+          icon={<ClipboardCheck size={20} />} 
+          label="Asistencia" 
+          active={active === 'asistencia'}
           onClick={onClose}
         />
         <NavItem 
