@@ -40,12 +40,12 @@ BEGIN
   -- 3. Retornar el roster del día especificado
   RETURN QUERY
   SELECT 
-    b.id AS booking_id,
-    b.session_id,
-    s.start_at AS session_start_at,
-    p.full_name AS student_name,
-    p.avatar_url AS student_avatar_url,
-    b.status AS booking_status
+    b.id::UUID AS booking_id,
+    b.session_id::UUID,
+    s.start_at::TIMESTAMPTZ AS session_start_at,
+    p.full_name::TEXT AS student_name,
+    COALESCE(p.avatar_url, '')::TEXT AS student_avatar_url,
+    b.status::TEXT AS booking_status
   FROM bookings b
   INNER JOIN sessions s ON s.id = b.session_id
   INNER JOIN profiles p ON p.id = b.profile_id
@@ -53,7 +53,7 @@ BEGIN
     -- Filtrar por fecha en timezone America/Lima
     DATE(s.start_at AT TIME ZONE 'America/Lima') = p_date
     -- Incluir solo bookings confirmadas o con asistencia marcada
-    AND b.status IN ('confirmed', 'attended', 'no_show')
+    AND b.status IN ('reserved', 'confirmed', 'attended', 'no_show')
   ORDER BY 
     s.start_at ASC,          -- Primero por hora del turno
     p.full_name ASC;         -- Luego alfabéticamente por nombre
