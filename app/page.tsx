@@ -4,6 +4,7 @@ import AppContainer from '@/components/AppContainer'
 import { ProfileHeader } from '@/components/ui/ProfileHeader'
 import { MembershipAlert } from '@/components/ui/MembershipAlert'
 import { InfoCard } from '@/components/ui/InfoCard'
+import { NextBookingWidget } from '@/components/ui/NextBookingWidget'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 import { useProfile } from '@/lib/hooks/useProfile'
 import { useUpcomingBookings } from '@/lib/hooks/useUpcomingBookings'
@@ -77,6 +78,9 @@ export default function Home() {
               isExpiringSoon={isExpiringSoon} 
               daysUntilExpiry={daysUntilExpiry} 
             />
+
+            {/* Próxima Reserva */}
+            <NextBookingWidget />
 
             {/* Clases disponibles */}
             <div className="rounded-2xl border border-white/10 px-6 py-5 flex items-center justify-between bg-transparent backdrop-blur">
