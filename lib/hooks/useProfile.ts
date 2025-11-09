@@ -15,6 +15,8 @@ export type Profile = {
   distance_m: number | null
   group_type: string | null
   is_active: boolean
+  date_of_birth: string | null
+  birth_date: string | null
 }
 
 export function useProfile() {

@@ -14,7 +14,8 @@ interface DailyRosterBooking {
   session_start_at: string
   student_name: string
   student_avatar_url: string | null
-  booking_status: 'reserved' | 'confirmed' | 'attended' | 'no_show'
+  booking_status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
+  admin_notes: string | null
 }
 
 interface GroupedSession {
@@ -215,7 +216,7 @@ export default function AsistenciaPage() {
                     const isProcessing = actionLoading === booking.booking_id
                     const isAttended = booking.booking_status === 'attended'
                     const isNoShow = booking.booking_status === 'no_show'
-                    const isConfirmed = booking.booking_status === 'reserved'
+                    const isReserved = booking.booking_status === 'reserved'
 
                     return (
                       <div
@@ -231,10 +232,15 @@ export default function AsistenciaPage() {
                           />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium truncate">{booking.student_name}</p>
+                            {booking.admin_notes && (
+                              <p className="text-xs text-warning italic">
+                                📝 {booking.admin_notes}
+                              </p>
+                            )}
                             <p className="text-xs text-textsec">
                               {isAttended && '✓ Asistió'}
                               {isNoShow && '✗ No asistió'}
-                              {isConfirmed && 'Confirmado'}
+                              {isReserved && 'Reservado'}
                             </p>
                           </div>
                         </div>
@@ -262,11 +268,11 @@ export default function AsistenciaPage() {
                           {/* Botón: Cancelar */}
                           <button
                             onClick={() => handleCancelBooking(booking.booking_id)}
-                            disabled={isProcessing || !isConfirmed}
+                            disabled={isProcessing || !isReserved}
                             className="btn-ghost text-sm px-3 py-2 text-danger hover:bg-danger/10 disabled:opacity-50 disabled:cursor-not-allowed"
                             title={
-                              !isConfirmed
-                                ? 'Solo se pueden cancelar reservas confirmadas'
+                              !isReserved
+                                ? 'Solo se pueden cancelar reservas pendientes'
                                 : 'Cancelar reserva'
                             }
                           >

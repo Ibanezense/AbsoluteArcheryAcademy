@@ -8,7 +8,7 @@ export function NextBookingWidget() {
 
   if (isLoading) {
     return (
-      <div className="card p-6 animate-pulse">
+      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 animate-pulse">
         <div className="h-6 bg-white/10 rounded w-1/3 mb-4"></div>
         <div className="h-4 bg-white/10 rounded w-2/3"></div>
       </div>
@@ -17,7 +17,7 @@ export function NextBookingWidget() {
 
   if (error) {
     return (
-      <div className="card p-6 border-danger/30 bg-danger/5">
+      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 border-danger/30 bg-danger/5">
         <p className="text-danger text-sm">{error}</p>
       </div>
     )
@@ -25,7 +25,7 @@ export function NextBookingWidget() {
 
   if (!booking) {
     return (
-      <div className="card p-6">
+      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2">
         <h3 className="font-semibold text-lg mb-2">Próxima Reserva</h3>
         <p className="text-sm text-textsec">No tienes reservas programadas</p>
       </div>
@@ -41,7 +41,7 @@ export function NextBookingWidget() {
   if (isTomorrow) dateLabel = 'Mañana'
 
   return (
-    <div className="card p-6 border-accent/30 bg-accent/5">
+    <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 border-accent/30 bg-accent/5">
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-semibold text-lg">Próxima Reserva</h3>
         <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent font-medium">
