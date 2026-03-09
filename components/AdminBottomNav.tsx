@@ -1,12 +1,8 @@
 import Link from 'next/link'
 import React, { memo, type ComponentType } from 'react'
-import { LayoutDashboard, CalendarDays, Users, BadgeCheck, type LucideProps } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, LayoutDashboard, MoreHorizontal, Users, type LucideProps } from 'lucide-react'
 
-export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard'
-
-const BASE = 'flex flex-col items-center gap-1 text-xs flex-1 py-2'
-const OFF = 'text-textsec'
-const ON = 'text-accent'
+export type Tab = 'dashboard' | 'turnos' | 'alumnos' | 'asistencia' | 'finanzas' | 'more'
 
 type Item = {
   key: Tab
@@ -24,18 +20,26 @@ type NavItemProps = {
 
 const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProps) {
   return (
-    <Link href={href} className={`${BASE} ${active ? ON : OFF}`} aria-current={active ? 'page' : undefined}>
+    <Link
+      href={href}
+      className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs transition ${active ? 'text-accent font-medium' : 'text-textsec'
+        }`}
+      aria-current={active ? 'page' : undefined}
+    >
       <Icon size={20} />
       <span>{label}</span>
     </Link>
   )
 })
 
+import { Banknote } from 'lucide-react'
+
 const items: readonly Item[] = [
-  { key: 'dashboard', href: '/admin', Icon: LayoutDashboard, label: 'Dashboard' },
+  { key: 'dashboard', href: '/admin', Icon: LayoutDashboard, label: 'Inicio' },
   { key: 'turnos', href: '/admin/sesiones', Icon: CalendarDays, label: 'Turnos' },
   { key: 'alumnos', href: '/admin/alumnos', Icon: Users, label: 'Alumnos' },
-  { key: 'membresias', href: '/admin/membresias', Icon: BadgeCheck, label: 'Membresías' },
+  { key: 'finanzas', href: '/admin/finanzas', Icon: Banknote, label: 'Finanzas' },
+  { key: 'more', href: '/admin/ajustes', Icon: MoreHorizontal, label: 'Mas' },
 ]
 
 type Props = { active: Tab }
@@ -45,9 +49,9 @@ const AdminBottomNav = memo(function AdminBottomNav({ active }: Props) {
     <nav
       role="navigation"
       aria-label="Admin bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-card/95 backdrop-blur"
+      className="fixed inset-x-0 bottom-3 z-40 px-4 lg:hidden"
     >
-      <div className="mx-auto flex max-w-7xl px-4 py-2 lg:px-8">
+      <div className="mx-auto flex max-w-[430px] rounded-2xl border border-line bg-card/95 px-3 py-2 shadow-soft backdrop-blur">
         {items.map(({ key, href, Icon, label }) => (
           <NavItem key={key} href={href} Icon={Icon} label={label} active={active === key} />
         ))}
