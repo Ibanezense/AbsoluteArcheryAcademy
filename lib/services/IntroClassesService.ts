@@ -59,11 +59,21 @@ export class IntroClassesService {
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);
 
-        // Obtener todas las sesiones en ese rango SOLO DE 10 METROS
+        // Obtener todas las sesiones en ese rango que tengan configurada la distancia de 10m
         const { data: sessionsData, error: sessionsError } = await supabase
             .from('sessions')
-            .select('id, start_at, end_at, capacity, distance')
-            .eq('distance', 10)
+            .select(`
+                id, 
+                start_at, 
+                end_at,
+                session_distance_allocations!inner (
+                    distance_m,
+                    slot_capacity,
+                    targets
+                )
+            `)
+            .eq('status', 'scheduled')
+            .eq('session_distance_allocations.distance_m', 10)
             .gte('start_at', now.toISOString())
             .lte('start_at', future.toISOString())
             .order('start_at', { ascending: true });
@@ -80,6 +90,7 @@ export class IntroClassesService {
             .from('bookings')
             .select('session_id')
             .in('session_id', sessionIds)
+            .eq('distance_m', 10)
             .in('status', ['reserved', 'attended', 'no_show']);
 
         if (bookingsError) throw bookingsError;
@@ -90,11 +101,16 @@ export class IntroClassesService {
         }, {} as Record<string, number>);
 
         return sessionsData
-            .map(s => {
+            .map((s: any) => {
                 const booked = bookingCounts[s.id] || 0;
-                // Si reportas que la capacidad es 40, usamos tu capacidad configurada o el max(40) si la bd sigue guardando 8.
-                // Como indicaste que son 40, sobreescribiremos el de la BD solo para UI visual si esta dice 8.
-                const realCapacity = s.capacity === 8 ? 40 : s.capacity;
+
+                // Extraer la capacidad desde V3 engine array o objeto unico
+                const alloc = Array.isArray(s.session_distance_allocations)
+                    ? s.session_distance_allocations[0]
+                    : s.session_distance_allocations;
+
+                const slotCapacity = alloc?.slot_capacity || (alloc?.targets ? alloc.targets * 4 : 0);
+                const realCapacity = slotCapacity === 0 ? 12 : slotCapacity; // Fallback preventivo
 
                 return {
                     session_id: s.id,
@@ -142,7 +158,9 @@ export class IntroClassesService {
                 .insert({
                     session_id: payload.sessionId,
                     intro_client_id: newClientId,
-                    status: 'reserved'
+                    status: 'reserved',
+                    distance_m: 10,
+                    bow_usage_type: 'shared_inventory'
                     // no le mandamos user_id, queda NULO validando la constraint
                 });
 
