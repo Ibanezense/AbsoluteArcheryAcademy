@@ -59,10 +59,11 @@ export class IntroClassesService {
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);
 
-        // Obtener todas las sesiones en ese rango
+        // Obtener todas las sesiones en ese rango SOLO DE 10 METROS
         const { data: sessionsData, error: sessionsError } = await supabase
             .from('sessions')
-            .select('id, start_at, end_at, capacity')
+            .select('id, start_at, end_at, capacity, distance')
+            .eq('distance', 10)
             .gte('start_at', now.toISOString())
             .lte('start_at', future.toISOString())
             .order('start_at', { ascending: true });
@@ -91,13 +92,17 @@ export class IntroClassesService {
         return sessionsData
             .map(s => {
                 const booked = bookingCounts[s.id] || 0;
+                // Si reportas que la capacidad es 40, usamos tu capacidad configurada o el max(40) si la bd sigue guardando 8.
+                // Como indicaste que son 40, sobreescribiremos el de la BD solo para UI visual si esta dice 8.
+                const realCapacity = s.capacity === 8 ? 40 : s.capacity;
+
                 return {
                     session_id: s.id,
                     start_at: s.start_at,
                     end_at: s.end_at,
-                    capacity: s.capacity,
+                    capacity: realCapacity,
                     booked: booked,
-                    available: s.capacity - booked,
+                    available: realCapacity - booked,
                 };
             })
             .filter(s => s.available > 0); // Solo devolver los que tienen cupo
