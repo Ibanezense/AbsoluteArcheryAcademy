@@ -19,15 +19,15 @@ const base =
 
 const variants: Record<Variant, string> = {
 	default:
-		"bg-white/10 hover:bg-white/20 text-slate-100 border border-white/10",
+		"bg-white/10 hover:bg-white/20 text-textpri border border-line",
 	outline:
-		"border border-white/20 bg-transparent hover:bg-white/10 text-slate-100",
+		"border border-line bg-transparent hover:bg-white/10 text-textpri",
 	ghost:
-		"bg-transparent hover:bg-white/10 text-slate-200",
+		"bg-transparent hover:bg-white/10 text-textsec",
 	accent:
-		"bg-orange-500 hover:bg-orange-600 text-white",
+		"bg-accent hover:brightness-105 text-white",
 	destructive:
-		"bg-red-600 hover:bg-red-700 text-white",
+		"bg-danger hover:brightness-105 text-white",
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(

@@ -4,26 +4,28 @@ import { useState } from 'react'
 import Card from '@/components/ui/card'
 import Button from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
-import { 
-  useAdminBookings, 
+import { useToast } from '@/components/ui/ToastProvider'
+import {
+  useAdminBookings,
   useAdminCancelBooking,
-  type AdminBooking 
+  type AdminBooking
 } from '@/lib/adminBookingQueries'
 
 const ITEMS_PER_PAGE = 10
 
 export default function AdminBookingsManager() {
   const confirm = useConfirm()
+  const toast = useToast()
   const [currentPage, setCurrentPage] = useState(1)
 
   const { data: bookings = [], isLoading } = useAdminBookings()
   const cancelBookingMutation = useAdminCancelBooking()
 
   // Filtrar solo reservas activas (no canceladas ni pasadas)
-  const allActiveBookings = bookings.filter(b => 
+  const allActiveBookings = bookings.filter(b =>
     b.status === 'reserved' && new Date(b.start_at) > new Date()
   )
-  
+
   // Paginación
   const totalPages = Math.ceil(allActiveBookings.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -35,17 +37,14 @@ export default function AdminBookingsManager() {
       '¿Estás seguro de que quieres cancelar esta reserva? Se devolverá el crédito al estudiante automáticamente.',
       { title: 'Cancelar Reserva' }
     )
-    
+
     if (!confirmed) return
 
     try {
       await cancelBookingMutation.mutateAsync(bookingId)
-      alert('Reserva cancelada exitosamente. Se devolvió el crédito al estudiante.')
-      
-      // Recargar la página para actualizar todas las vistas
-      window.location.reload()
+      toast.push({ message: 'Reserva cancelada. Se devolvió el crédito al alumno.', type: 'success' })
     } catch (error: any) {
-      alert(`Error: ${error.message}`)
+      toast.push({ message: error?.message || 'No se pudo cancelar la reserva.', type: 'error' })
     }
   }
 
@@ -53,7 +52,7 @@ export default function AdminBookingsManager() {
     const date = new Date(dateString)
     return date.toLocaleDateString('es-ES', {
       weekday: 'short',
-      month: 'short', 
+      month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
@@ -62,11 +61,11 @@ export default function AdminBookingsManager() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'reserved': return 'text-green-400'
-      case 'cancelled': return 'text-red-400'
-      case 'attended': return 'text-blue-400'
-      case 'no_show': return 'text-yellow-400'
-      default: return 'text-slate-400'
+      case 'reserved': return 'text-success'
+      case 'cancelled': return 'text-danger'
+      case 'attended': return 'text-info'
+      case 'no_show': return 'text-warning'
+      default: return 'text-textsec'
     }
   }
 
@@ -83,7 +82,7 @@ export default function AdminBookingsManager() {
   if (isLoading) {
     return (
       <Card className="p-6">
-        <div className="text-center py-8 text-slate-400">
+        <div className="text-center py-8 text-textsec">
           Cargando reservas...
         </div>
       </Card>
@@ -96,43 +95,43 @@ export default function AdminBookingsManager() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-white">Reservas Activas</h3>
-              <p className="text-slate-400 text-sm">Próximas reservas de estudiantes</p>
+              <h3 className="text-lg font-semibold text-textpri">Reservas Activas</h3>
+              <p className="text-textsec text-sm">Próximas reservas de estudiantes</p>
             </div>
-            <div className="text-sm text-slate-400">
+            <div className="text-sm text-textsec">
               {activeBookings.length} reservas activas
             </div>
           </div>
 
           {activeBookings.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-textsec">
               No hay reservas activas próximas.
             </div>
           ) : (
             <div className="space-y-3">
               {activeBookings.map((booking) => (
-                <div 
+                <div
                   key={booking.booking_id}
-                  className="bg-slate-800 rounded-lg p-4 border border-slate-700"
+                  className="bg-bg/40 rounded-2xl p-4 border border-white/10"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-textpri">
                             {booking.student_name}
                           </div>
-                          <div className="text-sm text-slate-300">
+                          <div className="text-sm text-textsec">
                             {formatDateTime(booking.start_at)} • {booking.distance}m
                           </div>
                           {/* Mostrar categoría/grupo si está disponible */}
                           {booking.group_type && (
                             <div className="text-xs text-purple-400 mt-1">
                               {booking.group_type === 'children' ? '👶 Niños' :
-                               booking.group_type === 'youth' ? '🧒 Jóvenes' :
-                               booking.group_type === 'adult' ? '🧑 Adultos' :
-                               booking.group_type === 'assigned' ? '🎯 Asignados' :
-                               booking.group_type === 'ownbow' ? '🏹 Arco propio' : booking.group_type}
+                                booking.group_type === 'youth' ? '🧒 Jóvenes' :
+                                  booking.group_type === 'adult' ? '🧑 Adultos' :
+                                    booking.group_type === 'assigned' ? '🎯 Asignados' :
+                                      booking.group_type === 'ownbow' ? '🏹 Arco propio' : booking.group_type}
                             </div>
                           )}
                           {/* Mostrar notas del admin si existen */}
@@ -141,11 +140,11 @@ export default function AdminBookingsManager() {
                               📝 {booking.admin_notes}
                             </div>
                           )}
-                          <div className="text-xs text-slate-400 mt-1">
+                          <div className="text-xs text-textsec mt-1">
                             Instructor: {booking.coach_name || 'Sin asignar'}
                             <span className="ml-3">
-                              Clases restantes: 
-                              <span className={`ml-1 ${booking.classes_remaining > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              Clases restantes:
+                              <span className={`ml-1 ${booking.classes_remaining > 0 ? 'text-success' : 'text-danger'}`}>
                                 {booking.classes_remaining}
                               </span>
                             </span>
@@ -162,7 +161,7 @@ export default function AdminBookingsManager() {
                         <Button
                           variant="ghost"
                           onClick={() => handleCancelBooking(booking.booking_id)}
-                          className="text-red-400 hover:text-red-300 hover:bg-red-400/10 !px-3 !py-1"
+                          className="text-danger hover:brightness-110 hover:bg-danger/10 !px-3 !py-1"
                         >
                           Cancelar
                         </Button>
@@ -171,8 +170,8 @@ export default function AdminBookingsManager() {
                   </div>
 
                   {/* Información adicional de la clase */}
-                  <div className="mt-3 pt-3 border-t border-slate-700">
-                    <div className="flex items-center text-xs text-slate-400 gap-4">
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <div className="flex items-center text-xs text-textsec gap-4">
                       <span>
                         Ocupación: {booking.current_reservations}/{booking.capacity}
                       </span>
@@ -188,8 +187,8 @@ export default function AdminBookingsManager() {
 
           {/* Paginación */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-              <div className="text-xs text-slate-400">
+            <div className="flex items-center justify-between pt-4 border-t border-white/10">
+              <div className="text-xs text-textsec">
                 Mostrando {startIndex + 1}-{Math.min(endIndex, allActiveBookings.length)} de {allActiveBookings.length} reservas
               </div>
               <div className="flex gap-2">
@@ -206,11 +205,10 @@ export default function AdminBookingsManager() {
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`px-3 py-1 text-xs rounded ${
-                        page === currentPage 
-                          ? 'bg-accent text-white font-medium' 
-                          : 'text-slate-400 hover:text-white hover:bg-slate-700'
-                      }`}
+                      className={`px-3 py-1 text-xs rounded ${page === currentPage
+                        ? 'bg-accent text-white font-medium'
+                        : 'text-textsec hover:text-textpri hover:bg-white/10'
+                        }`}
                     >
                       {page}
                     </button>

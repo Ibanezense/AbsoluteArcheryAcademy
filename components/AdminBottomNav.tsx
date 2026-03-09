@@ -2,7 +2,7 @@ import Link from 'next/link'
 import React, { memo, type ComponentType } from 'react'
 import { CalendarDays, ClipboardCheck, LayoutDashboard, MoreHorizontal, Users, type LucideProps } from 'lucide-react'
 
-export type Tab = 'dashboard' | 'turnos' | 'alumnos' | 'asistencia' | 'finanzas' | 'more'
+export type Tab = 'dashboard' | 'turnos' | 'alumnos' | 'asistencia' | 'finanzas' | 'intro' | 'more'
 
 type Item = {
   key: Tab
@@ -32,12 +32,13 @@ const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProp
   )
 })
 
-import { Banknote } from 'lucide-react'
+import { Banknote, UsersRound } from 'lucide-react'
 
 const items: readonly Item[] = [
   { key: 'dashboard', href: '/admin', Icon: LayoutDashboard, label: 'Inicio' },
   { key: 'turnos', href: '/admin/sesiones', Icon: CalendarDays, label: 'Turnos' },
   { key: 'alumnos', href: '/admin/alumnos', Icon: Users, label: 'Alumnos' },
+  { key: 'intro', href: '/admin/intro', Icon: UsersRound, label: 'Pruebas' },
   { key: 'finanzas', href: '/admin/finanzas', Icon: Banknote, label: 'Finanzas' },
   { key: 'more', href: '/admin/ajustes', Icon: MoreHorizontal, label: 'Mas' },
 ]

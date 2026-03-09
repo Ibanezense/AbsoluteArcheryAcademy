@@ -4,10 +4,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { memo } from 'react'
-import { BadgeCheck, CalendarDays, ClipboardCheck, LayoutDashboard, LogOut, Settings, Users, Banknote } from 'lucide-react'
+import { BadgeCheck, CalendarDays, ClipboardCheck, LayoutDashboard, LogOut, Settings, Users, Banknote, UsersRound } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
 
-export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard' | 'asistencia' | 'finanzas'
+export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard' | 'asistencia' | 'finanzas' | 'intro'
 
 interface AdminSidebarProps {
   isOpen: boolean
@@ -50,6 +50,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     if (pathname.startsWith('/admin/asistencia')) return 'asistencia'
     if (pathname.startsWith('/admin/membresias')) return 'membresias'
     if (pathname.startsWith('/admin/finanzas')) return 'finanzas'
+    if (pathname.startsWith('/admin/intro')) return 'intro'
     if (pathname.startsWith('/admin/ajustes')) return 'ajustes'
     return 'dashboard'
   })()
@@ -79,6 +80,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <NavItem href="/admin" icon={<LayoutDashboard size={20} />} label="Inicio" active={active === 'dashboard'} onClick={onClose} />
           <NavItem href="/admin/sesiones" icon={<CalendarDays size={20} />} label="Turnos" active={active === 'turnos'} onClick={onClose} />
           <NavItem href="/admin/alumnos" icon={<Users size={20} />} label="Alumnos" active={active === 'alumnos'} onClick={onClose} />
+          <NavItem href="/admin/intro" icon={<UsersRound size={20} />} label="Pruebas" active={active === 'intro'} onClick={onClose} />
           <NavItem href="/admin/asistencia" icon={<ClipboardCheck size={20} />} label="Asistencia" active={active === 'asistencia'} onClick={onClose} />
           <NavItem href="/admin/membresias" icon={<BadgeCheck size={20} />} label="Membresias" active={active === 'membresias'} onClick={onClose} />
           <NavItem href="/admin/finanzas" icon={<Banknote size={20} />} label="Finanzas" active={active === 'finanzas'} onClick={onClose} />
