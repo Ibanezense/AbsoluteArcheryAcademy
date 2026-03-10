@@ -23,13 +23,16 @@ export interface AdminBooking {
 export interface AdminStudent {
   id: string
   full_name: string
+  avatar_url?: string | null
   classes_remaining: number
   membership_type: string
   membership_start: string
   membership_end: string
   status: 'active' | 'expired' | 'no_classes'
   distance_m?: number | null
-  group_type?: string | null
+  bow_poundage?: number | null
+  has_own_bow?: boolean
+  assigned_bow?: boolean
 }
 
 // Hook para obtener todos los estudiantes
@@ -38,22 +41,42 @@ export function useAdminStudents() {
     queryKey: ['admin-students'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, classes_remaining, membership_type, membership_start, membership_end, is_active, distance_m, group_type')
-        .eq('role', 'student')
+        .from('students')
+        .select(`
+          id,
+          full_name,
+          avatar_url,
+          current_distance_m,
+          bow_poundage,
+          has_own_bow,
+          assigned_bow,
+          is_active,
+          student_memberships (
+            custom_name,
+            classes_remaining,
+            start_date,
+            end_date,
+            status,
+            created_at
+          )
+        `)
         .order('full_name', { ascending: true })
 
       if (error) throw error
       
-      // Mapear a AdminStudent con status derivado
-      return (data || []).map(profile => {
+      return (data || []).map((student: any) => {
         const now = new Date()
-        const membershipEnd = profile.membership_end ? new Date(profile.membership_end) : null
+        const memberships = [...(student.student_memberships || [])].sort((left, right) =>
+          new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+        )
+        const activeMembership =
+          memberships.find((membership: any) => membership.status === 'active') || memberships[0] || null
+        const membershipEnd = activeMembership?.end_date ? new Date(activeMembership.end_date) : null
         const isExpired = membershipEnd && membershipEnd < now
-        const hasClasses = (profile.classes_remaining || 0) > 0
+        const hasClasses = (activeMembership?.classes_remaining || 0) > 0
         
         let status: 'active' | 'expired' | 'no_classes'
-        if (!profile.is_active) {
+        if (!student.is_active) {
           status = 'expired'
         } else if (!hasClasses) {
           status = 'no_classes'
@@ -64,15 +87,18 @@ export function useAdminStudents() {
         }
         
         return {
-          id: profile.id,
-          full_name: profile.full_name,
-          classes_remaining: profile.classes_remaining || 0,
-          membership_type: profile.membership_type || '',
-          membership_start: profile.membership_start || '',
-          membership_end: profile.membership_end || '',
+          id: student.id,
+          full_name: student.full_name,
+          avatar_url: student.avatar_url,
+          classes_remaining: activeMembership?.classes_remaining || 0,
+          membership_type: activeMembership?.custom_name || '',
+          membership_start: activeMembership?.start_date || '',
+          membership_end: activeMembership?.end_date || '',
           status,
-          distance_m: profile.distance_m,
-          group_type: profile.group_type,
+          distance_m: student.current_distance_m,
+          bow_poundage: student.bow_poundage,
+          has_own_bow: student.has_own_bow,
+          assigned_bow: student.assigned_bow,
         } as AdminStudent
       })
     },
@@ -84,7 +110,6 @@ export function useAdminBookings() {
   return useQuery({
     queryKey: ['admin-bookings'],
     queryFn: async () => {
-      // Query manual con joins para obtener toda la información
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -94,10 +119,14 @@ export function useAdminBookings() {
           distance_m,
           group_type,
           admin_notes,
-          user:profiles!bookings_user_id_fkey(
+          student_id,
+          student:students!bookings_student_id_fkey(
             id,
             full_name,
-            classes_remaining
+            student_memberships (
+              classes_remaining,
+              status
+            )
           ),
           session:sessions!bookings_session_id_fkey(
             id,
@@ -110,24 +139,62 @@ export function useAdminBookings() {
 
       if (error) throw error
 
-      // Mapear a AdminBooking
-      return (data || []).map((booking: any) => ({
-        booking_id: booking.id,
-        status: booking.status,
-        booking_created: booking.created_at,
-        student_id: booking.user?.id,
-        student_name: booking.user?.full_name,
-        classes_remaining: booking.user?.classes_remaining || 0,
-        session_id: booking.session?.id,
-        start_at: booking.session?.start_at,
-        end_at: booking.session?.end_at,
-        distance: booking.distance_m,
-        capacity: 0, // Se puede calcular desde allocations si es necesario
-        coach_name: booking.session?.coach?.full_name,
-        current_reservations: 0, // Se puede calcular si es necesario
-        admin_notes: booking.admin_notes,
-        group_type: booking.group_type,
-      })) as AdminBooking[]
+      // Recopilar los session_ids únicos para buscar capacidad y ocupación
+      const sessionIds = [...new Set(
+        (data || []).map((b: any) => b.session?.id).filter(Boolean)
+      )]
+
+      // Obtener capacidad total por sesión desde session_distance_allocations
+      let capacityBySession: Record<string, number> = {}
+      if (sessionIds.length > 0) {
+        const { data: allocData } = await supabase
+          .from('session_distance_allocations')
+          .select('session_id, slot_capacity, targets')
+          .in('session_id', sessionIds)
+
+        allocData?.forEach((a: any) => {
+          const cap = a.slot_capacity ?? (a.targets ?? 0) * 4
+          capacityBySession[a.session_id] = (capacityBySession[a.session_id] || 0) + cap
+        })
+      }
+
+      // Contar reservas activas por sesión
+      let reservedBySession: Record<string, number> = {}
+      if (sessionIds.length > 0) {
+        const { data: bookingCounts } = await supabase
+          .from('bookings')
+          .select('session_id')
+          .eq('status', 'reserved')
+          .in('session_id', sessionIds)
+
+        bookingCounts?.forEach((b: any) => {
+          reservedBySession[b.session_id] = (reservedBySession[b.session_id] || 0) + 1
+        })
+      }
+
+      return (data || []).map((booking: any) => {
+        const activeMembership = (booking.student?.student_memberships || [])
+          .find((m: any) => m.status === 'active')
+        const sessionId = booking.session?.id
+
+        return {
+          booking_id: booking.id,
+          status: booking.status,
+          booking_created: booking.created_at,
+          student_id: booking.student?.id,
+          student_name: booking.student?.full_name,
+          classes_remaining: activeMembership?.classes_remaining || 0,
+          session_id: sessionId,
+          start_at: booking.session?.start_at,
+          end_at: booking.session?.end_at,
+          distance: booking.distance_m,
+          capacity: sessionId ? (capacityBySession[sessionId] || 0) : 0,
+          coach_name: booking.session?.coach?.full_name,
+          current_reservations: sessionId ? (reservedBySession[sessionId] || 0) : 0,
+          admin_notes: booking.admin_notes,
+          group_type: booking.group_type,
+        } as AdminBooking
+      })
     },
   })
 }
@@ -140,16 +207,19 @@ export function useAdminBookSession() {
     mutationFn: async ({ 
       sessionId, 
       studentId, 
-      adminNotes 
+      adminNotes,
+      forceBooking,
     }: { 
       sessionId: string; 
       studentId: string; 
       adminNotes?: string 
+      forceBooking?: boolean
     }) => {
       const { data, error } = await supabase.rpc('admin_book_session', {
         p_session_id: sessionId,
         p_student_id: studentId,
         p_admin_notes: adminNotes || null,
+        p_force: forceBooking || false,
       })
 
       if (error) throw error
@@ -188,114 +258,3 @@ export function useAdminCancelBooking() {
   })
 }
 
-// Hook para obtener sesiones disponibles con información completa
-export function useAvailableSessions() {
-  return useQuery({
-    queryKey: ['available-sessions'],
-    queryFn: async () => {
-      // Obtener sesiones desde ahora hasta 14 días en el futuro
-      const now = new Date()
-      now.setHours(0, 0, 0, 0) // Inicio del día actual
-      
-      const twoWeeksFromNow = new Date(now)
-      twoWeeksFromNow.setDate(now.getDate() + 14)
-      twoWeeksFromNow.setHours(23, 59, 59, 999)
-
-      // Primero obtener todas las sesiones
-      const { data: sessions, error: sessionsError } = await supabase
-        .from('sessions')
-        .select(`
-          *,
-          coach:profiles!sessions_coach_id_fkey(full_name)
-        `)
-        .eq('status', 'scheduled')
-        .gte('start_at', now.toISOString())
-        .lte('start_at', twoWeeksFromNow.toISOString())
-        .order('start_at', { ascending: true })
-
-      if (sessionsError) throw sessionsError
-
-      const sessionIds = (sessions || []).map((s: any) => s.id)
-      
-      // Obtener allocations por distancia para cada sesión
-      let allocations: Record<string, { distance_m: number; targets: number }[]> = {}
-      if (sessionIds.length > 0) {
-        const { data: allocs } = await supabase
-          .from('session_distance_allocations')
-          .select('session_id, distance_m, targets')
-          .in('session_id', sessionIds)
-
-        allocs?.forEach((a: any) => {
-          if (!allocations[a.session_id]) allocations[a.session_id] = []
-          allocations[a.session_id].push({ distance_m: a.distance_m, targets: a.targets })
-        })
-      }
-
-      // Contar reservas por sesión, distancia Y grupo
-      let bookingCountsByDistance: Record<string, Record<number, number>> = {}
-      let bookingCountsByGroup: Record<string, Record<string, number>> = {}
-      
-      if (sessionIds.length > 0) {
-        const { data: bookings } = await supabase
-          .from('bookings')
-          .select('session_id, distance_m, group_type')
-          .eq('status', 'reserved')
-          .in('session_id', sessionIds)
-
-        bookings?.forEach((b: any) => {
-          // Contar por distancia
-          if (!bookingCountsByDistance[b.session_id]) bookingCountsByDistance[b.session_id] = {}
-          const dist = b.distance_m || 0
-          bookingCountsByDistance[b.session_id][dist] = (bookingCountsByDistance[b.session_id][dist] || 0) + 1
-          
-          // Contar por grupo
-          if (b.group_type) {
-            if (!bookingCountsByGroup[b.session_id]) bookingCountsByGroup[b.session_id] = {}
-            bookingCountsByGroup[b.session_id][b.group_type] = (bookingCountsByGroup[b.session_id][b.group_type] || 0) + 1
-          }
-        })
-      }
-
-      // Crear una sesión por cada distancia configurada
-      const sessionsWithAvailability: any[] = []
-      
-      sessions?.forEach((session: any) => {
-        const sessionAllocs = allocations[session.id] || []
-        
-        sessionAllocs.forEach((alloc) => {
-          const capacityDistance = alloc.targets * 4 // 4 spots por paca
-          const reservedDistance = bookingCountsByDistance[session.id]?.[alloc.distance_m] || 0
-          const spotsLeftDistance = capacityDistance - reservedDistance
-          
-          // Solo agregar si hay cupos disponibles en esta distancia
-          if (spotsLeftDistance > 0) {
-            sessionsWithAvailability.push({
-              id: session.id,
-              start_at: session.start_at,
-              end_at: session.end_at,
-              distance: alloc.distance_m,
-              capacity: capacityDistance,
-              status: session.status,
-              spots_left: spotsLeftDistance,
-              instructor_name: session.coach?.full_name || null,
-              // Incluir capacidades por grupo para validación en frontend
-              capacity_children: session.capacity_children || 0,
-              capacity_youth: session.capacity_youth || 0,
-              capacity_adult: session.capacity_adult || 0,
-              capacity_assigned: session.capacity_assigned || 0,
-              capacity_ownbow: session.capacity_ownbow || 0,
-              // Incluir reservas actuales por grupo
-              reserved_children: bookingCountsByGroup[session.id]?.['children'] || 0,
-              reserved_youth: bookingCountsByGroup[session.id]?.['youth'] || 0,
-              reserved_adult: bookingCountsByGroup[session.id]?.['adult'] || 0,
-              reserved_assigned: bookingCountsByGroup[session.id]?.['assigned'] || 0,
-              reserved_ownbow: bookingCountsByGroup[session.id]?.['ownbow'] || 0,
-            })
-          }
-        })
-      })
-
-      return sessionsWithAvailability.sort((a, b) => a.start_at.localeCompare(b.start_at))
-    },
-  })
-}

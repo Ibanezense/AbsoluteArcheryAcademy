@@ -6,6 +6,12 @@ import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/components/ui/ToastProvider'
 import type { Profile } from '@/lib/types'
 
+function getRoleRedirect(role?: Profile['role']) {
+  if (role === 'admin') return '/admin'
+  if (role === 'guardian') return '/hub'
+  return '/'
+}
+
 export function useAuth() {
   const router = useRouter()
   const toast = useToast()
@@ -39,16 +45,22 @@ export function useAuth() {
   }, [])
 
   const loadProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
 
-    if (!error && data) {
-      setProfile(data as Profile)
+      if (error) {
+        setProfile(null)
+        return
+      }
+
+      setProfile((data as Profile | null) ?? null)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const signOut = async () => {
@@ -62,7 +74,7 @@ export function useAuth() {
   }
 
   const isAdmin = profile?.role === 'admin'
-  const isCoach = profile?.role === 'coach' || profile?.role === 'admin'
+  const isCoach = profile?.role === 'admin'
 
   return {
     user,
@@ -84,30 +96,65 @@ export function useRequireAdmin() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
+
+    const checkAdmin = async () => {
+      try {
+        setChecking(true)
+
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError || !session?.user) {
+          if (!cancelled) {
+            setIsAdmin(false)
+            setChecking(false)
+          }
+          router.replace('/login')
+          return
+        }
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        if (error || !data) {
+          if (!cancelled) {
+            setIsAdmin(false)
+            setChecking(false)
+          }
+          router.replace('/login')
+          return
+        }
+
+        if (data.role !== 'admin') {
+          if (!cancelled) {
+            setIsAdmin(false)
+            setChecking(false)
+          }
+          router.replace(getRoleRedirect(data.role as Profile['role']))
+          return
+        }
+
+        if (!cancelled) {
+          setIsAdmin(true)
+          setChecking(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setIsAdmin(false)
+          setChecking(false)
+        }
+        router.replace('/login')
+      }
+    }
+
     checkAdmin()
-  }, [])
 
-  const checkAdmin = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) {
-      router.replace('/login')
-      return
+    return () => {
+      cancelled = true
     }
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (data?.role !== 'admin') {
-      router.replace('/')
-      return
-    }
-
-    setIsAdmin(true)
-    setChecking(false)
-  }
+  }, [router])
 
   return { isAdmin, checking }
 }

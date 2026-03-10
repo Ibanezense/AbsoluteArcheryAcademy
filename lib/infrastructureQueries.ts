@@ -1,240 +1,333 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabaseClient'
 
-// Tipos TypeScript
-export interface Equipment {
+export interface BowInventoryItem {
   id: string
-  name: string
-  category: 'niños' | 'jovenes' | 'adultos' | 'asignados'
-  total_quantity: number
-  available_quantity: number
+  draw_weight_lbs: number
+  quantity_total: number
+  quantity_active: number
+  notes: string | null
   created_at: string
   updated_at: string
 }
 
-export interface ShootingLane {
+export interface WeeklyTemplateDistance {
+  id?: string
+  distance_m: number
+  slot_capacity: number
+  targets?: number
+}
+
+export interface WeeklySessionTemplate {
   id: string
-  name: string
-  distance_meters: number
-  capacity: number
+  label: string
+  weekday: number
+  start_time: string
+  end_time: string
   is_active: boolean
   created_at: string
   updated_at: string
+  distances: WeeklyTemplateDistance[]
 }
 
-export interface CreateEquipmentData {
-  name: string
-  category: 'niños' | 'jovenes' | 'adultos' | 'asignados'
-  total_quantity: number
+export interface CreateBowInventoryData {
+  draw_weight_lbs: number
+  quantity_total: number
+  quantity_active: number
+  notes?: string | null
 }
 
-export interface UpdateEquipmentData extends CreateEquipmentData {
+export interface UpdateBowInventoryData extends CreateBowInventoryData {
   id: string
 }
 
-export interface CreateShootingLaneData {
-  name: string
-  distance_meters: number
-  capacity: number
+export interface UpsertWeeklyTemplateData {
+  label: string
+  weekday: number
+  start_time: string
+  end_time: string
+  is_active: boolean
+  distances: WeeklyTemplateDistance[]
 }
 
-export interface UpdateShootingLaneData extends CreateShootingLaneData {
+export interface UpdateWeeklyTemplateData extends UpsertWeeklyTemplateData {
   id: string
 }
 
-// === EQUIPMENT QUERIES ===
+export interface GenerateWeeklySessionsData {
+  weekStart: string
+  weeks: number
+}
 
-export function useEquipment() {
+export function useBowInventory() {
   return useQuery({
-    queryKey: ['equipment'],
-    queryFn: async (): Promise<Equipment[]> => {
+    queryKey: ['bow-inventory'],
+    queryFn: async (): Promise<BowInventoryItem[]> => {
       const { data, error } = await supabase
-        .from('equipment')
+        .from('bow_inventory')
         .select('*')
-        .order('created_at', { ascending: true })
+        .order('draw_weight_lbs', { ascending: true })
 
       if (error) {
-        throw new Error(`Error fetching equipment: ${error.message}`)
+        throw new Error(`Error fetching bow inventory: ${error.message}`)
       }
 
-      return data || []
+      return (data || []) as BowInventoryItem[]
     },
   })
 }
 
-export function useCreateEquipment() {
+export function useCreateBowInventory() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (equipmentData: CreateEquipmentData): Promise<Equipment> => {
+    mutationFn: async (payload: CreateBowInventoryData): Promise<BowInventoryItem> => {
       const { data, error } = await supabase
-        .from('equipment')
-        .insert([{
-          name: equipmentData.name,
-          category: equipmentData.category,
-          total_quantity: equipmentData.total_quantity,
-          available_quantity: equipmentData.total_quantity // Initially all equipment is available
-        }])
+        .from('bow_inventory')
+        .insert({
+          draw_weight_lbs: payload.draw_weight_lbs,
+          quantity_total: payload.quantity_total,
+          quantity_active: payload.quantity_active,
+          notes: payload.notes || null,
+        })
         .select()
         .single()
 
       if (error) {
-        throw new Error(`Error creating equipment: ${error.message}`)
+        throw new Error(`Error creating bow inventory: ${error.message}`)
       }
 
-      return data
+      return data as BowInventoryItem
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['equipment'] })
+      queryClient.invalidateQueries({ queryKey: ['bow-inventory'] })
     },
   })
 }
 
-export function useUpdateEquipment() {
+export function useUpdateBowInventory() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (equipmentData: UpdateEquipmentData): Promise<Equipment> => {
+    mutationFn: async (payload: UpdateBowInventoryData): Promise<BowInventoryItem> => {
       const { data, error } = await supabase
-        .from('equipment')
+        .from('bow_inventory')
         .update({
-          name: equipmentData.name,
-          category: equipmentData.category,
-          total_quantity: equipmentData.total_quantity,
-          // Update available quantity proportionally
-          available_quantity: Math.min(
-            equipmentData.total_quantity,
-            equipmentData.total_quantity // For now, keep it simple
+          draw_weight_lbs: payload.draw_weight_lbs,
+          quantity_total: payload.quantity_total,
+          quantity_active: payload.quantity_active,
+          notes: payload.notes || null,
+        })
+        .eq('id', payload.id)
+        .select()
+        .single()
+
+      if (error) {
+        throw new Error(`Error updating bow inventory: ${error.message}`)
+      }
+
+      return data as BowInventoryItem
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bow-inventory'] })
+    },
+  })
+}
+
+export function useDeleteBowInventory() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from('bow_inventory')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        throw new Error(`Error deleting bow inventory: ${error.message}`)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bow-inventory'] })
+    },
+  })
+}
+
+export function useWeeklySessionTemplates() {
+  return useQuery({
+    queryKey: ['weekly-session-templates'],
+    queryFn: async (): Promise<WeeklySessionTemplate[]> => {
+      const { data, error } = await supabase
+        .from('weekly_session_templates')
+        .select(`
+          id,
+          label,
+          weekday,
+          start_time,
+          end_time,
+          is_active,
+          created_at,
+          updated_at,
+          distances:weekly_session_template_distances (
+            id,
+            distance_m,
+            slot_capacity,
+            targets
           )
+        `)
+
+      if (error) {
+        throw new Error(`Error fetching weekly templates: ${error.message}`)
+      }
+
+      return ((data || []) as WeeklySessionTemplate[])
+        .map((template) => ({
+          ...template,
+          distances: [...(template.distances || [])].sort((a, b) => a.distance_m - b.distance_m),
+        }))
+        .sort((a, b) => {
+          if (a.weekday !== b.weekday) return a.weekday - b.weekday
+          return a.start_time.localeCompare(b.start_time)
         })
-        .eq('id', equipmentData.id)
+    },
+  })
+}
+
+async function saveTemplateDistances(templateId: string, distances: WeeklyTemplateDistance[]) {
+  const normalized = distances
+    .filter((distance) => distance.slot_capacity > 0)
+    .map((distance) => ({
+      weekly_template_id: templateId,
+      distance_m: distance.distance_m,
+      slot_capacity: distance.slot_capacity,
+      targets: distance.targets || Math.ceil(distance.slot_capacity / 4),
+    }))
+
+  const { error: deleteError } = await supabase
+    .from('weekly_session_template_distances')
+    .delete()
+    .eq('weekly_template_id', templateId)
+
+  if (deleteError) {
+    throw new Error(`Error resetting template distances: ${deleteError.message}`)
+  }
+
+  if (!normalized.length) {
+    return
+  }
+
+  const { error: insertError } = await supabase
+    .from('weekly_session_template_distances')
+    .insert(normalized)
+
+  if (insertError) {
+    throw new Error(`Error saving template distances: ${insertError.message}`)
+  }
+}
+
+export function useCreateWeeklySessionTemplate() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: UpsertWeeklyTemplateData): Promise<WeeklySessionTemplate> => {
+      const { data, error } = await supabase
+        .from('weekly_session_templates')
+        .insert({
+          label: payload.label,
+          weekday: payload.weekday,
+          start_time: payload.start_time,
+          end_time: payload.end_time,
+          is_active: payload.is_active,
+        })
         .select()
         .single()
 
       if (error) {
-        throw new Error(`Error updating equipment: ${error.message}`)
+        throw new Error(`Error creating weekly template: ${error.message}`)
       }
 
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['equipment'] })
-    },
-  })
-}
+      await saveTemplateDistances(data.id, payload.distances)
 
-export function useDeleteEquipment() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (equipmentId: string): Promise<void> => {
-      const { error } = await supabase
-        .from('equipment')
-        .delete()
-        .eq('id', equipmentId)
-
-      if (error) {
-        throw new Error(`Error deleting equipment: ${error.message}`)
+      return {
+        ...(data as Omit<WeeklySessionTemplate, 'distances'>),
+        distances: payload.distances.filter((distance) => distance.slot_capacity > 0),
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['equipment'] })
+      queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
     },
   })
 }
 
-// === SHOOTING LANES QUERIES ===
-
-export function useShootingLanes() {
-  return useQuery({
-    queryKey: ['shooting-lanes'],
-    queryFn: async (): Promise<ShootingLane[]> => {
-      const { data, error } = await supabase
-        .from('shooting_lanes')
-        .select('*')
-        .order('distance_meters', { ascending: true })
-
-      if (error) {
-        throw new Error(`Error fetching shooting lanes: ${error.message}`)
-      }
-
-      return data || []
-    },
-  })
-}
-
-export function useCreateShootingLane() {
+export function useUpdateWeeklySessionTemplate() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (laneData: CreateShootingLaneData): Promise<ShootingLane> => {
+    mutationFn: async (payload: UpdateWeeklyTemplateData): Promise<WeeklySessionTemplate> => {
       const { data, error } = await supabase
-        .from('shooting_lanes')
-        .insert([{
-          name: laneData.name,
-          distance_meters: laneData.distance_meters,
-          capacity: laneData.capacity,
-          is_active: true
-        }])
-        .select()
-        .single()
-
-      if (error) {
-        throw new Error(`Error creating shooting lane: ${error.message}`)
-      }
-
-      return data
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shooting-lanes'] })
-    },
-  })
-}
-
-export function useUpdateShootingLane() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: async (laneData: UpdateShootingLaneData): Promise<ShootingLane> => {
-      const { data, error } = await supabase
-        .from('shooting_lanes')
+        .from('weekly_session_templates')
         .update({
-          name: laneData.name,
-          distance_meters: laneData.distance_meters,
-          capacity: laneData.capacity
+          label: payload.label,
+          weekday: payload.weekday,
+          start_time: payload.start_time,
+          end_time: payload.end_time,
+          is_active: payload.is_active,
         })
-        .eq('id', laneData.id)
+        .eq('id', payload.id)
         .select()
         .single()
 
       if (error) {
-        throw new Error(`Error updating shooting lane: ${error.message}`)
+        throw new Error(`Error updating weekly template: ${error.message}`)
       }
 
-      return data
+      await saveTemplateDistances(payload.id, payload.distances)
+
+      return {
+        ...(data as Omit<WeeklySessionTemplate, 'distances'>),
+        distances: payload.distances.filter((distance) => distance.slot_capacity > 0),
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shooting-lanes'] })
+      queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
     },
   })
 }
 
-export function useDeleteShootingLane() {
+export function useDeleteWeeklySessionTemplate() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (laneId: string): Promise<void> => {
+    mutationFn: async (id: string): Promise<void> => {
       const { error } = await supabase
-        .from('shooting_lanes')
+        .from('weekly_session_templates')
         .delete()
-        .eq('id', laneId)
+        .eq('id', id)
 
       if (error) {
-        throw new Error(`Error deleting shooting lane: ${error.message}`)
+        throw new Error(`Error deleting weekly template: ${error.message}`)
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shooting-lanes'] })
+      queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
+    },
+  })
+}
+
+export function useGenerateWeeklySessions() {
+  return useMutation({
+    mutationFn: async (payload: GenerateWeeklySessionsData): Promise<number> => {
+      const { data, error } = await supabase.rpc('admin_generate_sessions_from_templates', {
+        p_week_start: payload.weekStart,
+        p_weeks: payload.weeks,
+      })
+
+      if (error) {
+        throw new Error(`Error generating sessions: ${error.message}`)
+      }
+
+      return Number(data || 0)
     },
   })
 }

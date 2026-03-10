@@ -1,7 +1,7 @@
 // Tipos de base de datos
 export type BookingStatus = 'reserved' | 'cancelled' | 'attended' | 'no_show'
 export type SessionStatus = 'scheduled' | 'cancelled'
-export type UserRole = 'student' | 'coach' | 'admin'
+export type UserRole = 'student' | 'guardian' | 'admin'
 export type GroupType = 'children' | 'youth' | 'adult' | 'assigned' | 'ownbow'
 
 // Profile

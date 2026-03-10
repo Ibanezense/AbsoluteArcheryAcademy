@@ -233,6 +233,66 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
     }
   }
 
+  async function handleCancelBooking(card: StudentClassCard) {
+    if (!studentId || !card.booking_id) return
+
+    if (!confirm('¿Estás seguro que deseas cancelar tu turno para poder elegir otro? La clase se devolverá a tus clases disponibles.')) return
+
+    try {
+      const key = cardKey(card)
+      setBookingCardKey(key)
+
+      const { error: cancelError } = await supabase.rpc('cancel_booking', {
+        p_booking: card.booking_id,
+      })
+
+      if (cancelError) throw cancelError
+
+      // Devolver la UI al estado local disponible y clase + 1 (evitando recargar la DB completa)
+      setLocalCards((current) =>
+        current.map((entry) => {
+          if (entry.card_index === card.card_index && entry.student_membership_id === card.student_membership_id) {
+            return {
+              ...entry,
+              classes_remaining: (entry.classes_remaining ?? 0) + 1,
+              card_status: 'available',
+              booking_id: null,
+              session_id: null,
+              start_at: null,
+              end_at: null,
+              distance_m: null,
+              bow_usage_type: null,
+            }
+          }
+          if (entry.student_membership_id === card.student_membership_id) {
+            return {
+              ...entry,
+              classes_remaining: (entry.classes_remaining ?? 0) + 1,
+            }
+          }
+          return entry
+        })
+      )
+
+      // Update session availability local counter
+      setAvailableSessions((current) =>
+        current.map((session) =>
+          session.session_id === card.session_id
+            ? { ...session, already_reserved: false, spots_for_student: session.spots_for_student + 1 }
+            : session
+        )
+      )
+
+      toast.push({ message: 'Turno cancelado. Ahora puedes reservar uno nuevo.', type: 'info' })
+    } catch (error: any) {
+      console.error('Error detallado de cancel_booking:', error)
+      toast.push({ message: error?.message || 'No se pudo deshacer la reserva.', type: 'error' })
+    } finally {
+      setBookingCardKey(null)
+    }
+  }
+
+
   if (loading) {
     return (
       <div className="card p-6">
@@ -291,10 +351,12 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
           const selectedSession = sessionsForDate.find((session) => session.session_id === selectedSessionId) || null
           const selectedSessionIsBookable = !!selectedSession && isSessionBookable(selectedSession)
 
+          const editable = card.card_status === 'reserved' && dayjs(card.start_at).isAfter(dayjs().add(12, 'hour'))
+
           return (
             <div
               key={`${card.student_membership_id}-${card.card_index}`}
-              className={`rounded-2xl border p-4 shadow-card ${config.className}`}
+              className={`rounded-2xl border p-4 shadow-card flex flex-col ${config.className}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -313,103 +375,122 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
               </div>
 
               {card.start_at ? (
-                <div className="mt-4 space-y-2 text-sm">
-                  <div className="flex items-center gap-2 text-textpri">
-                    <Clock3 className="h-4 w-4 text-textsec" />
-                    <span>{dayjs(card.start_at).format('dddd, D [de] MMMM')}</span>
+                <div className="mt-4 flex flex-col flex-1 justify-between">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-textpri">
+                      <Clock3 className="h-4 w-4 text-textsec" />
+                      <span>{dayjs(card.start_at).format('dddd, D [de] MMMM')}</span>
+                    </div>
+                    {card.distance_m && (
+                      <p className="text-textsec">Distancia: {card.distance_m} m</p>
+                    )}
+                    {usage && (
+                      <p className="text-textsec">{usage}</p>
+                    )}
                   </div>
-                  {card.distance_m && (
-                    <p className="text-textsec">Distancia: {card.distance_m} m</p>
-                  )}
-                  {usage && (
-                    <p className="text-textsec">{usage}</p>
+                  {editable && card.booking_id && (
+                    <div className="mt-6 pt-4 border-t border-accent/10">
+                      <button
+                        onClick={() => handleCancelBooking(card)}
+                        disabled={bookingCardKey === key}
+                        className="btn flex w-full justify-center !py-2 text-sm !bg-black text-white hover:!bg-black/80"
+                      >
+                        {bookingCardKey === key ? '...' : 'Cancelar reserva'}
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (
-                <div className="mt-4">
-                  <p className="text-sm text-textsec">
-                    Esta clase aun no tiene turno asignado.
-                  </p>
-                  {canReserve && (
-                    <div className="mt-4 space-y-3">
-                      {sessionsLoading ? (
-                        <div className="text-sm text-textsec">Cargando turnos programados...</div>
-                      ) : sessionsError ? (
-                        <div className="text-sm text-danger">{sessionsError}</div>
-                      ) : availableDates.length === 0 ? (
-                        <div className="text-sm text-textsec">No hay turnos programados disponibles.</div>
-                      ) : (
-                        <>
-                          <div className="grid gap-2">
-                            <label className="text-xs uppercase tracking-[0.16em] text-textsec">Fecha</label>
-                            <select
-                              className="input text-sm !py-2 !px-3"
-                              value={selectedDate}
-                              onChange={(event) => {
-                                const nextDate = event.target.value
-                                setSelectedDateByCard((current) => ({ ...current, [key]: nextDate }))
-                                setSelectedSessionByCard((current) => ({
-                                  ...current,
-                                  [key]: getDefaultSessionIdForDate(nextDate),
-                                }))
-                              }}
-                            >
-                              {availableDates.map((dateOption) => (
-                                <option key={dateOption.value} value={dateOption.value}>
-                                  {dateOption.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                <div className="mt-4 flex flex-col flex-1 justify-between">
+                  <div>
+                    <p className="text-sm text-textsec">
+                      Esta clase aun no tiene turno asignado.
+                    </p>
+                    {canReserve && (
+                      <div className="mt-4 space-y-3">
+                        {sessionsLoading ? (
+                          <div className="text-sm text-textsec">Cargando turnos programados...</div>
+                        ) : sessionsError ? (
+                          <div className="text-sm text-danger">{sessionsError}</div>
+                        ) : availableDates.length === 0 ? (
+                          <div className="text-sm text-textsec">No hay turnos programados disponibles.</div>
+                        ) : (
+                          <>
+                            <div className="grid gap-2">
+                              <label className="text-xs uppercase tracking-[0.16em] text-textsec">Fecha</label>
+                              <select
+                                className="input text-sm !py-2 !px-3"
+                                value={selectedDate}
+                                onChange={(event) => {
+                                  const nextDate = event.target.value
+                                  setSelectedDateByCard((current) => ({ ...current, [key]: nextDate }))
+                                  setSelectedSessionByCard((current) => ({
+                                    ...current,
+                                    [key]: getDefaultSessionIdForDate(nextDate),
+                                  }))
+                                }}
+                              >
+                                {availableDates.map((dateOption) => (
+                                  <option key={dateOption.value} value={dateOption.value}>
+                                    {dateOption.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                          <div className="grid gap-2">
-                            <label className="text-xs uppercase tracking-[0.16em] text-textsec">Turno</label>
-                            <select
-                              className="input min-w-0 text-sm !py-2 !px-3"
-                              value={selectedSessionId}
-                              onChange={(event) =>
-                                setSelectedSessionByCard((current) => ({
-                                  ...current,
-                                  [key]: event.target.value,
-                                }))
-                              }
-                            >
-                              {sessionsForDate.map((session) => (
-                                <option key={session.session_id} value={session.session_id}>
-                                  {dayjs(session.start_at).format('HH:mm')}-{dayjs(session.end_at).format('HH:mm')} · {session.distance_m}m
-                                  {session.already_reserved
-                                    ? ' · ya reservado'
-                                    : session.spots_for_student > 0
-                                      ? ''
-                                      : ' · sin cupos'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            <div className="grid gap-2">
+                              <label className="text-xs uppercase tracking-[0.16em] text-textsec">Turno</label>
+                              <select
+                                className="input min-w-0 text-sm !py-2 !px-3"
+                                value={selectedSessionId}
+                                onChange={(event) =>
+                                  setSelectedSessionByCard((current) => ({
+                                    ...current,
+                                    [key]: event.target.value,
+                                  }))
+                                }
+                              >
+                                {sessionsForDate.map((session) => (
+                                  <option key={session.session_id} value={session.session_id}>
+                                    {dayjs(session.start_at).format('HH:mm')}-{dayjs(session.end_at).format('HH:mm')} · {session.distance_m}m
+                                    {session.already_reserved
+                                      ? ' · ya reservado'
+                                      : session.spots_for_student > 0
+                                        ? ''
+                                        : ' · sin cupos'}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                          {selectedSessionId && (() => {
-                            const sel = sessionsForDate.find(s => s.session_id === selectedSessionId)
-                            return sel ? (
-                              <p className="text-xs text-textsec">
-                                {sel.already_reserved
-                                  ? `Ya existe una reserva para este turno · ${sessionUsageLabel(sel)}`
-                                  : sel.spots_for_student > 0
-                                    ? `${sel.spots_for_student} cupos · ${sessionUsageLabel(sel)}`
-                                    : `Sin cupos disponibles · ${sessionUsageLabel(sel)}`}
-                              </p>
-                            ) : null
-                          })()}
+                            {selectedSessionId && (() => {
+                              const sel = sessionsForDate.find(s => s.session_id === selectedSessionId)
+                              return sel ? (
+                                <p className="text-xs text-textsec">
+                                  {sel.already_reserved
+                                    ? `Ya existe una reserva para este turno · ${sessionUsageLabel(sel)}`
+                                    : sel.spots_for_student > 0
+                                      ? `${sel.spots_for_student} cupos · ${sessionUsageLabel(sel)}`
+                                      : `Sin cupos disponibles · ${sessionUsageLabel(sel)}`}
+                                </p>
+                              ) : null
+                            })()}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                          <button
-                            type="button"
-                            className="btn w-full"
-                            onClick={() => handleBook(card)}
-                            disabled={!selectedSessionId || bookingCardKey === key || !selectedSessionIsBookable}
-                          >
-                            {bookingCardKey === key ? 'Reservando...' : 'Reservar esta clase'}
-                          </button>
-                        </>
-                      )}
+                  {canReserve && selectedSessionId && (
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        className="btn w-full"
+                        onClick={() => handleBook(card)}
+                        disabled={!selectedSessionId || bookingCardKey === key || !selectedSessionIsBookable}
+                      >
+                        {bookingCardKey === key ? 'Reservando...' : 'Reservar esta clase'}
+                      </button>
                     </div>
                   )}
                 </div>

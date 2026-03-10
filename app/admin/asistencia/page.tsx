@@ -1,27 +1,41 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import dayjs from 'dayjs'
-import { supabase } from '@/lib/supabaseClient'
 import AdminGuard from '@/components/AdminGuard'
 import Avatar from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
+import { supabase } from '@/lib/supabaseClient'
 
 interface DailyRosterBooking {
   booking_id: string
   session_id: string
   session_start_at: string
+  student_id: string
   student_name: string
   student_avatar_url: string | null
   booking_status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
   admin_notes: string | null
+  distance_m: number | null
+  bow_usage_type: 'shared_inventory' | 'assigned' | 'own' | null
+  bow_poundage: number | null
 }
 
 interface GroupedSession {
   session_id: string
   session_start_at: string
   bookings: DailyRosterBooking[]
+}
+
+function bowUsageLabel(booking: DailyRosterBooking) {
+  if (booking.bow_usage_type === 'own') return 'Arco propio'
+  if (booking.bow_usage_type === 'assigned') return 'Arco asignado'
+  if (booking.bow_usage_type === 'shared_inventory' && booking.bow_poundage) {
+    return `Arco academia ${booking.bow_poundage} lb`
+  }
+  if (booking.bow_usage_type === 'shared_inventory') return 'Arco academia'
+  return 'Equipo sin definir'
 }
 
 export default function AsistenciaPage() {
@@ -32,7 +46,6 @@ export default function AsistenciaPage() {
   const [bookings, setBookings] = useState<DailyRosterBooking[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  // Cargar roster del día
   const loadRoster = async (date: string) => {
     setIsLoading(true)
     setError(null)
@@ -43,8 +56,7 @@ export default function AsistenciaPage() {
       })
 
       if (rpcError) throw rpcError
-
-      setBookings(data || [])
+      setBookings(((data || []) as DailyRosterBooking[]))
     } catch (err: any) {
       console.error('Error loading roster:', err)
       setError(err.message || 'Error al cargar el roster')
@@ -53,12 +65,10 @@ export default function AsistenciaPage() {
     }
   }
 
-  // Cargar roster cuando cambia la fecha
   useEffect(() => {
     loadRoster(selectedDate)
   }, [selectedDate])
 
-  // Handler: Marcar asistencia (asistió o no asistió)
   const handleMarkAttendance = async (bookingId: string, attended: boolean) => {
     setActionLoading(bookingId)
 
@@ -69,12 +79,10 @@ export default function AsistenciaPage() {
       })
 
       if (rpcError) throw rpcError
-
-      if (!data.success) {
-        throw new Error(data.error || 'Error al marcar asistencia')
+      if (!data?.success) {
+        throw new Error(data?.error || 'Error al marcar asistencia')
       }
 
-      // Refrescar datos
       await loadRoster(selectedDate)
     } catch (err: any) {
       console.error('Error marking attendance:', err)
@@ -84,9 +92,8 @@ export default function AsistenciaPage() {
     }
   }
 
-  // Handler: Cancelar reserva
   const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('¿Estás seguro de cancelar esta reserva? Se devolverá la clase al alumno.')) {
+    if (!confirm('Se cancelara esta reserva y se devolvera la clase al alumno. Continuar?')) {
       return
     }
 
@@ -95,15 +102,14 @@ export default function AsistenciaPage() {
     try {
       const { data, error: rpcError } = await supabase.rpc('admin_cancel_booking', {
         p_booking_id: bookingId,
+        p_refund: true,
       })
 
       if (rpcError) throw rpcError
-
-      if (!data.success) {
-        throw new Error(data.error || 'Error al cancelar reserva')
+      if (!data?.success) {
+        throw new Error(data?.error || 'Error al cancelar reserva')
       }
 
-      // Refrescar datos
       await loadRoster(selectedDate)
     } catch (err: any) {
       console.error('Error canceling booking:', err)
@@ -113,95 +119,85 @@ export default function AsistenciaPage() {
     }
   }
 
-  // Agrupar bookings por turno (session)
-  const groupedSessions: GroupedSession[] = bookings.reduce((acc, booking) => {
-    const existing = acc.find((g) => g.session_id === booking.session_id)
-    if (existing) {
-      existing.bookings.push(booking)
-    } else {
-      acc.push({
-        session_id: booking.session_id,
-        session_start_at: booking.session_start_at,
-        bookings: [booking],
-      })
-    }
-    return acc
-  }, [] as GroupedSession[])
+  const groupedSessions: GroupedSession[] = useMemo(() => {
+    return bookings.reduce((acc, booking) => {
+      const existing = acc.find((group) => group.session_id === booking.session_id)
+      if (existing) {
+        existing.bookings.push(booking)
+      } else {
+        acc.push({
+          session_id: booking.session_id,
+          session_start_at: booking.session_start_at,
+          bookings: [booking],
+        })
+      }
+      return acc
+    }, [] as GroupedSession[])
+  }, [bookings])
 
-  // Formatear hora del turno
-  const formatSessionTime = (timestamp: string) => {
-    return dayjs(timestamp).format('HH:mm')
-  }
-
-  // Formatear fecha para mostrar
-  const formatDateLabel = (date: string) => {
-    return dayjs(date).format('dddd, D [de] MMMM [de] YYYY')
-  }
+  const formatSessionTime = (timestamp: string) => dayjs(timestamp).format('HH:mm')
+  const formatDateLabel = (date: string) => dayjs(date).format('dddd, D [de] MMMM [de] YYYY')
 
   return (
     <AdminGuard>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 -mx-4 lg:-mx-8 px-4 lg:px-8 py-3">
+        <section className="sticky top-0 z-10 border-b border-white/10 bg-bg/95 px-4 py-3 backdrop-blur lg:px-8 lg:-mx-8 -mx-4">
           <div className="flex items-center gap-3">
             <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>
-              ←
+              Volver
             </button>
-            <h1 className="text-lg font-semibold">Gestión de Asistencia</h1>
-          </div>
-        </div>
-
-        {/* Selector de fecha */}
-        <div className="card p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold mb-1">Seleccionar Día</h2>
-              <p className="text-sm text-textsec capitalize">{formatDateLabel(selectedDate)}</p>
+              <h1 className="text-lg font-semibold text-textpri">Gestion de asistencia</h1>
+              <p className="text-sm text-textsec">Marca asistencia y resuelve cancelaciones del dia.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="card p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-textpri">Seleccionar dia</h2>
+              <p className="mt-1 text-sm capitalize text-textsec">{formatDateLabel(selectedDate)}</p>
             </div>
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 rounded-xl border border-white/10 bg-card text-textpri"
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="input w-full sm:w-auto"
             />
           </div>
-        </div>
+        </section>
 
-        {/* Loading state */}
         {isLoading && (
-          <div className="flex justify-center items-center py-12">
+          <div className="flex items-center justify-center py-12">
             <Spinner />
           </div>
         )}
 
-        {/* Error state */}
         {error && !isLoading && (
-          <div className="card p-6 border-danger/30 bg-danger/5">
-            <p className="text-danger text-center">{error}</p>
+          <div className="card border-danger/30 bg-danger/5 p-6">
+            <p className="text-center text-danger">{error}</p>
           </div>
         )}
 
-        {/* Empty state */}
         {!isLoading && !error && bookings.length === 0 && (
           <div className="card p-12 text-center">
-            <p className="text-textsec text-lg">No hay reservas para este día</p>
+            <p className="text-lg text-textsec">No hay reservas para este dia.</p>
           </div>
         )}
 
-        {/* Roster agrupado por turno */}
         {!isLoading && !error && groupedSessions.length > 0 && (
           <div className="space-y-6">
             {groupedSessions.map((session) => (
-              <div key={session.session_id} className="card p-6">
-                {/* Header del turno */}
-                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-white/10">
-                  <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center">
-                    <span className="text-accent font-bold text-lg">
+              <section key={session.session_id} className="card p-6">
+                <div className="mb-4 flex items-center gap-3 border-b border-white/10 pb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10">
+                    <span className="text-lg font-bold text-accent">
                       {formatSessionTime(session.session_start_at)}
                     </span>
                   </div>
                   <div>
-                    <h3 className="font-semibold">
+                    <h3 className="font-semibold text-textpri">
                       Turno de {formatSessionTime(session.session_start_at)}
                     </h3>
                     <p className="text-sm text-textsec">
@@ -210,7 +206,6 @@ export default function AsistenciaPage() {
                   </div>
                 </div>
 
-                {/* Lista de alumnos */}
                 <div className="space-y-3">
                   {session.bookings.map((booking) => {
                     const isProcessing = actionLoading === booking.booking_id
@@ -221,60 +216,64 @@ export default function AsistenciaPage() {
                     return (
                       <div
                         key={booking.booking_id}
-                        className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition"
+                        className="flex flex-col gap-4 rounded-2xl bg-white/5 p-4 transition hover:bg-white/10 sm:flex-row sm:items-center"
                       >
-                        {/* Avatar y nombre */}
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           <Avatar
                             url={booking.student_avatar_url}
                             name={booking.student_name}
                             size="md"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium truncate">{booking.student_name}</p>
-                            {booking.admin_notes && (
-                              <p className="text-xs text-warning italic">
-                                📝 {booking.admin_notes}
-                              </p>
-                            )}
+                            <p className="truncate font-medium text-textpri">{booking.student_name}</p>
                             <p className="text-xs text-textsec">
-                              {isAttended && '✓ Asistió'}
-                              {isNoShow && '✗ No asistió'}
+                              {booking.distance_m ? `${booking.distance_m} m` : 'Sin distancia'} · {bowUsageLabel(booking)}
+                            </p>
+                            {booking.admin_notes && (
+                              <p className="text-xs italic text-warning">Nota: {booking.admin_notes}</p>
+                            )}
+                            <p className={`text-xs ${isAttended ? 'text-success font-semibold' :
+                              isNoShow ? 'text-danger' :
+                                'text-textsec'
+                              }`}>
+                              {isAttended && 'Asistio'}
+                              {isNoShow && 'No asistio'}
                               {isReserved && 'Reservado'}
                             </p>
                           </div>
                         </div>
 
-                        {/* Botones de acción */}
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          {/* Botón: Asistió */}
+                        <div className="flex w-full items-center gap-2 sm:w-auto">
                           <button
                             onClick={() => handleMarkAttendance(booking.booking_id, true)}
                             disabled={isProcessing || isAttended || isNoShow}
-                            className="btn-outline text-sm px-3 py-2 flex-1 sm:flex-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="btn-outline flex-1 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                           >
-                            {isProcessing ? '...' : '✓ Asistió'}
+                            {isProcessing ? '...' : 'Asistio'}
                           </button>
 
-                          {/* Botón: No Asistió */}
                           <button
                             onClick={() => handleMarkAttendance(booking.booking_id, false)}
                             disabled={isProcessing || isAttended || isNoShow}
-                            className="btn-outline text-sm px-3 py-2 flex-1 sm:flex-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="btn-outline flex-1 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                           >
-                            {isProcessing ? '...' : '✗ No asistió'}
+                            {isProcessing ? '...' : 'No asistio'}
                           </button>
 
-                          {/* Botón: Cancelar */}
+                          <button
+                            onClick={() => router.push(`/reserva/${booking.booking_id}/editar`)}
+                            disabled={isProcessing || !isReserved}
+                            className="btn-ghost px-3 py-2 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            title={!isReserved ? 'Solo se pueden editar reservas pendientes' : 'Cambiar turno'}
+                          >
+                            {isProcessing ? '...' : 'Editar'}
+                          </button>
+
                           <button
                             onClick={() => handleCancelBooking(booking.booking_id)}
                             disabled={isProcessing || !isReserved}
-                            className="btn-ghost text-sm px-3 py-2 text-danger hover:bg-danger/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={
-                              !isReserved
-                                ? 'Solo se pueden cancelar reservas pendientes'
-                                : 'Cancelar reserva'
-                            }
+                            className="btn-ghost px-3 py-2 text-sm text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            title={!isReserved ? 'Solo se pueden cancelar reservas pendientes' : 'Cancelar reserva'}
                           >
                             {isProcessing ? '...' : 'Cancelar'}
                           </button>
@@ -283,7 +282,7 @@ export default function AsistenciaPage() {
                     )
                   })}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}

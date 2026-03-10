@@ -127,3 +127,21 @@ export function fromLocalDateTimeInput(datetimeLocal: string): string {
   
   return dayjs(datetimeLocal).toISOString()
 }
+
+/**
+ * Calcula la edad en anios a partir de una fecha de nacimiento.
+ * Devuelve null si la fecha es nula o invalida.
+ */
+export function calculateAge(dateString: string | null | undefined): number | null {
+  if (!dateString) {
+    return null
+  }
+
+  const birthDate = dayjs(dateString)
+  if (!birthDate.isValid()) {
+    return null
+  }
+
+  const age = dayjs().diff(birthDate, 'year')
+  return age >= 0 ? age : null
+}

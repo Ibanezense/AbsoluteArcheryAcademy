@@ -1,0 +1,92 @@
+{
+  "ledger": [
+    {
+      "id": "acfa7946-b5f5-4536-82b3-e98e5c6e1249",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "student_membership_id": "2765fea3-5934-4ce6-a13d-4d95a253f18e",
+      "booking_id": "e5ff1990-2942-4ad9-a29c-ae7356603e2f",
+      "movement_type": "booking_cancelled_no_refund",
+      "delta": 0,
+      "balance_after": 14,
+      "reason": "DEBUG: memISNULL=false status=active end_date=2026-04-08 current_date=2026-03-10",
+      "performed_by_profile_id": "1d5869bb-6e12-48e1-a179-d7b51246db51",
+      "created_at": "2026-03-10T15:55:25.107876+00:00"
+    },
+    {
+      "id": "989ecbe5-2252-4ce1-89e1-641683164038",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "student_membership_id": "2765fea3-5934-4ce6-a13d-4d95a253f18e",
+      "booking_id": "e5ff1990-2942-4ad9-a29c-ae7356603e2f",
+      "movement_type": "booking_reserved",
+      "delta": -1,
+      "balance_after": 14,
+      "reason": "Reserva realizada desde la app",
+      "performed_by_profile_id": "1d5869bb-6e12-48e1-a179-d7b51246db51",
+      "created_at": "2026-03-10T15:55:04.259384+00:00"
+    },
+    {
+      "id": "b96eb755-8ebb-4dd1-b51c-22df7867cebd",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "student_membership_id": "2765fea3-5934-4ce6-a13d-4d95a253f18e",
+      "booking_id": "55118d21-e229-4c04-bfe8-d6d9cb631bd1",
+      "movement_type": "booking_cancelled_no_refund",
+      "delta": 0,
+      "balance_after": 15,
+      "reason": "Cancelacion sin devolucion: membresia expirada o inactiva",
+      "performed_by_profile_id": "1d5869bb-6e12-48e1-a179-d7b51246db51",
+      "created_at": "2026-03-10T15:48:38.317536+00:00"
+    }
+  ],
+  "bookings": [
+    {
+      "id": "e5ff1990-2942-4ad9-a29c-ae7356603e2f",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "session_id": "74d9001b-4eb6-4315-a8ef-879481d8da04",
+      "status": "cancelled",
+      "active_membership_id": "2765fea3-5934-4ce6-a13d-4d95a253f18e"
+    },
+    {
+      "id": "55118d21-e229-4c04-bfe8-d6d9cb631bd1",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "session_id": "74d9001b-4eb6-4315-a8ef-879481d8da04",
+      "status": "cancelled",
+      "active_membership_id": "2765fea3-5934-4ce6-a13d-4d95a253f18e"
+    },
+    {
+      "id": "96ebf90d-0e5b-4194-be0e-e1bc658a8c4d",
+      "student_id": "4c8b90fe-3958-4b54-97ff-c8d0a9e9c906",
+      "session_id": "74d9001b-4eb6-4315-a8ef-879481d8da04",
+      "status": "reserved",
+      "active_membership_id": "75e4a6dc-1069-4a3a-9592-90927367451e"
+    }
+  ],
+  "memberships": [
+    {
+      "id": "2765fea3-5934-4ce6-a13d-4d95a253f18e",
+      "student_id": "05662d5d-8e12-45a0-a467-64b902ba85d7",
+      "classes_used": 2,
+      "classes_remaining": 14,
+      "classes_total": 16,
+      "status": "active",
+      "end_date": "2026-04-08"
+    },
+    {
+      "id": "75e4a6dc-1069-4a3a-9592-90927367451e",
+      "student_id": "4c8b90fe-3958-4b54-97ff-c8d0a9e9c906",
+      "classes_used": 1,
+      "classes_remaining": 15,
+      "classes_total": 16,
+      "status": "active",
+      "end_date": "2026-04-08"
+    },
+    {
+      "id": "fb71dfaf-3056-425b-98d3-0a5e614f578d",
+      "student_id": "2aa6166f-e246-4bef-9b61-61bd4f0f7e54",
+      "classes_used": 1,
+      "classes_remaining": 3,
+      "classes_total": 4,
+      "status": "historical",
+      "end_date": "2026-04-05"
+    }
+  ]
+}

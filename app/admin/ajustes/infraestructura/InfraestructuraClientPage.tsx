@@ -1,141 +1,272 @@
-"use client"
+'use client'
 
-import { useState } from 'react'
-import { Plus, Edit2, Trash2, AlertCircle } from 'lucide-react'
-import { 
-  useEquipment, 
-  useCreateEquipment, 
-  useUpdateEquipment, 
-  useDeleteEquipment,
-  useShootingLanes,
-  useCreateShootingLane,
-  useUpdateShootingLane,
-  useDeleteShootingLane,
-  type Equipment,
-  type ShootingLane,
-  type CreateEquipmentData,
-  type UpdateEquipmentData,
-  type CreateShootingLaneData,
-  type UpdateShootingLaneData
+import { useMemo, useState } from 'react'
+import { AlertCircle, Edit2, Plus, Trash2 } from 'lucide-react'
+import { useToast } from '@/components/ui/ToastProvider'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import {
+  type BowInventoryItem,
+  type WeeklySessionTemplate,
+  useBowInventory,
+  useCreateBowInventory,
+  useCreateWeeklySessionTemplate,
+  useDeleteBowInventory,
+  useDeleteWeeklySessionTemplate,
+  useGenerateWeeklySessions,
+  useUpdateBowInventory,
+  useUpdateWeeklySessionTemplate,
+  useWeeklySessionTemplates,
 } from '@/lib/infrastructureQueries'
 
-type ModalType = 'equipment-create' | 'equipment-edit' | 'lane-create' | 'lane-edit' | null
+const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70]
+const WEEKDAYS = [
+  { value: 1, label: 'Lunes' },
+  { value: 2, label: 'Martes' },
+  { value: 3, label: 'Miercoles' },
+  { value: 4, label: 'Jueves' },
+  { value: 5, label: 'Viernes' },
+  { value: 6, label: 'Sabado' },
+  { value: 7, label: 'Domingo' },
+]
+
+type ModalType = 'bow-create' | 'bow-edit' | 'template-create' | 'template-edit' | null
+
+function getMondayISO(date = new Date()) {
+  const base = new Date(date)
+  const day = base.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  base.setDate(base.getDate() + diff)
+  return base.toISOString().slice(0, 10)
+}
+
+function weekdayLabel(weekday: number) {
+  return WEEKDAYS.find((item) => item.value === weekday)?.label || `Dia ${weekday}`
+}
+
+function renderDistanceSummary(template: WeeklySessionTemplate) {
+  if (!template.distances.length) {
+    return 'Sin cupos configurados'
+  }
+
+  const totalTargets = template.distances.reduce((sum, d) => sum + (d.targets || 0), 0)
+  const totalSlots = template.distances.reduce((sum, d) => sum + (d.slot_capacity || 0), 0)
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {template.distances.map((distance) => (
+          <span key={distance.distance_m} className="text-xs text-textsec bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+            {distance.distance_m}m: {distance.targets} p ({distance.slot_capacity} c)
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-xs font-semibold text-accent uppercase tracking-wider">
+        Total: {totalTargets} pacas · {totalSlots} cupos
+      </p>
+    </>
+  )
+}
 
 export default function InfraestructuraClientPage() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const [modalType, setModalType] = useState<ModalType>(null)
-  const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null)
-  const [selectedLane, setSelectedLane] = useState<ShootingLane | null>(null)
+  const [selectedBow, setSelectedBow] = useState<BowInventoryItem | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<WeeklySessionTemplate | null>(null)
+  const [weekStart, setWeekStart] = useState(getMondayISO())
+  const [weeksToGenerate, setWeeksToGenerate] = useState(4)
 
-  // Equipment queries
-  const { data: equipment = [], isLoading: equipmentLoading, error: equipmentError } = useEquipment()
-  const createEquipmentMutation = useCreateEquipment()
-  const updateEquipmentMutation = useUpdateEquipment()
-  const deleteEquipmentMutation = useDeleteEquipment()
+  const {
+    data: bowInventory = [],
+    isLoading: inventoryLoading,
+    error: inventoryError,
+  } = useBowInventory()
+  const {
+    data: templates = [],
+    isLoading: templatesLoading,
+    error: templatesError,
+  } = useWeeklySessionTemplates()
 
-  // Shooting lanes queries
-  const { data: lanes = [], isLoading: lanesLoading, error: lanesError } = useShootingLanes()
-  const createLaneMutation = useCreateShootingLane()
-  const updateLaneMutation = useUpdateShootingLane()
-  const deleteLaneMutation = useDeleteShootingLane()
+  const createBowMutation = useCreateBowInventory()
+  const updateBowMutation = useUpdateBowInventory()
+  const deleteBowMutation = useDeleteBowInventory()
 
-  const handleEquipmentSubmit = async (formData: FormData) => {
-    const name = formData.get('name') as string
-    const category = formData.get('category') as 'niños' | 'jovenes' | 'adultos' | 'asignados'
-    const total_quantity = parseInt(formData.get('total_quantity') as string)
+  const createTemplateMutation = useCreateWeeklySessionTemplate()
+  const updateTemplateMutation = useUpdateWeeklySessionTemplate()
+  const deleteTemplateMutation = useDeleteWeeklySessionTemplate()
+  const generateSessionsMutation = useGenerateWeeklySessions()
+
+  const loading = inventoryLoading || templatesLoading
+  const error = inventoryError || templatesError
+
+  const totalActiveBows = useMemo(
+    () => bowInventory.reduce((sum, item) => sum + item.quantity_active, 0),
+    [bowInventory]
+  )
+
+  const totalConfiguredSlots = useMemo(
+    () =>
+      templates.reduce(
+        (sum, template) =>
+          sum + template.distances.reduce((distanceSum, distance) => distanceSum + (distance.slot_capacity || 0), 0),
+        0
+      ),
+    [templates]
+  )
+
+  const closeModal = () => {
+    setModalType(null)
+    setSelectedBow(null)
+    setSelectedTemplate(null)
+  }
+
+  const handleBowSubmit = async (formData: FormData) => {
+    const drawWeight = Number(formData.get('draw_weight_lbs') || 0)
+    const total = Number(formData.get('quantity_total') || 0)
+    const active = Number(formData.get('quantity_active') || 0)
+    const notes = String(formData.get('notes') || '').trim()
+
+    if (drawWeight <= 0 || total < 0 || active < 0 || active > total) {
+      toast.push({ message: 'Revisa el libraje y las cantidades del inventario.', type: 'error' })
+      return
+    }
 
     try {
-      if (modalType === 'equipment-create') {
-        await createEquipmentMutation.mutateAsync({ name, category, total_quantity })
-      } else if (modalType === 'equipment-edit' && selectedEquipment) {
-        await updateEquipmentMutation.mutateAsync({ 
-          id: selectedEquipment.id, 
-          name, 
-          category, 
-          total_quantity 
+      if (modalType === 'bow-create') {
+        await createBowMutation.mutateAsync({
+          draw_weight_lbs: drawWeight,
+          quantity_total: total,
+          quantity_active: active,
+          notes,
         })
+        toast.push({ message: 'Inventario guardado.', type: 'success' })
+      } else if (modalType === 'bow-edit' && selectedBow) {
+        await updateBowMutation.mutateAsync({
+          id: selectedBow.id,
+          draw_weight_lbs: drawWeight,
+          quantity_total: total,
+          quantity_active: active,
+          notes,
+        })
+        toast.push({ message: 'Inventario actualizado.', type: 'success' })
       }
-      setModalType(null)
-      setSelectedEquipment(null)
-    } catch (error) {
-      console.error('Error saving equipment:', error)
+
+      closeModal()
+    } catch (mutationError: any) {
+      toast.push({ message: mutationError?.message || 'No se pudo guardar el inventario.', type: 'error' })
     }
   }
 
-  const handleLaneSubmit = async (formData: FormData) => {
-    const name = formData.get('name') as string
-    const distance_meters = parseInt(formData.get('distance_meters') as string)
-    const capacity = parseInt(formData.get('capacity') as string)
+  const handleTemplateSubmit = async (formData: FormData) => {
+    const label = String(formData.get('label') || '').trim()
+    const weekday = Number(formData.get('weekday') || 0)
+    const startTime = String(formData.get('start_time') || '')
+    const endTime = String(formData.get('end_time') || '')
+    const isActive = formData.get('is_active') === 'on'
+    const distances = DISTANCES.map((distance) => {
+      const pacas = Number(formData.get(`distance_${distance}`) || 0)
+      return {
+        distance_m: distance,
+        slot_capacity: pacas * 4, // 4 cupos por paca
+        targets: pacas,
+      }
+    })
+
+    if (!label || !weekday || !startTime || !endTime || endTime <= startTime) {
+      toast.push({ message: 'Revisa el nombre, dia y horario de la plantilla.', type: 'error' })
+      return
+    }
+
+    if (!distances.some((distance) => distance.slot_capacity > 0)) {
+      toast.push({ message: 'Configura al menos un cupo por distancia.', type: 'error' })
+      return
+    }
 
     try {
-      if (modalType === 'lane-create') {
-        await createLaneMutation.mutateAsync({ name, distance_meters, capacity })
-      } else if (modalType === 'lane-edit' && selectedLane) {
-        await updateLaneMutation.mutateAsync({ 
-          id: selectedLane.id, 
-          name, 
-          distance_meters, 
-          capacity 
+      if (modalType === 'template-create') {
+        await createTemplateMutation.mutateAsync({
+          label,
+          weekday,
+          start_time: startTime,
+          end_time: endTime,
+          is_active: isActive,
+          distances,
         })
+        toast.push({ message: 'Plantilla semanal creada.', type: 'success' })
+      } else if (modalType === 'template-edit' && selectedTemplate) {
+        await updateTemplateMutation.mutateAsync({
+          id: selectedTemplate.id,
+          label,
+          weekday,
+          start_time: startTime,
+          end_time: endTime,
+          is_active: isActive,
+          distances,
+        })
+        toast.push({ message: 'Plantilla semanal actualizada.', type: 'success' })
       }
-      setModalType(null)
-      setSelectedLane(null)
-    } catch (error) {
-      console.error('Error saving lane:', error)
+
+      closeModal()
+    } catch (mutationError: any) {
+      toast.push({ message: mutationError?.message || 'No se pudo guardar la plantilla.', type: 'error' })
     }
   }
 
-  const handleDeleteEquipment = async (id: string) => {
-    if (confirm('¿Estás seguro de que deseas eliminar este equipamiento?')) {
-      try {
-        await deleteEquipmentMutation.mutateAsync(id)
-      } catch (error) {
-        console.error('Error deleting equipment:', error)
-      }
+  const handleDeleteBow = async (id: string) => {
+    const confirmed = await confirm('¿Eliminar este libraje del inventario?', { title: 'Eliminar libraje' })
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteBowMutation.mutateAsync(id)
+      toast.push({ message: 'Inventario eliminado.', type: 'success' })
+    } catch (mutationError: any) {
+      toast.push({ message: mutationError?.message || 'No se pudo eliminar el inventario.', type: 'error' })
     }
   }
 
-  const handleDeleteLane = async (id: string) => {
-    if (confirm('¿Estás seguro de que deseas eliminar esta pista?')) {
-      try {
-        await deleteLaneMutation.mutateAsync(id)
-      } catch (error) {
-        console.error('Error deleting lane:', error)
-      }
+  const handleDeleteTemplate = async (id: string) => {
+    const confirmed = await confirm('¿Eliminar esta plantilla semanal?', { title: 'Eliminar plantilla' })
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await deleteTemplateMutation.mutateAsync(id)
+      toast.push({ message: 'Plantilla eliminada.', type: 'success' })
+    } catch (mutationError: any) {
+      toast.push({ message: mutationError?.message || 'No se pudo eliminar la plantilla.', type: 'error' })
     }
   }
 
-  const getCategoryLabel = (category: string) => {
-    const labels = {
-      'niños': 'Niños',
-      'jovenes': 'Jóvenes',
-      'adultos': 'Adultos',
-      'asignados': 'Asignados'
+  const handleGenerateSessions = async () => {
+    try {
+      const created = await generateSessionsMutation.mutateAsync({
+        weekStart,
+        weeks: weeksToGenerate,
+      })
+      toast.push({
+        message: created === 0 ? 'No se crearon turnos nuevos.' : `Turnos generados: ${created}.`,
+        type: 'success',
+      })
+    } catch (mutationError: any) {
+      toast.push({ message: mutationError?.message || 'No se pudieron generar los turnos.', type: 'error' })
     }
-    return labels[category as keyof typeof labels] || category
   }
 
-  const getCategoryColor = (category: string) => {
-    const colors = {
-      'niños': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      'jovenes': 'bg-green-500/20 text-green-400 border-green-500/30',
-      'adultos': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      'asignados': 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-    }
-    return colors[category as keyof typeof colors] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-  }
-
-  if (equipmentLoading || lanesLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-slate-300">Cargando infraestructura...</div>
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-textsec">Cargando infraestructura...</div>
       </div>
     )
   }
 
-  if (equipmentError || lanesError) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[400px] text-red-400">
-        <AlertCircle className="w-5 h-5 mr-2" />
+      <div className="flex min-h-[400px] items-center justify-center text-danger">
+        <AlertCircle className="mr-2 h-5 w-5" />
         Error al cargar la infraestructura
       </div>
     )
@@ -143,59 +274,73 @@ export default function InfraestructuraClientPage() {
 
   return (
     <div className="space-y-6">
-      {/* Equipment Card */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="card p-5">
+          <p className="text-sm text-textsec">Inventario activo</p>
+          <p className="mt-2 text-3xl font-semibold text-textpri">{totalActiveBows}</p>
+          <p className="mt-1 text-xs text-textsec">Arcos compartidos configurados por libraje</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-sm text-textsec">Plantillas activas</p>
+          <p className="mt-2 text-3xl font-semibold text-textpri">
+            {templates.filter((template) => template.is_active).length}
+          </p>
+          <p className="mt-1 text-xs text-textsec">Turnos semanales listos para generar</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-sm text-textsec">Cupos semanales</p>
+          <p className="mt-2 text-3xl font-semibold text-textpri">{totalConfiguredSlots}</p>
+          <p className="mt-1 text-xs text-textsec">Suma de cupos por distancia en plantillas</p>
+        </div>
+      </div>
+
       <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Equipamiento</h2>
-            <p className="text-slate-400 text-sm mt-1">Gestiona tu inventario de arcos y otros equipos.</p>
+            <h2 className="text-xl font-semibold text-textpri">Inventario de arcos</h2>
+            <p className="mt-1 text-sm text-textsec">
+              Define cuantos arcos compartidos hay disponibles por libraje.
+            </p>
           </div>
           <button
-            onClick={() => setModalType('equipment-create')}
-            className="hover-accent btn flex items-center gap-2"
-            style={{ backgroundColor: 'var(--accent-color)', color: 'white' }}
+            onClick={() => setModalType('bow-create')}
+            className="btn flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" />
-            Agregar Equipamiento
+            <Plus className="h-4 w-4" />
+            Agregar libraje
           </button>
         </div>
 
         <div className="space-y-3">
-          {equipment.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              No hay equipamiento registrado
+          {bowInventory.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-textsec">
+              No hay inventario configurado. Usa el botón de arriba para agregar arcos.
             </div>
           ) : (
-            equipment.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <h3 className="font-medium text-white">{item.name}</h3>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full border ${getCategoryColor(item.category)}`}>
-                        {getCategoryLabel(item.category)}
-                      </span>
-                      <span className="text-slate-400 text-sm">
-                        {item.available_quantity}/{item.total_quantity} disponibles
-                      </span>
-                    </div>
+            bowInventory.map((item) => (
+              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-bg/40 p-4">
+                <div>
+                  <h3 className="font-medium text-textpri">{item.draw_weight_lbs} lb</h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-textsec">
+                    <span>{item.quantity_active}/{item.quantity_total} activos</span>
+                    {item.notes && <span>{item.notes}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setSelectedEquipment(item)
-                      setModalType('equipment-edit')
+                      setSelectedBow(item)
+                      setModalType('bow-edit')
                     }}
-                    className="hover-accent p-2 rounded-lg transition-colors"
+                    className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri"
                   >
-                    <Edit2 className="w-4 h-4 text-slate-400" />
+                    <Edit2 className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleDeleteEquipment(item.id)}
-                    className="p-2 rounded-lg transition-colors hover:bg-red-500/20 hover:text-red-400"
+                    onClick={() => handleDeleteBow(item.id)}
+                    className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger"
                   >
-                    <Trash2 className="w-4 h-4 text-slate-400" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
@@ -204,65 +349,66 @@ export default function InfraestructuraClientPage() {
         </div>
       </div>
 
-      {/* Shooting Lanes Card */}
       <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-white">Pistas de Tiro</h2>
-            <p className="text-slate-400 text-sm mt-1">Configura las distancias y capacidades de las pistas.</p>
+            <h2 className="text-xl font-semibold text-textpri">Plantillas semanales</h2>
+            <p className="mt-1 text-sm text-textsec">
+              Configura los turnos recurrentes y sus cupos por distancia.
+            </p>
           </div>
           <button
-            onClick={() => setModalType('lane-create')}
-            className="hover-accent btn flex items-center gap-2"
-            style={{ backgroundColor: 'var(--accent-color)', color: 'white' }}
+            onClick={() => setModalType('template-create')}
+            className="btn flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" />
-            Agregar Pista
+            <Plus className="h-4 w-4" />
+            Agregar plantilla
           </button>
         </div>
 
         <div className="space-y-3">
-          {lanes.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              No hay pistas registradas
+          {templates.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-textsec">
+              No hay plantillas semanales configuradas.
             </div>
           ) : (
-            lanes.map((lane) => (
-              <div key={lane.id} className="flex items-center justify-between p-4 bg-gray-800 rounded-lg border border-gray-700">
-                <div className="flex items-center gap-4">
+            templates.map((template) => (
+              <div key={template.id} className="rounded-2xl border border-white/10 bg-bg/40 p-4">
+                <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="font-medium text-white">{lane.name}</h3>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-slate-400 text-sm">
-                        {lane.distance_meters}m
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-medium text-textpri">{template.label}</h3>
+                      <span
+                        className={`rounded-full border px-2 py-1 text-xs ${template.is_active
+                          ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                          : 'border-red-500/30 bg-red-500/15 text-red-300'
+                          }`}
+                      >
+                        {template.is_active ? 'Activa' : 'Inactiva'}
                       </span>
-                      <span className="text-slate-400 text-sm">
-                        {lane.capacity} arqueros
-                      </span>
-                      {!lane.is_active && (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full border bg-red-500/20 text-red-400 border-red-500/30">
-                          Inactiva
-                        </span>
-                      )}
                     </div>
+                    <p className="mt-1 text-sm text-textsec">
+                      {weekdayLabel(template.weekday)} · {template.start_time.slice(0, 5)} - {template.end_time.slice(0, 5)}
+                    </p>
+                    <p className="mt-2 text-sm text-textsec">{renderDistanceSummary(template)}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedLane(lane)
-                      setModalType('lane-edit')
-                    }}
-                    className="hover-accent p-2 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4 text-slate-400" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteLane(lane.id)}
-                    className="p-2 rounded-lg transition-colors hover:bg-red-500/20 hover:text-red-400"
-                  >
-                    <Trash2 className="w-4 h-4 text-slate-400" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedTemplate(template)
+                        setModalType('template-edit')
+                      }}
+                      className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTemplate(template.id)}
+                      className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -270,71 +416,113 @@ export default function InfraestructuraClientPage() {
         </div>
       </div>
 
-      {/* Equipment Modal */}
-      {(modalType === 'equipment-create' || modalType === 'equipment-edit') && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              {modalType === 'equipment-create' ? 'Agregar Equipamiento' : 'Editar Equipamiento'}
+      <div className="card p-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-textpri">Generar turnos</h2>
+          <p className="mt-1 text-sm text-textsec">
+            Crea sesiones reales desde las plantillas activas. Si un turno ya existe, no se duplica.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-textsec">Semana base</label>
+            <input
+              type="date"
+              value={weekStart}
+              onChange={(event) => setWeekStart(event.target.value)}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-textsec">Semanas a generar</label>
+            <input
+              type="number"
+              min="1"
+              max="24"
+              value={weeksToGenerate}
+              onChange={(event) => setWeeksToGenerate(Number(event.target.value || 1))}
+              className="input"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleGenerateSessions}
+              disabled={generateSessionsMutation.isPending}
+              className="btn w-full"
+            >
+              {generateSessionsMutation.isPending ? 'Generando...' : 'Generar turnos'}
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-4 text-xs text-textsec">
+          Para cambiar un turno puntual despues de generarlo, editalo desde la pantalla de turnos.
+        </p>
+      </div>
+
+      {(modalType === 'bow-create' || modalType === 'bow-edit') && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-card p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-textpri">
+              {modalType === 'bow-create' ? 'Agregar libraje' : 'Editar libraje'}
             </h3>
-            <form action={handleEquipmentSubmit} className="space-y-4">
+            <form action={handleBowSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Nombre</label>
+                <label className="mb-2 block text-sm font-medium text-textsec">Libraje (lb)</label>
                 <input
-                  name="name"
-                  type="text"
-                  defaultValue={selectedEquipment?.name || ''}
-                  className="input"
-                  placeholder="Ej: Arco Recurvo Infantil"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Categoría</label>
-                <select
-                  name="category"
-                  defaultValue={selectedEquipment?.category || 'niños'}
-                  className="input"
-                  required
-                >
-                  <option value="niños">Niños</option>
-                  <option value="jovenes">Jóvenes</option>
-                  <option value="adultos">Adultos</option>
-                  <option value="asignados">Asignados</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Cantidad Total</label>
-                <input
-                  name="total_quantity"
+                  name="draw_weight_lbs"
                   type="number"
                   min="1"
-                  defaultValue={selectedEquipment?.total_quantity || 1}
+                  defaultValue={selectedBow?.draw_weight_lbs || ''}
                   className="input"
                   required
                 />
               </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalType(null)
-                    setSelectedEquipment(null)
-                  }}
-                  className="btn-ghost flex-1"
-                >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Cantidad total</label>
+                  <input
+                    name="quantity_total"
+                    type="number"
+                    min="0"
+                    defaultValue={selectedBow?.quantity_total ?? 0}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Cantidad activa</label>
+                  <input
+                    name="quantity_active"
+                    type="number"
+                    min="0"
+                    defaultValue={selectedBow?.quantity_active ?? 0}
+                    className="input"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec">Notas</label>
+                <textarea
+                  name="notes"
+                  defaultValue={selectedBow?.notes || ''}
+                  className="input min-h-24"
+                  placeholder="Observaciones opcionales"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={closeModal} className="btn-outline flex-1">
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   className="btn flex-1"
-                  style={{ backgroundColor: 'var(--accent-color)', color: 'white' }}
-                  disabled={createEquipmentMutation.isPending || updateEquipmentMutation.isPending}
+                  disabled={createBowMutation.isPending || updateBowMutation.isPending}
                 >
-                  {createEquipmentMutation.isPending || updateEquipmentMutation.isPending 
-                    ? 'Guardando...' 
-                    : modalType === 'equipment-create' ? 'Crear' : 'Guardar'
-                  }
+                  {createBowMutation.isPending || updateBowMutation.isPending ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </form>
@@ -342,68 +530,109 @@ export default function InfraestructuraClientPage() {
         </div>
       )}
 
-      {/* Shooting Lane Modal */}
-      {(modalType === 'lane-create' || modalType === 'lane-edit') && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              {modalType === 'lane-create' ? 'Agregar Pista' : 'Editar Pista'}
+      {(modalType === 'template-create' || modalType === 'template-edit') && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-card p-6 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-textpri">
+              {modalType === 'template-create' ? 'Agregar plantilla semanal' : 'Editar plantilla semanal'}
             </h3>
-            <form action={handleLaneSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Nombre</label>
-                <input
-                  name="name"
-                  type="text"
-                  defaultValue={selectedLane?.name || ''}
-                  className="input"
-                  placeholder="Ej: Pista Corta"
-                  required
-                />
+            <form action={handleTemplateSubmit} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Nombre</label>
+                  <input
+                    name="label"
+                    type="text"
+                    defaultValue={selectedTemplate?.label || ''}
+                    className="input"
+                    placeholder="Ej: Grupo intermedio tarde"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Dia</label>
+                  <select
+                    name="weekday"
+                    defaultValue={selectedTemplate?.weekday || 1}
+                    className="input"
+                    required
+                  >
+                    {WEEKDAYS.map((weekday) => (
+                      <option key={weekday.value} value={weekday.value}>
+                        {weekday.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Hora inicio</label>
+                  <input
+                    name="start_time"
+                    type="time"
+                    defaultValue={selectedTemplate?.start_time?.slice(0, 5) || ''}
+                    className="input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Hora fin</label>
+                  <input
+                    name="end_time"
+                    type="time"
+                    defaultValue={selectedTemplate?.end_time?.slice(0, 5) || ''}
+                    className="input"
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Distancia (metros)</label>
-                <input
-                  name="distance_meters"
-                  type="number"
-                  min="1"
-                  defaultValue={selectedLane?.distance_meters || 10}
-                  className="input"
-                  required
-                />
+
+              <div className="rounded-2xl border border-white/10 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-textpri">Pacas por distancia</p>
+                    <p className="text-[10px] text-textsec uppercase tracking-widest mt-1">Cada paca = 4 cupos para alumnos</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-textsec">
+                    <input
+                      name="is_active"
+                      type="checkbox"
+                      defaultChecked={selectedTemplate ? selectedTemplate.is_active : true}
+                    />
+                    Plantilla activa
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {DISTANCES.map((distance) => {
+                    const defaultDistance = selectedTemplate?.distances.find(
+                      (item) => item.distance_m === distance
+                    )
+
+                    return (
+                      <div key={distance}>
+                        <label className="mb-2 block text-sm font-medium text-textsec">{distance} m</label>
+                        <input
+                          name={`distance_${distance}`}
+                          type="number"
+                          min="0"
+                          defaultValue={defaultDistance?.targets ?? 0}
+                          className="input"
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Capacidad (arqueros)</label>
-                <input
-                  name="capacity"
-                  type="number"
-                  min="1"
-                  defaultValue={selectedLane?.capacity || 4}
-                  className="input"
-                  required
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalType(null)
-                    setSelectedLane(null)
-                  }}
-                  className="btn-ghost flex-1"
-                >
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={closeModal} className="btn-outline flex-1">
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   className="btn flex-1"
-                  style={{ backgroundColor: 'var(--accent-color)', color: 'white' }}
-                  disabled={createLaneMutation.isPending || updateLaneMutation.isPending}
+                  disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}
                 >
-                  {createLaneMutation.isPending || updateLaneMutation.isPending 
-                    ? 'Guardando...' 
-                    : modalType === 'lane-create' ? 'Crear' : 'Guardar'
-                  }
+                  {createTemplateMutation.isPending || updateTemplateMutation.isPending ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </form>

@@ -1,348 +1,312 @@
 'use client'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
-import { toLocalDateTimeInput, fromLocalDateTimeInput } from '@/lib/utils/dateUtils'
+import { fromLocalDateTimeInput, toLocalDateTimeInput } from '@/lib/utils/dateUtils'
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
-const ALLOWED_DISTANCES = new Set<number>(DISTANCES as unknown as number[])
-type Dist = typeof DISTANCES[number]
+type Distance = typeof DISTANCES[number]
 
-type Session = {
-  id?: string
+type SessionForm = {
   start_at: string
   end_at: string
   status: 'scheduled' | 'cancelled'
-  capacity_children: number
-  capacity_youth: number
-  capacity_adult: number
-  capacity_assigned: number
-  capacity_ownbow: number
+  notes: string
+  weekly_template_id: string | null
+  is_manual_override: boolean
 }
 
-type Allocation = { session_id?: string; distance_m: Dist; targets: number }
-
-export default function EditarSesion() {
+export default function EditarSesionPage() {
   const router = useRouter()
+  const toast = useToast()
+  const confirm = useConfirm()
   const { id } = useParams<{ id: string }>()
   const isNew = id === 'new'
 
-  const [session, setSession] = useState<Session>({
-    start_at: new Date(Date.now() + 3600e3).toISOString().slice(0, 16), // yyyy-mm-ddThh:mm
-    end_at: new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 16),
+  const [session, setSession] = useState<SessionForm>({
+    start_at: new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16),
+    end_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16),
     status: 'scheduled',
-    capacity_children: 2,
-    capacity_youth: 4,
-    capacity_adult: 6,
-    capacity_assigned: 3,
-    capacity_ownbow: 17,
+    notes: '',
+    weekly_template_id: null,
+    is_manual_override: true,
   })
-  const [alloc, setAlloc] = useState<Record<Dist, number>>(
-    Object.fromEntries(DISTANCES.map((d) => [d, 0])) as Record<Dist, number>
+  const [distanceCaps, setDistanceCaps] = useState<Record<Distance, number>>(
+    Object.fromEntries(DISTANCES.map((distance) => [distance, 0])) as Record<Distance, number>
   )
+  const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
 
-  // Cargar datos si es edición
   useEffect(() => {
-    ;(async () => {
+    const loadSession = async () => {
       if (isNew) return
-      const { data: s, error: e1 } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('id', id)
-        .single()
-      if (e1) {
-        alert(e1.message)
-        return
-      }
-      setSession({
-        ...s,
-        start_at: toLocalDateTimeInput(s.start_at),
-        end_at: toLocalDateTimeInput(s.end_at),
-      })
-      const { data: a, error: e2 } = await supabase
-        .from('session_distance_allocations')
-        .select('distance_m, targets')
-        .eq('session_id', id)
-      if (e2) {
-        alert(e2.message)
-        return
-      }
-      const map: any = Object.fromEntries(DISTANCES.map((d) => [d, 0]))
-      ;(a || []).forEach((r: any) => {
-        map[r.distance_m] = r.targets
-      })
-      setAlloc(map)
-    })()
-  }, [id, isNew])
 
-  const totalCap = useMemo(
-    () =>
-      (session.capacity_children ?? 0) +
-      (session.capacity_youth ?? 0) +
-      (session.capacity_adult ?? 0) +
-      (session.capacity_assigned ?? 0) +
-      (session.capacity_ownbow ?? 0),
-    [session]
+      try {
+        setLoading(true)
+
+        const { data: sessionRow, error: sessionError } = await supabase
+          .from('sessions')
+          .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override')
+          .eq('id', id)
+          .single()
+
+        if (sessionError) {
+          throw sessionError
+        }
+
+        setSession({
+          start_at: toLocalDateTimeInput(sessionRow.start_at),
+          end_at: toLocalDateTimeInput(sessionRow.end_at),
+          status: sessionRow.status,
+          notes: sessionRow.notes || '',
+          weekly_template_id: sessionRow.weekly_template_id,
+          is_manual_override: sessionRow.is_manual_override ?? true,
+        })
+
+        const { data: allocationRows, error: allocationsError } = await supabase
+          .from('session_distance_allocations')
+          .select('distance_m, slot_capacity, targets')
+          .eq('session_id', id)
+
+        if (allocationsError) {
+          throw allocationsError
+        }
+
+        const nextCaps = Object.fromEntries(DISTANCES.map((distance) => [distance, 0])) as Record<Distance, number>
+          ; (allocationRows || []).forEach((allocation: any) => {
+            // Cargamos targets (pacas)
+            nextCaps[allocation.distance_m as Distance] = allocation.targets || 0
+          })
+        setDistanceCaps(nextCaps)
+      } catch (loadError: any) {
+        toast.push({ message: loadError?.message || 'No se pudo cargar el turno.', type: 'error' })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadSession()
+  }, [id, isNew]) // Removed toast to avoid any potential loops
+
+  const totalSlots = useMemo(
+    () => Object.values(distanceCaps).reduce((sum, value) => sum + (value * 4), 0),
+    [distanceCaps]
   )
 
   const save = async () => {
-    // Validaciones
-    if (totalCap > 32) {
-      alert('La suma de cupos no puede superar 32')
-      return
-    }
-    const start = new Date(session.start_at),
-      end = new Date(session.end_at)
-    if (end <= start) {
-      alert('La hora de fin debe ser posterior a la de inicio')
-      return
-    }
-    if (Object.values(alloc).reduce((a, b) => a + b, 0) === 0) {
-      alert('Define al menos una paca en alguna distancia')
+    const startAt = new Date(session.start_at)
+    const endAt = new Date(session.end_at)
+
+    if (endAt <= startAt) {
+      toast.push({ message: 'La hora de fin debe ser posterior a la de inicio.', type: 'error' })
       return
     }
 
-    setSaving(true)
-
-    // 1) Guardar sesión (insert o update explícito para evitar 400 con upsert)
-    const sessPayload = {
-      start_at: fromLocalDateTimeInput(session.start_at),
-      end_at: fromLocalDateTimeInput(session.end_at),
-      status: session.status,
-      capacity_children: session.capacity_children ?? 0,
-      capacity_youth: session.capacity_youth ?? 0,
-      capacity_adult: session.capacity_adult ?? 0,
-      capacity_assigned: session.capacity_assigned ?? 0,
-      capacity_ownbow: session.capacity_ownbow ?? 0,
+    if (!Object.values(distanceCaps).some((value) => value > 0)) {
+      toast.push({ message: 'Configura al menos un cupo por distancia.', type: 'error' })
+      return
     }
 
-    let sret: any | null = null
-    let es: any | null = null
-    if (isNew) {
-      // Debug: payload exacto que se enviará al INSERT
-      console.log('🛰️ INSERT sessPayload:', JSON.stringify(sessPayload, null, 2))
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert(sessPayload)
-        .select()
-        .single()
-      sret = data
-      es = error
-      if (error) {
-        console.error('❌ Error en INSERT:', error)
+    try {
+      setSaving(true)
+
+      const sessionPayload = {
+        start_at: fromLocalDateTimeInput(session.start_at),
+        end_at: fromLocalDateTimeInput(session.end_at),
+        status: session.status,
+        notes: session.notes.trim() || null,
+        weekly_template_id: session.weekly_template_id,
+        is_manual_override: true,
       }
-    } else {
-      // Debug: payload exacto que se enviará al UPDATE
-      console.log('🛰️ UPDATE sessPayload (id=' + id + '):', JSON.stringify(sessPayload, null, 2))
-      const { data, error } = await supabase
-        .from('sessions')
-        .update(sessPayload)
-        .eq('id', id)
-        .select()
-        .single()
-      sret = data
-      es = error
-      if (error) {
-        console.error('❌ Error en UPDATE:', error)
+
+      const sessionMutation = isNew
+        ? await supabase.from('sessions').insert(sessionPayload).select().single()
+        : await supabase.from('sessions').update(sessionPayload).eq('id', id).select().single()
+
+      if (sessionMutation.error) {
+        throw sessionMutation.error
       }
-    }
-    if (es) {
-      setSaving(false)
-      alert(es.message)
-      return
-    }
-    const sid = sret.id as string
 
-    // 2) Upsert allocations con targets > 0
-    const toUpsert = DISTANCES
-      .filter((d) => (alloc[d] ?? 0) > 0)
-      .map((d) => {
-        const targets = Math.max(0, Math.min(8, Number(alloc[d] ?? 0)))
-        return {
-          session_id: sid,
-          distance_m: Number(d),
-          targets: targets,
-        }
-      })
-      .filter((r) => ALLOWED_DISTANCES.has(r.distance_m) && r.targets > 0 && r.targets <= 8)
+      const sessionId = sessionMutation.data.id as string
 
-    // Log para debugging - JSON exacto que se enviará
-    console.log('📊 Allocations a insertar:', JSON.stringify(toUpsert, null, 2))
-
-    // Validación extra: asegurarse de que todo sea válido
-    const invalid = toUpsert.filter(
-      (r) => !ALLOWED_DISTANCES.has(r.distance_m) || r.targets < 1 || r.targets > 8
-    )
-    if (invalid.length) {
-      console.error('❌ Asignaciones inválidas detectadas:', JSON.stringify(invalid, null, 2))
-      alert('Error: Hay valores inválidos. Revisa la consola del navegador (F12).')
-      setSaving(false)
-      return
-    }
-
-    if (toUpsert.length === 0) {
-      alert('Define al menos una paca en alguna distancia')
-      setSaving(false)
-      return
-    }
-
-    // Estrategia más simple: borrar todas las allocations de esta sesión y volver a insertarlas
-    // Esto evita problemas con upsert y constraints
-    const { error: delErr } = await supabase
-      .from('session_distance_allocations')
-      .delete()
-      .eq('session_id', sid)
-    
-    if (delErr) {
-      console.error('Error al limpiar allocations anteriores:', delErr)
-      setSaving(false)
-      alert('Error al actualizar asignaciones de distancias')
-      return
-    }
-
-    // Ahora insertar las nuevas (solo las que tienen targets > 0)
-    if (toUpsert.length) {
-      console.log('🔄 Insertando allocations en DB...')
-      const { error: insErr } = await supabase
+      const { error: deleteError } = await supabase
         .from('session_distance_allocations')
-        .insert(toUpsert)
-      
-      if (insErr) {
-        setSaving(false)
-        console.error('❌ Error al insertar allocations:', {
-          payload: JSON.stringify(toUpsert, null, 2),
-          error: insErr,
-          code: insErr.code,
-          details: insErr.details,
-          hint: insErr.hint
-        })
-        alert(`Error al guardar asignaciones de distancias: ${insErr.message}\n\nRevisa la consola (F12) para más detalles.`)
-        return
-      }
-      
-      console.log('✅ Allocations guardadas correctamente')
-    }
+        .delete()
+        .eq('session_id', sessionId)
 
-    setSaving(false)
-    alert('Sesión guardada')
-    location.href = '/admin/sesiones'
+      if (deleteError) {
+        throw deleteError
+      }
+
+      const rows = DISTANCES
+        .filter((distance) => distanceCaps[distance] > 0)
+        .map((distance) => ({
+          session_id: sessionId,
+          distance_m: Number(distance),
+          slot_capacity: Number(distanceCaps[distance]) * 4, // 4 cupos por paca
+          targets: Number(distanceCaps[distance]),
+        }))
+
+      const { error: insertError } = await supabase
+        .from('session_distance_allocations')
+        .insert(rows)
+
+      if (insertError) {
+        throw insertError
+      }
+
+      toast.push({ message: 'Turno guardado.', type: 'success' })
+      router.push('/admin/sesiones')
+    } catch (saveError: any) {
+      toast.push({ message: saveError?.message || 'No se pudo guardar el turno.', type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteSession = async () => {
+    const ok = await confirm('¿Estás seguro de que deseas eliminar este turno y todas sus reservas? Esta acción no se puede deshacer.')
+    if (!ok) return
+
+    try {
+      setSaving(true)
+      const { error } = await supabase.rpc('admin_delete_session', {
+        p_session_id: id,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      toast.push({ message: 'Turno eliminado.', type: 'success' })
+      router.push('/admin/sesiones')
+    } catch (saveError: any) {
+      toast.push({ message: saveError?.message || 'No se pudo eliminar el turno.', type: 'error' })
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <AdminGuard>
+        <div className="p-5">Cargando...</div>
+      </AdminGuard>
+    )
   }
 
   return (
     <AdminGuard>
-      <div className="p-5 space-y-5">
-        <h1 className="text-lg font-semibold">
-          {isNew ? 'Nueva sesión' : 'Editar sesión'}
-        </h1>
-
-        <div className="card p-4 grid gap-4">
-          <div className="grid gap-2">
-            <label className="text-sm text-textsec">Inicio</label>
-            <input
-              type="datetime-local"
-              className="input"
-              value={session.start_at}
-              onChange={(e) =>
-                setSession((s) => ({ ...s, start_at: e.target.value }))
-              }
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-sm text-textsec">Fin</label>
-            <input
-              type="datetime-local"
-              className="input"
-              value={session.end_at}
-              onChange={(e) =>
-                setSession((s) => ({ ...s, end_at: e.target.value }))
-              }
-            />
-          </div>
-          <div className="grid gap-2">
-            <label className="text-sm text-textsec">Estado</label>
-            <select
-              className="input"
-              value={session.status}
-              onChange={(e) =>
-                setSession((s) => ({
-                  ...s,
-                  status: e.target.value as Session['status'],
-                }))
-              }
-            >
-              <option value="scheduled">Programada</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
-          </div>
-
-          {/* APILADAS: primero Cupos, luego Pacas */}
-          <div className="grid grid-cols-1 gap-3">
-            {/* Cupos por tipo */}
-            <div className="card p-3">
-              <p className="text-sm font-medium mb-2">
-                Cupos por tipo (máx 32)
+      <div className="space-y-6">
+        <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-accent">Turnos</p>
+              <h1 className="mt-2 text-3xl font-bold text-textpri">
+                {isNew ? 'Nuevo turno manual' : 'Editar turno'}
+              </h1>
+              <p className="mt-2 text-sm text-textsec">
+                Define el horario y los cupos directos por distancia para esta sesion.
               </p>
-              <div className="grid gap-2">
-                {[
-                  ['Niños', 'capacity_children'],
-                  ['Jóvenes', 'capacity_youth'],
-                  ['Adultos', 'capacity_adult'],
-                  ['Asignados', 'capacity_assigned'],
-                  ['Arco propio', 'capacity_ownbow'],
-                ].map(([label, key]) => (
-                  <div
-                    key={key as string}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span className="text-sm text-textsec">{label}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="input w-24 text-right"
-                      value={(session as any)[key] ?? 0}
-                      onChange={(e) =>
-                        setSession((s) => ({
-                          ...s,
-                          [key as any]: Number(e.target.value || 0),
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
-                <div
-                  className={`text-sm ${
-                    totalCap > 32 ? 'text-danger' : 'text-textsec'
-                  }`}
+            </div>
+            <button className="btn-outline" onClick={() => router.push('/admin/sesiones')}>
+              Volver a turnos
+            </button>
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="card p-5 space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec">Inicio</label>
+                <input
+                  type="datetime-local"
+                  className="input"
+                  value={session.start_at}
+                  onChange={(event) => setSession((current) => ({ ...current, start_at: event.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec">Fin</label>
+                <input
+                  type="datetime-local"
+                  className="input"
+                  value={session.end_at}
+                  onChange={(event) => setSession((current) => ({ ...current, end_at: event.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec">Estado</label>
+                <select
+                  className="input"
+                  value={session.status}
+                  onChange={(event) =>
+                    setSession((current) => ({
+                      ...current,
+                      status: event.target.value as SessionForm['status'],
+                    }))
+                  }
                 >
-                  Total: {totalCap} / 32
+                  <option value="scheduled">Programado</option>
+                  <option value="cancelled">Cancelado</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec">Origen</label>
+                <div className="input flex items-center">
+                  {session.weekly_template_id ? 'Sesion heredada de plantilla' : 'Sesion manual'}
                 </div>
               </div>
             </div>
 
-            {/* Pacas por distancia */}
-            <div className="card p-3">
-              <p className="text-sm font-medium mb-2">
-                Pacas por distancia (cada paca = 4 plazas)
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {DISTANCES.map((d) => (
-                  <div
-                    key={d}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span className="text-sm text-textsec">{d} m</span>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-textsec">Notas</label>
+              <textarea
+                className="input min-h-28"
+                value={session.notes}
+                onChange={(event) => setSession((current) => ({ ...current, notes: event.target.value }))}
+                placeholder="Observaciones del turno"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-white/10 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-textpri">Pacas por distancia</h2>
+                  <p className="text-sm text-textsec">
+                    Define el numero de pacas (targets). Cada paca habilita 4 cupos para alumnos.
+                  </p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="rounded-full bg-accent/10 px-3 py-1 text-sm text-accent">
+                    Total {Object.values(distanceCaps).reduce((s, v) => s + v, 0)} pacas
+                  </span>
+                  <span className="mt-1 text-[10px] text-textsec uppercase">({totalSlots} cupos totales)</span>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {DISTANCES.map((distance) => (
+                  <div key={distance} className="rounded-xl border border-white/5 bg-bg/60 p-3">
+                    <label className="mb-2 block text-sm font-medium text-textpri">{distance} m</label>
                     <input
                       type="number"
-                      min={0}
-                      max={8}
-                      className="input w-24 text-right"
-                      value={alloc[d] ?? 0}
-                      onChange={(e) =>
-                        setAlloc((prev) => ({
-                          ...prev,
-                          [d]: Math.max(0, Math.min(8, Number(e.target.value || 0))),
+                      min="0"
+                      className="input"
+                      value={distanceCaps[distance]}
+                      onChange={(event) =>
+                        setDistanceCaps((current) => ({
+                          ...current,
+                          [distance]: Math.max(0, Number(event.target.value || 0)),
                         }))
                       }
                     />
@@ -350,18 +314,37 @@ export default function EditarSesion() {
                 ))}
               </div>
             </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button className="btn" disabled={saving} onClick={save}>
+                {saving ? 'Guardando...' : 'Guardar turno'}
+              </button>
+              <button className="btn-outline" onClick={() => router.push('/admin/sesiones')}>
+                Cancelar
+              </button>
+              {!isNew && (
+                <button className="btn-outline border-danger text-danger hover:bg-danger/10 ml-auto" disabled={saving} onClick={deleteSession}>
+                  Eliminar turno
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button className="btn" disabled={saving} onClick={save}>
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-            <button
-              className="btn-outline"
-              onClick={() => router.push('/admin/sesiones')}
-            >
-              Cancelar
-            </button>
+          <div className="card p-5 space-y-4">
+            <h2 className="text-lg font-semibold text-textpri">Resumen del turno</h2>
+            <div className="rounded-2xl border border-white/10 bg-bg/60 p-4">
+              <p className="text-sm text-textsec">Horario</p>
+              <p className="mt-1 font-medium text-textpri">
+                {session.start_at ? new Date(session.start_at).toLocaleString() : '-'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-bg/60 p-4">
+              <p className="text-sm text-textsec">Total de cupos</p>
+              <p className="mt-1 text-2xl font-semibold text-textpri">{totalSlots}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-bg/60 p-4 text-sm text-textsec">
+              Si el turno viene de una plantilla, al guardar quedara marcado como ajuste manual para no perder el cambio puntual.
+            </div>
           </div>
         </div>
       </div>

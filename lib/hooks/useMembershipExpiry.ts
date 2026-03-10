@@ -1,27 +1,29 @@
 import { useMemo } from 'react'
 import dayjs from 'dayjs'
-import type { Profile } from './useProfile'
 
-export function useMembershipExpiry(profile: Profile | null) {
+type MembershipCarrier = {
+  membership_end?: string | null
+}
+
+export function useMembershipExpiry(record: MembershipCarrier | null) {
   const expiryData = useMemo(() => {
-    if (!profile?.membership_end) {
+    if (!record?.membership_end) {
       return {
         daysUntilExpiry: null,
         isExpired: false,
-        isExpiringSoon: false
+        isExpiringSoon: false,
       }
     }
 
     const now = dayjs().startOf('day')
-    const expiryDate = dayjs(profile.membership_end)
-    // diff() calcula la diferencia. Si es negativo, ya pasó.
+    const expiryDate = dayjs(record.membership_end)
     const daysUntilExpiry = expiryDate.diff(now, 'day')
 
     const isExpired = daysUntilExpiry <= 0
     const isExpiringSoon = daysUntilExpiry > 0 && daysUntilExpiry <= 7
 
     return { daysUntilExpiry, isExpired, isExpiringSoon }
-  }, [profile]) // Se recalcula solo si el perfil cambia
+  }, [record])
 
   return expiryData
 }

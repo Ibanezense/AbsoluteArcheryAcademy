@@ -6,6 +6,7 @@ export type Profile = {
   id: string
   full_name: string | null
   avatar_url: string | null
+  role?: 'admin' | 'guardian' | 'student'
   email: string | null
   phone: string | null
   membership_type: string | null
@@ -26,33 +27,21 @@ export function useProfile() {
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchProfile = async () => {
       try {
         setIsLoading(true)
         setError(null)
 
-        // Verificar sesión
         const { data: { user } } = await supabase.auth.getUser()
 
-        // Si no hay sesión, ir a login
         if (!user) {
+          if (!cancelled) setIsLoading(false)
           router.replace('/login')
           return
         }
 
-        // Si es admin, ir directo al dashboard
-        const { data: admin } = await supabase
-          .from('admin_users')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        if (admin) {
-          router.replace('/admin')
-          return
-        }
-
-        // Alumno: cargar su perfil completo
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -63,16 +52,36 @@ export function useProfile() {
           throw new Error(profileError.message)
         }
 
-        setProfile(profileData as Profile)
+        if (profileData?.role === 'admin') {
+          if (!cancelled) setIsLoading(false)
+          router.replace('/admin')
+          return
+        }
+
+        if (profileData?.role === 'guardian') {
+          if (!cancelled) setIsLoading(false)
+          router.replace('/hub')
+          return
+        }
+
+        if (!cancelled) {
+          setProfile((profileData as Profile | null) ?? null)
+          setIsLoading(false)
+        }
       } catch (err) {
-        console.error('Error al cargar perfil:', err)
-        setError(err instanceof Error ? err : new Error('Error desconocido'))
-      } finally {
-        setIsLoading(false)
+        if (!cancelled) {
+          console.error('Error al cargar perfil:', err)
+          setError(err instanceof Error ? err : new Error('Error desconocido'))
+          setIsLoading(false)
+        }
       }
     }
 
     fetchProfile()
+
+    return () => {
+      cancelled = true
+    }
   }, [router])
 
   return { profile, isLoading, error }

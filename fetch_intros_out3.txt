@@ -1,0 +1,2 @@
+Data: [{"id":"2a3bded5-0d57-4b4b-affc-1203097a2c24","session_id":"6a63dca7-1784-45f0-91c2-f836d5af774c","sessions":{"end_at":"2026-03-14T17:30:00+00:00","start_at":"2026-03-14T16:00:00+00:00"},"intro_clients":{"id":"2974bc89-15b7-4903-a239-b9b2f1760901","age":15,"phone":"959518964","full_name":"Luana Antonella Vilca Gómez"}}]
+Error: null

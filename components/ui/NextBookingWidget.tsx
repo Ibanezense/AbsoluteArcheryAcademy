@@ -8,26 +8,26 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
 
   if (isLoading) {
     return (
-      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 animate-pulse">
-        <div className="h-6 bg-white/10 rounded w-1/3 mb-4"></div>
-        <div className="h-4 bg-white/10 rounded w-2/3"></div>
+      <div className="w-full p-5 animate-pulse bg-card">
+        <div className="h-6 bg-line rounded w-1/3 mb-4"></div>
+        <div className="h-4 bg-line rounded w-2/3"></div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 border-danger/30 bg-danger/5">
-        <p className="text-danger text-sm">{error}</p>
+      <div className="w-full p-5 border-l-4 border-danger bg-danger/5">
+        <p className="text-danger text-sm font-medium">{error}</p>
       </div>
     )
   }
 
   if (!booking) {
     return (
-      <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2">
-        <h3 className="font-semibold text-lg mb-2">Proxima Reserva</h3>
-        <p className="text-sm text-textsec">No tienes reservas programadas</p>
+      <div className="w-full p-5 bg-card flex flex-col items-center justify-center text-center py-8">
+        <h3 className="font-semibold text-lg mb-1">Sin reservas</h3>
+        <p className="text-sm text-textsec">No hay reservas programadas próximamente</p>
       </div>
     )
   }
@@ -41,26 +41,31 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
   if (isTomorrow) dateLabel = 'Manana'
 
   return (
-    <div className="card w-full max-w-none p-6 rounded-none sm:rounded-xl2 border-accent/30 bg-accent/5">
-      <div className="flex items-start justify-between mb-3">
-        <h3 className="font-semibold text-lg">Proxima Reserva</h3>
-        <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent font-medium">
+    <div className="w-full p-5 bg-gradient-to-br from-card to-accent/5">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
+            <span className="font-semibold text-sm">{date.format('D')}</span>
+          </div>
+          <div>
+            <h3 className="font-semibold text-base text-textpri leading-tight">Proxima Reserva</h3>
+            <span className="text-xs text-textsec capitalize">{date.format('dddd, MMMM YYYY')}</span>
+          </div>
+        </div>
+        <span className="text-[11px] px-2.5 py-1 rounded-full bg-accent text-white font-medium uppercase tracking-wider">
           {dateLabel}
         </span>
       </div>
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-textsec">Fecha:</span>
-          <span className="font-medium">{date.format('dddd, D [de] MMMM')}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-textsec">Hora:</span>
-          <span className="font-medium">{date.format('HH:mm')}</span>
+
+      <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-line/60">
+        <div>
+          <span className="text-xs text-textsec block mb-0.5">Hora:</span>
+          <span className="font-medium text-sm">{date.format('HH:mm')}</span>
         </div>
         {booking.distance_m && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-textsec">Distancia:</span>
-            <span className="font-medium">{booking.distance_m}m</span>
+          <div>
+            <span className="text-xs text-textsec block mb-0.5">Distancia:</span>
+            <span className="font-medium text-sm">{booking.distance_m}m</span>
           </div>
         )}
       </div>

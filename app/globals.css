@@ -1,32 +1,96 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: light;
+}
+
+html {
+  min-height: 100%;
+  background: #f8f9fa;
+}
 
 body {
-  @apply bg-bg text-textpri min-h-screen;
+  @apply min-h-screen bg-bg text-textpri font-sans antialiased;
   font-feature-settings: "liga" 1, "calt" 1;
+  background-image:
+    radial-gradient(circle at top left, rgba(249, 115, 22, 0.08), transparent 22rem),
+    linear-gradient(180deg, #fbfbfc 0%, #f3f4f6 100%);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-heading text-textpri;
+}
+
+a {
+  @apply text-inherit no-underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 .btn {
-  @apply inline-flex items-center justify-center rounded-xl2 px-4 py-3 font-medium;
-  @apply bg-accent text-black hover:brightness-110 transition;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium text-white shadow-card transition;
+  @apply bg-accent hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25;
 }
 
 .btn-outline {
-  @apply inline-flex items-center justify-center rounded-xl2 px-4 py-3 font-medium;
-  @apply border border-gray-700 text-textpri hover:bg-gray-800 transition;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 font-medium text-textpri shadow-card transition;
+  @apply hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/20;
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white/70 px-4 py-3 font-medium text-textpri transition;
+  @apply hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/15;
+}
+
+.btn-sm {
+  @apply rounded-lg px-3 py-2 text-sm;
 }
 
 .card {
-  @apply bg-card rounded-xl2 border border-gray-800;
+  @apply rounded-2xl border border-line bg-card shadow-card;
 }
 
 .input {
-  @apply w-full rounded-xl2 bg-gray-900 border border-gray-800 px-4 py-3 text-textpri placeholder:text-textsec outline-none focus:ring-2 focus:ring-accent/40;
+  @apply w-full rounded-xl border border-line bg-white px-4 py-3 text-textpri outline-none transition;
+  @apply placeholder:text-textsec focus:border-accent/40 focus:ring-2 focus:ring-accent/20;
 }
-/* Tamaños compactos para botones del admin */
-.btn-sm { @apply px-3 py-2 text-sm rounded-xl; }
-.btn-ghost { @apply bg-transparent border border-white/10 hover:bg-white/5; }
+
+.border-white\/10 {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+.bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.bg-card\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.hover\:bg-white\/5:hover {
+  background-color: rgba(248, 250, 252, 0.96) !important;
+}
+
+.hover\:bg-white\/10:hover {
+  background-color: rgba(241, 245, 249, 0.96) !important;
+}
+
+.text-white {
+  color: #ffffff !important;
+}

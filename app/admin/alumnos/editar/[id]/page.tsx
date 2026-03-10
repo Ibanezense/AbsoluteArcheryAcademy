@@ -1,624 +1,653 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useToast } from '@/components/ui/ToastProvider'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { ArrowLeft, ImagePlus, KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
 import AdminGuard from '@/components/AdminGuard'
+import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
-import AdminBottomNav from '@/components/AdminBottomNav'
-import { parseDateFromSupabase } from '@/lib/utils/dateUtils'
+import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
+import { calculateAge } from '@/lib/utils/dateUtils'
+import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
 
-type GroupType = 'children' | 'youth' | 'adult' | 'assigned' | 'ownbow'
+type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
-type Profile = {
-  id?: string
+type StudentFormState = {
   full_name: string
-  email?: string | null
-  phone?: string | null
-  group_type?: GroupType | null
-  distance_m?: number | null
-  is_active?: boolean | null
-  classes_remaining?: number | null
-  membership_type?: string | null
-  membership_start?: string | null // YYYY-MM-DD
-  membership_end?: string | null   // YYYY-MM-DD
-  avatar_url?: string | null
-}
-
-type MembershipTemplate = {
-  id: string
-  name: string
-  default_classes: number
+  avatar_url: string
+  date_of_birth: string
+  dni: string
+  phone: string
+  email: string
+  medical_notes: string
+  current_distance_m: string
+  division: string
+  gender: string
+  level: string
+  has_own_bow: boolean
+  assigned_bow: boolean
+  bow_poundage: string
   is_active: boolean
 }
 
-type ProfileMembership = {
-  id: string
-  membership_id: string | null
-  name: string
-  classes_total: number
-  classes_used: number
-  start_date: string
-  end_date: string | null
-  status: 'active' | 'expired' | 'cancelled' | 'historical'
-  amount_paid?: number
-  created_at: string
+type GuardianFormState = {
+  full_name: string
+  email: string
+  phone: string
+  dni: string
+  relationship: string
 }
 
-const GRUPOS: { value: GroupType; label: string }[] = [
-  { value: 'children', label: 'Niños (8–12)' },
-  { value: 'youth',    label: 'Jóvenes (13–17)' },
-  { value: 'adult',    label: 'Adultos' },
-  { value: 'assigned', label: 'Asignados' },
-  { value: 'ownbow',   label: 'Arco propio' },
-]
+type CreatedCodes = {
+  student_access_code: string | null
+  guardian_access_code: string | null
+  guardian_reused?: boolean
+  guardian_created?: boolean
+}
 
-const DISTANCIAS = [10, 15, 20, 30, 40, 50, 60, 70] as const
+const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70]
 
-export default function AlumnoEditor() {
-  const router = useRouter()
-  const { id } = useParams<{ id: string }>()
-  const isNew = id === 'new'
+function emptyStudentForm(): StudentFormState {
+  return {
+    full_name: '',
+    avatar_url: '',
+    date_of_birth: '',
+    dni: '',
+    phone: '',
+    email: '',
+    medical_notes: '',
+    current_distance_m: '',
+    division: '',
+    gender: '',
+    level: '',
+    has_own_bow: false,
+    assigned_bow: false,
+    bow_poundage: '',
+    is_active: true,
+  }
+}
 
-  const [form, setForm] = useState<Profile>({
+function emptyGuardianForm(): GuardianFormState {
+  return {
     full_name: '',
     email: '',
     phone: '',
-    group_type: 'adult',
-    distance_m: undefined,
-    is_active: true,
-    classes_remaining: 0,
-    membership_type: '',
-    membership_start: '',
-    membership_end: '',
-    avatar_url: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+    dni: '',
+    relationship: 'Tutor',
+  }
+}
+
+function buildAccountMode(hasStudentAccess: boolean, hasGuardianAccess: boolean): AccountMode {
+  if (hasStudentAccess && hasGuardianAccess) return 'student_and_guardian'
+  if (hasGuardianAccess) return 'guardian_only'
+  return 'student_only'
+}
+
+export default function AdminAlumnoEditorPage() {
+  const router = useRouter()
+  const { id } = useParams<{ id: string }>()
+  const isNew = id === 'new'
   const toast = useToast()
+  const detailQuery = useStudentDetail(isNew ? '' : id)
 
-  // ---- Membresías (templates + del alumno) ----
-  const [templates, setTemplates] = useState<MembershipTemplate[]>([])
-  const [pms, setPms] = useState<ProfileMembership[]>([])
-  const loadTemplates = async () => {
-    const { data, error } = await supabase
-      .from('memberships')
-      .select('id,name,default_classes,is_active')
-      .order('name', { ascending: true })
-    if (!error) setTemplates((data || []) as MembershipTemplate[])
-  }
-  const loadProfileMemberships = async (profileId: string) => {
-    const { data, error } = await supabase
-      .from('profile_memberships')
-      .select('*')
-      .eq('profile_id', profileId)
-      .order('start_date', { ascending: false })
-  if (error) return toast.push({ message: error.message, type: 'error' })
-    setPms((data || []) as ProfileMembership[])
-  }
+  const [studentForm, setStudentForm] = useState<StudentFormState>(emptyStudentForm)
+  const [guardianForm, setGuardianForm] = useState<GuardianFormState>(emptyGuardianForm)
+  const [accountMode, setAccountMode] = useState<AccountMode>('guardian_only')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [createdCodes, setCreatedCodes] = useState<CreatedCodes | null>(null)
 
-  // Cargar si es edición
   useEffect(() => {
-    (async () => {
-      await loadTemplates()
-      if (isNew) return
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle()
-  setLoading(false)
-  if (error) return toast.push({ message: error.message, type: 'error' })
-  if (!data) return toast.push({ message: 'Alumno no encontrado', type: 'error' })
-      const p = data as Profile
-      setForm({
-        id: p.id,
-        full_name: p.full_name || '',
-        email: p.email || '',
-        phone: p.phone || '',
-        group_type: (p.group_type as GroupType) || 'adult',
-        distance_m: p.distance_m ?? null,
-        is_active: p.is_active ?? true,
-        classes_remaining: p.classes_remaining ?? 0,
-        membership_type: p.membership_type || '',
-        // Parsear fechas correctamente desde Supabase para evitar problemas de timezone
-        membership_start: parseDateFromSupabase(p.membership_start),
-        membership_end: parseDateFromSupabase(p.membership_end),
-        avatar_url: p.avatar_url || '',
-      })
-      await loadProfileMemberships(p.id!)
-    })()
-  }, [id, isNew])
+    if (!detailQuery.data || isNew) return
 
-  // Subir avatar a Storage (solo admin; debes tener RLS del bucket como configuraste)
-  const onAvatarChange = async (file?: File) => {
-    if (!file) return
-    const ext = file.name.split('.').pop()
-    const path = `avatars/${crypto.randomUUID()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, {
-      cacheControl: '3600',
-      upsert: false,
+    const data = detailQuery.data
+    const hasStudentAccess = !!data.self_account
+    const hasGuardianAccess = !!data.guardian
+
+    setStudentForm({
+      full_name: data.full_name,
+      avatar_url: data.avatar_url || '',
+      date_of_birth: data.date_of_birth || '',
+      dni: data.dni || '',
+      phone: data.phone || '',
+      email: data.email || data.self_account?.email || '',
+      medical_notes: data.medical_notes || '',
+      current_distance_m: data.current_distance_m ? String(data.current_distance_m) : '',
+      division: data.division || '',
+      gender: data.gender || '',
+      level: data.level || '',
+      has_own_bow: data.has_own_bow,
+      assigned_bow: data.assigned_bow,
+      bow_poundage: data.bow_poundage ? String(data.bow_poundage) : '',
+      is_active: data.is_active,
     })
-  if (upErr) return toast.push({ message: upErr.message, type: 'error' })
-    const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path)
-    setForm(f => ({ ...f, avatar_url: pub.publicUrl }))
+
+    setGuardianForm({
+      full_name: data.guardian?.full_name || '',
+      email: data.guardian?.email || '',
+      phone: data.guardian?.phone || '',
+      dni: data.guardian?.dni || '',
+      relationship: data.guardian?.relationship || 'Tutor',
+    })
+
+    setCreatedCodes({
+      student_access_code: data.self_account?.access_code || null,
+      guardian_access_code: data.guardian?.access_code || null,
+    })
+
+    setAccountMode(buildAccountMode(hasStudentAccess, hasGuardianAccess))
+  }, [detailQuery.data, isNew])
+
+  const showStudentAccountFields = accountMode !== 'guardian_only'
+  const showGuardianFields = accountMode !== 'student_only'
+  const computedAge = useMemo(
+    () => calculateAge(studentForm.date_of_birth),
+    [studentForm.date_of_birth]
+  )
+  const computedCategory = useMemo(
+    () =>
+      buildStudentCategory({
+        dateOfBirth: studentForm.date_of_birth,
+        division: studentForm.division,
+        gender: studentForm.gender,
+      }) || '',
+    [studentForm.date_of_birth, studentForm.division, studentForm.gender]
+  )
+
+  const canSubmit = useMemo(() => {
+    if (!studentForm.full_name.trim()) return false
+    if (showStudentAccountFields && !studentForm.email.trim()) return false
+    if (showGuardianFields && (!guardianForm.full_name.trim() || !guardianForm.email.trim())) return false
+    return true
+  }, [guardianForm.email, guardianForm.full_name, showGuardianFields, showStudentAccountFields, studentForm.email, studentForm.full_name])
+
+  async function uploadAvatar(file?: File) {
+    if (!file) return
+
+    try {
+      setUploadingAvatar(true)
+      const extension = file.name.split('.').pop() || 'jpg'
+      const path = `avatars/${crypto.randomUUID()}.${extension}`
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+
+      if (uploadError) throw uploadError
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      setStudentForm((current) => ({ ...current, avatar_url: data.publicUrl }))
+      toast.push({ message: 'Foto actualizada.', type: 'success' })
+    } catch (error: any) {
+      toast.push({ message: error.message || 'No se pudo subir la foto.', type: 'error' })
+    } finally {
+      setUploadingAvatar(false)
+    }
   }
 
-  // Guardar datos generales del alumno
-  const save = async () => {
-    if (!form.full_name.trim()) return toast.push({ message: 'Ingresa el nombre completo', type: 'error' })
-    setSaving(true)
-    if (isNew) {
-      toast.push({ message: 'Primero crea el alumno desde “Nuevo alumno” (pantalla de listado). Luego podrás asignar membresías.', type: 'error' })
-      setSaving(false)
+  async function submitForm() {
+    if (!canSubmit) {
+      toast.push({ message: 'Completa los campos obligatorios.', type: 'error' })
       return
     }
-    // Preparar payload - enviar fechas como strings en formato YYYY-MM-DD
-    // para evitar conversiones de zona horaria
-    const payload: Partial<Profile> & { membership_start?: string; membership_end?: string } = {
-      full_name: form.full_name,
-      email: form.email || undefined,
-      phone: form.phone || undefined,
-      group_type: form.group_type || undefined,
-      distance_m: form.distance_m ?? undefined,
-      is_active: form.is_active ?? true,
-      classes_remaining: form.classes_remaining ?? 0,
-      membership_type: form.membership_type || undefined,
-      // Las fechas ya vienen en formato YYYY-MM-DD del input type="date"
-      // Se envían como strings para que PostgreSQL las interprete como date sin conversión
-      membership_start: form.membership_start || undefined,
-      membership_end: form.membership_end || undefined,
-      avatar_url: form.avatar_url || undefined,
+
+    const { data: sessionData } = await supabase.auth.getSession()
+    const accessToken = sessionData.session?.access_token
+
+    if (!accessToken) {
+      toast.push({ message: 'Sesion expirada. Vuelve a iniciar sesion.', type: 'error' })
+      return
     }
-    const { error } = await supabase.from('profiles').update(payload).eq('id', form.id)
-    setSaving(false)
-  if (error) return toast.push({ message: error.message, type: 'error' })
-  toast.push({ message: 'Cambios guardados', type: 'success' })
-    router.push('/admin/alumnos')
-  }
 
-  // -------------------------------------------------
-  // UI / lógica para AGREGAR una membresía al alumno
-  // -------------------------------------------------
-  const [addOpen, setAddOpen] = useState(false)
-  const [addTemplateId, setAddTemplateId] = useState<string>('')
-  const [addName, setAddName] = useState('')
-  const [addClasses, setAddClasses] = useState<number>(0)
-  const [addStart, setAddStart] = useState<string>(() => {
-    const today = new Date()
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  })
-  const [addEnd, setAddEnd] = useState<string>('')
-  const [addActive, setAddActive] = useState(true)
-  const [addAmountPaid, setAddAmountPaid] = useState<number>(0)
-  const [addSaving, setAddSaving] = useState(false)
+    setSaving(true)
 
-  // al elegir plantilla, copiar nombre y clases (se puede sobreescribir)
-  useEffect(() => {
-    const t = templates.find(x => x.id === addTemplateId)
-    if (t) {
-      setAddName(t.name)
-      setAddClasses(t.default_classes)
-    }
-  }, [addTemplateId, templates])
+    try {
+      const payload = {
+        accountMode,
+        student: {
+          full_name: studentForm.full_name,
+          avatar_url: studentForm.avatar_url || null,
+          date_of_birth: studentForm.date_of_birth || null,
+          dni: studentForm.dni || null,
+          phone: studentForm.phone || null,
+          email: studentForm.email || null,
+          medical_notes: studentForm.medical_notes || null,
+          current_distance_m: studentForm.current_distance_m ? Number(studentForm.current_distance_m) : null,
+          division: studentForm.division || null,
+          gender: studentForm.gender || null,
+          category: computedCategory || null,
+          level: studentForm.level || null,
+          has_own_bow: studentForm.has_own_bow,
+          assigned_bow: studentForm.assigned_bow,
+          bow_poundage: studentForm.bow_poundage ? Number(studentForm.bow_poundage) : null,
+          is_active: studentForm.is_active,
+        },
+        guardian: showGuardianFields
+          ? {
+              full_name: guardianForm.full_name,
+              email: guardianForm.email,
+              phone: guardianForm.phone || null,
+              dni: guardianForm.dni || null,
+              relationship: guardianForm.relationship || 'Tutor',
+            }
+          : null,
+      }
 
-  const addMembership = async () => {
-    if (!form.id) return
-  if (!addName.trim()) return toast.push({ message: 'Nombre de membresía requerido', type: 'error' })
-  if (addClasses < 0) return toast.push({ message: 'Clases debe ser ≥ 0', type: 'error' })
-  if (addAmountPaid < 0) return toast.push({ message: 'Monto pagado debe ser ≥ 0', type: 'error' })
-    setAddSaving(true)
-    const { error } = await supabase.rpc('admin_add_membership', {
-      p_profile: form.id,
-      p_membership: addTemplateId || undefined,
-      p_name: addName.trim(),
-      p_classes: addClasses,
-      p_start: addStart,
-      p_end: addEnd || undefined,
-      p_make_active: addActive,
-      p_amount_paid: addAmountPaid,
-    })
-  setAddSaving(false)
-  if (error) return toast.push({ message: error.message, type: 'error' })
-    setAddOpen(false)
-    await loadProfileMemberships(form.id)
-    // si la hicimos activa, refrescamos encabezado del perfil
-    if (addActive) {
-      setForm(f => ({ ...f,
-        membership_type: addName.trim(),
-        membership_start: addStart,
-        membership_end: addEnd || '',
-        classes_remaining: addClasses
-      }))
-    }
-  }
+      const response = await fetch('/api/admin/create-student', {
+        method: isNew ? 'POST' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(isNew ? payload : { ...payload, studentId: id }),
+      })
 
-  // -------------------------------------------------
-  // UI / lógica para EDITAR una membresía existente
-  // -------------------------------------------------
-  const [editId, setEditId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editClasses, setEditClasses] = useState<number>(0)
-  const [editStart, setEditStart] = useState<string>('')
-  const [editEnd, setEditEnd] = useState<string>('')
-  const [editStatus, setEditStatus] = useState<'active'|'expired'|'cancelled'|'historical'>('active')
-  const [editAmountPaid, setEditAmountPaid] = useState<number>(0)
-  const [editSaving, setEditSaving] = useState(false)
+      const result = await response.json()
 
-  const startEdit = (pm: ProfileMembership) => {
-    setEditId(pm.id)
-    setEditName(pm.name)
-    setEditClasses(pm.classes_total)
-    // Parsear fechas correctamente desde Supabase
-    setEditStart(parseDateFromSupabase(pm.start_date))
-    setEditEnd(parseDateFromSupabase(pm.end_date))
-    setEditStatus(pm.status)
-    setEditAmountPaid(pm.amount_paid ?? 0)
-  }
+      if (!response.ok) {
+        console.error('admin-student-save-error', JSON.stringify({
+          status: response.status,
+          result,
+        }, null, 2))
 
-  const saveEditMembership = async () => {
-    if (!editId) return
-  if (!editName.trim()) return toast.push({ message: 'Nombre requerido', type: 'error' })
-  if (editClasses < 0) return toast.push({ message: 'Clases debe ser ≥ 0', type: 'error' })
-  if (editAmountPaid < 0) return toast.push({ message: 'Monto pagado debe ser ≥ 0', type: 'error' })
-    setEditSaving(true)
-    const { error } = await supabase.rpc('admin_update_profile_membership', {
-      p_id: editId,
-      p_name: editName.trim(),
-      p_classes: editClasses,
-      p_start: editStart,
-      p_end: editEnd || undefined,
-      p_status: editStatus,
-      p_amount_paid: editAmountPaid,
-    })
-  setEditSaving(false)
-  if (error) return toast.push({ message: error.message, type: 'error' })
-    setEditId(null)
-    if (form.id) await loadProfileMemberships(form.id)
-    // si quedó activa, reflejar encabezado
-    if (editStatus === 'active') {
-      setForm(f => ({ ...f,
-        membership_type: editName.trim(),
-        membership_start: editStart,
-        membership_end: editEnd || '',
-        classes_remaining: editClasses
-      }))
+        const errorMessage =
+          typeof result?.error === 'string'
+            ? result.error
+            : result?.error?.message || 'No se pudo guardar el alumno.'
+
+        throw new Error(errorMessage)
+      }
+
+      setCreatedCodes({
+        student_access_code: result.student_access_code || null,
+        guardian_access_code: result.guardian_access_code || null,
+        guardian_reused: result.guardian_reused,
+        guardian_created: result.guardian_created,
+      })
+
+      toast.push({
+        message: isNew ? 'Alumno creado correctamente.' : 'Alumno actualizado.',
+        type: 'success',
+      })
+
+      if (isNew && result.student_id) {
+        router.replace(`/admin/alumnos/${result.student_id}`)
+        return
+      }
+
+      detailQuery.refetch()
+    } catch (error: any) {
+      toast.push({ message: error.message || 'No se pudo guardar el alumno.', type: 'error' })
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
     <AdminGuard>
-      <div className="min-h-screen flex flex-col">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center gap-3">
-          <a href="/admin/alumnos" className="btn-ghost !px-3">←</a>
-          <h1 className="text-lg font-semibold">{isNew ? 'Nuevo alumno' : 'Editar alumno'}</h1>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-4 pb-28">
-          {loading ? (
-            <div className="p-4 text-textsec">Cargando…</div>
-          ) : (
-            <div className="card p-4 grid gap-4 mt-4">
-
-              {/* Avatar */}
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-white/10 overflow-hidden grid place-items-center">
-                  {form.avatar_url ? (
-                    <img src={form.avatar_url} className="h-full w-full object-cover" alt="avatar" />
-                  ) : (
-                    <span className="text-sm text-textsec">Sin foto</span>
-                  )}
-                </div>
-                <label className="btn-outline cursor-pointer">
-                  Cambiar foto
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => onAvatarChange(e.target.files?.[0])}
-                  />
-                </label>
+      <div className="space-y-6">
+        <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                className="btn-ghost mt-1 !px-3"
+                onClick={() => router.push(isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-accent">{isNew ? 'Nuevo' : 'Edicion'}</p>
+                <h1 className="mt-2 text-3xl font-bold text-textpri">
+                  {isNew ? 'Alta de alumno' : 'Editar alumno'}
+                </h1>
+                <p className="mt-2 text-sm text-textsec">
+                  Configura ficha tecnica, foto, cuenta del alumno y tutor desde una sola pantalla.
+                </p>
               </div>
+            </div>
 
-              {/* Nombre */}
-              <div className="grid gap-2">
-                <label className="text-sm text-textsec">Nombre completo</label>
-                <input
-                  className="input"
-                  value={form.full_name}
-                  onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                />
-              </div>
+            <button className="btn inline-flex items-center justify-center gap-2" onClick={submitForm} disabled={saving || !canSubmit}>
+              <Save className="h-4 w-4" />
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </section>
 
-              {/* Email */}
-              <div className="grid gap-2">
-                <label className="text-sm text-textsec">Correo</label>
-                <input
-                  className="input"
-                  value={form.email || ''}
-                  disabled={isNew}
-                  placeholder={isNew ? 'email@dominio.com' : undefined}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-
-              {/* Teléfono */}
-              <div className="grid gap-2">
-                <label className="text-sm text-textsec">Teléfono</label>
-                <input
-                  className="input"
-                  value={form.phone || ''}
-                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                />
-              </div>
-
-              {/* Grupo + Distancia + Estado */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="grid gap-2">
-                  <label className="text-sm text-textsec">Grupo</label>
-                  <select
-                    className="input"
-                    value={form.group_type || 'adult'}
-                    onChange={e => setForm(f => ({ ...f, group_type: e.target.value as GroupType }))}
-                  >
-                    {GRUPOS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid gap-2">
-                  <label className="text-sm text-textsec">Distancia de práctica</label>
-                  <select
-                    className="input"
-                    value={form.distance_m ?? ''}
-                    onChange={e => setForm(f => ({ ...f, distance_m: e.target.value ? Number(e.target.value) : null }))}
-                  >
-                    <option value="">Sin asignar</option>
-                    {DISTANCIAS.map(d => <option key={d} value={d}>{d}m</option>)}
-                  </select>
-                </div>
-
-                <div className="grid gap-2">
-                  <label className="text-sm text-textsec">Estado</label>
-                  <select
-                    className="input"
-                    value={String(form.is_active ?? true)}
-                    onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))}
-                  >
-                    <option value="true">Activo</option>
-                    <option value="false">Inactivo</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Clases restantes (ajuste manual si hace falta) */}
-              <div className="grid gap-2">
-                <label className="text-sm text-textsec">Clases restantes</label>
-                <input
-                  type="number"
-                  min={0}
-                  className="input w-32"
-                  value={form.classes_remaining ?? 0}
-                  onChange={e => setForm(f => ({ ...f, classes_remaining: Number(e.target.value || 0) }))}
-                />
-              </div>
-
-              {/* Info de membresía activa (encabezado del perfil) */}
-              <div className="grid gap-2">
-                <label className="text-sm text-textsec">Membresía activa (en perfil)</label>
-                <input
-                  className="input"
-                  value={form.membership_type || ''}
-                  onChange={e => setForm(f => ({ ...f, membership_type: e.target.value }))}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <label className="text-sm text-textsec">Inicio membresía</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={form.membership_start || ''}
-                    onChange={e => setForm(f => ({ ...f, membership_start: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm text-textsec">Vencimiento</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={form.membership_end || ''}
-                    onChange={e => setForm(f => ({ ...f, membership_end: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              {/* Botones generales */}
-              <div className="flex gap-2">
-                <button className="btn" disabled={saving} onClick={save}>
-                  {saving ? 'Guardando…' : 'Guardar cambios'}
-                </button>
-                <button className="btn-outline" onClick={() => router.push('/admin/alumnos')}>
-                  Cancelar
-                </button>
-              </div>
-
-              {/* ===================== Sección: Membresías del alumno ===================== */}
-              {!isNew && (
-                <div className="mt-6 grid gap-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-base font-semibold">Membresías del alumno</h2>
-                    <button className="btn-outline" onClick={() => setAddOpen(v => !v)}>
-                      {addOpen ? 'Cerrar' : 'Agregar membresía'}
-                    </button>
-                  </div>
-
-                  {/* Form agregar */}
-                  {addOpen && (
-                    <div className="card p-4 grid gap-3">
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Plantilla (opcional)</label>
-                          <select
-                            className="input"
-                            value={addTemplateId}
-                            onChange={e => setAddTemplateId(e.target.value)}
-                          >
-                            <option value="">— Elegir —</option>
-                            {templates.map(t => (
-                              <option key={t.id} value={t.id}>
-                                {t.name} · {t.default_classes} clases
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Nombre (editable)</label>
-                          <input className="input" value={addName} onChange={e => setAddName(e.target.value)} />
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Clases otorgadas</label>
-                          <input
-                            className="input"
-                            type="number"
-                            min={0}
-                            value={addClasses}
-                            onChange={e => setAddClasses(Number(e.target.value || 0))}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Monto Pagado (S/.)</label>
-                          <input
-                            className="input"
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={addAmountPaid}
-                            onChange={e => setAddAmountPaid(Number(e.target.value || 0))}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Inicio</label>
-                          <input type="date" className="input" value={addStart}
-                            onChange={e => setAddStart(e.target.value)} />
-                        </div>
-                        <div className="grid gap-2">
-                          <label className="text-sm text-textsec">Fin (opcional)</label>
-                          <input type="date" className="input" value={addEnd}
-                            onChange={e => setAddEnd(e.target.value)} />
-                        </div>
-                      </div>
-
-                      <label className="inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={addActive} onChange={e => setAddActive(e.target.checked)} />
-                        Hacer esta membresía activa ahora
-                      </label>
-
-                      <div className="flex gap-2">
-                        <button className="btn" onClick={addMembership} disabled={addSaving}>
-                          {addSaving ? 'Guardando…' : 'Agregar'}
-                        </button>
-                        <button className="btn-outline" onClick={() => setAddOpen(false)}>Cancelar</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Listado */}
-                  <div className="grid gap-3">
-                    {pms.length === 0 && <p className="text-textsec">Sin membresías registradas.</p>}
-
-                    {pms.map(pm => (
-                      <div key={pm.id} className="card p-4">
-                        {editId === pm.id ? (
-                          <div className="grid gap-3">
-                            <div className="grid md:grid-cols-2 gap-3">
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Nombre</label>
-                                <input className="input" value={editName} onChange={e => setEditName(e.target.value)} />
-                              </div>
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Clases otorgadas</label>
-                                <input className="input" type="number" min={0} value={editClasses}
-                                  onChange={e => setEditClasses(Number(e.target.value || 0))} />
-                              </div>
-                            </div>
-                            <div className="grid md:grid-cols-2 gap-3">
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Monto Pagado (S/.)</label>
-                                <input className="input" type="number" min={0} step={1} value={editAmountPaid}
-                                  onChange={e => setEditAmountPaid(Number(e.target.value || 0))} />
-                              </div>
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Estado</label>
-                                <select className="input" value={editStatus}
-                                  onChange={e => setEditStatus(e.target.value as any)}>
-                                  <option value="active">Activa</option>
-                                  <option value="expired">Expirada</option>
-                                  <option value="cancelled">Cancelada</option>
-                                  <option value="historical">Histórica</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="grid md:grid-cols-2 gap-3">
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Inicio</label>
-                                <input type="date" className="input" value={editStart}
-                                  onChange={e => setEditStart(e.target.value)} />
-                              </div>
-                              <div className="grid gap-2">
-                                <label className="text-sm text-textsec">Fin</label>
-                                <input type="date" className="input" value={editEnd}
-                                  onChange={e => setEditEnd(e.target.value)} />
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button className="btn" onClick={saveEditMembership} disabled={editSaving}>
-                                {editSaving ? 'Guardando…' : 'Guardar'}
-                              </button>
-                              <button className="btn-outline" onClick={() => setEditId(null)}>Cancelar</button>
-                            </div>
-                          </div>
+        {!isNew && detailQuery.isLoading ? (
+          <div className="card p-8 text-center text-textsec">Cargando datos del alumno...</div>
+        ) : !isNew && detailQuery.error && !detailQuery.data ? (
+          <div className="card p-8 text-center">
+            <p className="text-danger">{detailQuery.error instanceof Error ? detailQuery.error.message : 'No se pudo cargar el alumno.'}</p>
+            <button className="btn mt-4" onClick={() => router.push('/admin/alumnos')}>
+              Volver al listado
+            </button>
+          </div>
+        ) : (
+          <>
+            <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-white/10 bg-card p-5">
+                  <h2 className="text-lg font-semibold text-textpri">Foto y datos base</h2>
+                  <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-start">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="h-24 w-24 overflow-hidden rounded-full bg-white/10">
+                        {studentForm.avatar_url ? (
+                          <img src={studentForm.avatar_url} alt={studentForm.full_name || 'Alumno'} className="h-full w-full object-cover" />
                         ) : (
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="font-medium">{pm.name}</p>
-                              <p className="text-sm text-textsec">
-                                {pm.status === 'active' ? 'Activa' : pm.status} · Clases: {pm.classes_total}
-                                {pm.start_date ? ` · ${parseDateFromSupabase(pm.start_date)}` : ''}{pm.end_date ? ` → ${parseDateFromSupabase(pm.end_date)}` : ''}
-                              </p>
-                              {pm.amount_paid !== undefined && pm.amount_paid > 0 && (
-                                <p className="text-sm font-medium text-success">
-                                  💰 S/. {pm.amount_paid.toLocaleString()}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
-                              <button className="btn-outline" onClick={() => startEdit(pm)}>Editar</button>
-                            </div>
-                          </div>
+                          <div className="grid h-full w-full place-items-center text-xs text-textsec">Sin foto</div>
                         )}
                       </div>
-                    ))}
+                      <label className="btn-outline inline-flex cursor-pointer items-center gap-2 text-sm">
+                        <ImagePlus className="h-4 w-4" />
+                        {uploadingAvatar ? 'Subiendo...' : 'Cambiar foto'}
+                        <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadAvatar(event.target.files?.[0])} />
+                      </label>
+                    </div>
+
+                    <div className="grid flex-1 gap-4 sm:grid-cols-2">
+                      <div className="grid gap-2 sm:col-span-2">
+                        <label className="text-sm text-textsec">Nombre completo</label>
+                        <input
+                          className="input"
+                          value={studentForm.full_name}
+                          onChange={(event) => setStudentForm((current) => ({ ...current, full_name: event.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-sm text-textsec">Fecha de nacimiento</label>
+                        <input
+                          type="date"
+                          className="input"
+                          value={studentForm.date_of_birth}
+                          onChange={(event) => setStudentForm((current) => ({ ...current, date_of_birth: event.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-sm text-textsec">DNI</label>
+                        <input
+                          className="input"
+                          value={studentForm.dni}
+                          maxLength={8}
+                          onChange={(event) => setStudentForm((current) => ({ ...current, dni: event.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-sm text-textsec">Edad</label>
+                        <input
+                          className="input"
+                          value={computedAge !== null ? `${computedAge} años` : ''}
+                          readOnly
+                          placeholder="Se calcula con la fecha de nacimiento"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-sm text-textsec">Telefono</label>
+                        <input
+                          className="input"
+                          value={studentForm.phone}
+                          onChange={(event) => setStudentForm((current) => ({ ...current, phone: event.target.value }))}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-sm text-textsec">Estado</label>
+                        <select
+                          className="input"
+                          value={String(studentForm.is_active)}
+                          onChange={(event) => setStudentForm((current) => ({ ...current, is_active: event.target.value === 'true' }))}
+                        >
+                          <option value="true">Activo</option>
+                          <option value="false">Inactivo</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
-              {/* ===================== /Sección Membresías ===================== */}
+
+                <div className="rounded-3xl border border-white/10 bg-card p-5">
+                  <h2 className="text-lg font-semibold text-textpri">Configuracion tecnica</h2>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Distancia actual</label>
+                      <select
+                        className="input"
+                        value={studentForm.current_distance_m}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, current_distance_m: event.target.value }))}
+                      >
+                        <option value="">Sin asignar</option>
+                        {DISTANCES.map((distance) => (
+                          <option key={distance} value={distance}>
+                            {distance} m
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Libraje actual</label>
+                      <input
+                        type="number"
+                        min={0}
+                        className="input"
+                        value={studentForm.bow_poundage}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, bow_poundage: event.target.value }))}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">División</label>
+                      <select
+                        className="input"
+                        value={studentForm.division}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, division: event.target.value }))}
+                      >
+                        <option value="">Sin definir</option>
+                        {STUDENT_DIVISIONS.map((division) => (
+                          <option key={division} value={division}>
+                            {division}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Género</label>
+                      <select
+                        className="input"
+                        value={studentForm.gender}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, gender: event.target.value }))}
+                      >
+                        <option value="">Sin definir</option>
+                        {STUDENT_GENDERS.map((gender) => (
+                          <option key={gender} value={gender}>
+                            {gender}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Categoría</label>
+                      <input
+                        className="input"
+                        value={computedCategory}
+                        readOnly
+                        placeholder="Se compone con división, año de nacimiento y género"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Nivel</label>
+                      <input
+                        className="input"
+                        value={studentForm.level}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, level: event.target.value }))}
+                      />
+                    </div>
+                    <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-bg/40 p-4 text-sm text-textpri">
+                      <input
+                        type="checkbox"
+                        checked={studentForm.has_own_bow}
+                        onChange={(event) =>
+                          setStudentForm((current) => ({
+                            ...current,
+                            has_own_bow: event.target.checked,
+                            assigned_bow: event.target.checked ? false : current.assigned_bow,
+                          }))
+                        }
+                      />
+                      Usa arco propio
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-bg/40 p-4 text-sm text-textpri">
+                      <input
+                        type="checkbox"
+                        checked={studentForm.assigned_bow}
+                        onChange={(event) =>
+                          setStudentForm((current) => ({
+                            ...current,
+                            assigned_bow: event.target.checked,
+                            has_own_bow: event.target.checked ? false : current.has_own_bow,
+                          }))
+                        }
+                      />
+                      Tiene arco asignado
+                    </label>
+                    <div className="grid gap-2 sm:col-span-2">
+                      <label className="text-sm text-textsec">Notas medicas o restricciones</label>
+                      <textarea
+                        className="input min-h-28 resize-y"
+                        value={studentForm.medical_notes}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, medical_notes: event.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-white/10 bg-card p-5">
+                  <h2 className="text-lg font-semibold text-textpri">Accesos</h2>
+                  <div className="mt-4 grid gap-4">
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Modo de cuenta</label>
+                      <select
+                        className="input"
+                        value={accountMode}
+                        onChange={(event) => setAccountMode(event.target.value as AccountMode)}
+                      >
+                        <option value="guardian_only">Solo tutor</option>
+                        <option value="student_only">Solo alumno</option>
+                        <option value="student_and_guardian">Alumno y tutor</option>
+                      </select>
+                    </div>
+
+                    {showStudentAccountFields && (
+                      <div className="rounded-2xl border border-white/10 bg-bg/40 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-textpri">
+                          <UserRound className="h-4 w-4 text-textsec" />
+                          Cuenta del alumno
+                        </div>
+                        <div className="mt-3 grid gap-3">
+                          <div className="grid gap-2">
+                            <label className="text-sm text-textsec">Email de acceso</label>
+                            <input
+                              className="input"
+                              value={studentForm.email}
+                              onChange={(event) => setStudentForm((current) => ({ ...current, email: event.target.value }))}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs text-textpri">
+                            <KeyRound className="h-3 w-3 text-textsec" />
+                            {createdCodes?.student_access_code || 'Se generara al guardar'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {showGuardianFields && (
+                      <div className="rounded-2xl border border-white/10 bg-bg/40 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-textpri">
+                          <ShieldCheck className="h-4 w-4 text-textsec" />
+                          Tutor
+                        </div>
+                        <div className="mt-3 grid gap-3">
+                          <div className="grid gap-2">
+                            <label className="text-sm text-textsec">Nombre del tutor</label>
+                            <input
+                              className="input"
+                              value={guardianForm.full_name}
+                              onChange={(event) => setGuardianForm((current) => ({ ...current, full_name: event.target.value }))}
+                            />
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-sm text-textsec">Email del tutor</label>
+                            <input
+                              className="input"
+                              value={guardianForm.email}
+                              onChange={(event) => setGuardianForm((current) => ({ ...current, email: event.target.value }))}
+                            />
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="grid gap-2">
+                              <label className="text-sm text-textsec">Telefono</label>
+                              <input
+                                className="input"
+                                value={guardianForm.phone}
+                                onChange={(event) => setGuardianForm((current) => ({ ...current, phone: event.target.value }))}
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <label className="text-sm text-textsec">DNI</label>
+                              <input
+                                className="input"
+                                maxLength={8}
+                                value={guardianForm.dni}
+                                onChange={(event) => setGuardianForm((current) => ({ ...current, dni: event.target.value }))}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-2">
+                            <label className="text-sm text-textsec">Relacion</label>
+                            <input
+                              className="input"
+                              value={guardianForm.relationship}
+                              onChange={(event) => setGuardianForm((current) => ({ ...current, relationship: event.target.value }))}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs text-textpri">
+                            <KeyRound className="h-3 w-3 text-textsec" />
+                            {createdCodes?.guardian_access_code || 'Se generara o reutilizara al guardar'}
+                          </div>
+                          {createdCodes?.guardian_reused && (
+                            <p className="text-xs text-textsec">Se reutilizara la cuenta existente del tutor para este alumno.</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {!isNew && detailQuery.data?.active_membership && (
+                  <div className="rounded-3xl border border-white/10 bg-card p-5">
+                    <h2 className="text-lg font-semibold text-textpri">Membresia activa</h2>
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-bg/40 p-4">
+                      <p className="font-medium text-textpri">{detailQuery.data.active_membership.custom_name}</p>
+                      <p className="mt-2 text-sm text-textsec">
+                        {detailQuery.data.active_membership.classes_remaining} clases restantes · vence {detailQuery.data.active_membership.end_date || 'sin fecha'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button className="btn inline-flex items-center justify-center gap-2" onClick={submitForm} disabled={saving || !canSubmit}>
+                <Save className="h-4 w-4" />
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              <button className="btn-outline" onClick={() => router.push(isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}>
+                Cancelar
+              </button>
             </div>
-          )}
-        </div>
-
-        </div>
-      <AdminBottomNav active="alumnos" />
-
+          </>
+        )}
+      </div>
     </AdminGuard>
   )
 }

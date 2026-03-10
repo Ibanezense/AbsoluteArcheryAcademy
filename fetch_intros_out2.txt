@@ -1,0 +1,2 @@
+Data: null
+Error: {"code":"PGRST100","details":"unexpected \"s\" expecting \"asc\", \"desc\", \"nullsfirst\" or \"nullslast\"","hint":null,"message":"\"failed to parse order (sessions.start_at.asc)\" (line 1, column 10)"}

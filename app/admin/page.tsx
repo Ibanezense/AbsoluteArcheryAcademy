@@ -1,115 +1,179 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import {
+  ArrowRight,
+  BadgeCheck,
+  CalendarDays,
+  ClipboardCheck,
+  Settings,
+  Users,
+} from 'lucide-react'
 import AdminGuard from '@/components/AdminGuard'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
-import { useDashboardStats } from '@/lib/hooks/useDashboardStats'
-import { StatCard } from '@/components/ui/StatCard'
-import { Modal } from '@/components/ui/Modal'
 import { ActiveBookingsWidget } from '@/components/ActiveBookingsWidget'
+import { Modal } from '@/components/ui/Modal'
+import { StatCard } from '@/components/ui/StatCard'
 import WeeklyOccupancyChart from '@/components/ui/WeeklyOccupancyChart'
+import { useDashboardStats } from '@/lib/hooks/useDashboardStats'
 
-// Iconos SVG
-const IconAlumnos = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
-const IconFacturacion = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="16" x2="12" y2="16"></line><line x1="12" y1="8" x2="12" y2="12"></line></svg>
-const IconVencer = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
-const IconSinClases = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" x2="19" y1="5" y2="19"></line><line x1="5" x2="19" y1="19" y2="5"></line></svg>
-const IconOcupacion = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
+type HubCard = {
+  href: string
+  title: string
+  description: string
+  icon: React.ReactNode
+}
+
+const menuCards: HubCard[] = [
+  {
+    href: '/admin/sesiones',
+    title: 'Turnos',
+    description: 'Genera semanas, edita horarios y controla cupos por distancia.',
+    icon: <CalendarDays className="h-5 w-5" />,
+  },
+  {
+    href: '/admin/alumnos',
+    title: 'Alumnos',
+    description: 'Administra fichas, foto, tutor, nivel, distancia y libraje.',
+    icon: <Users className="h-5 w-5" />,
+  },
+  {
+    href: '/admin/asistencia',
+    title: 'Asistencia',
+    description: 'Pasa lista rapido por turno y marca asistio o no-show.',
+    icon: <ClipboardCheck className="h-5 w-5" />,
+  },
+  {
+    href: '/admin/membresias',
+    title: 'Membresias',
+    description: 'Renueva paquetes, registra pagos y controla clases disponibles.',
+    icon: <BadgeCheck className="h-5 w-5" />,
+  },
+  {
+    href: '/admin/ajustes',
+    title: 'Configuracion',
+    description: 'Configura inventario de arcos, plantillas y ajustes del sistema.',
+    icon: <Settings className="h-5 w-5" />,
+  },
+]
+
+function HubLinkCard({ card }: { card: HubCard }) {
+  return (
+    <Link
+      href={card.href}
+      className="group rounded-2xl border border-white/10 bg-card p-4 transition-colors hover:border-accent/40 hover:bg-accent/5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 text-accent">
+          {card.icon}
+        </div>
+        <ArrowRight className="h-4 w-4 text-textsec transition-transform group-hover:translate-x-1 group-hover:text-accent" />
+      </div>
+      <h3 className="mt-4 text-base font-semibold text-textpri">{card.title}</h3>
+      <p className="mt-2 text-sm text-textsec">{card.description}</p>
+    </Link>
+  )
+}
 
 export default function AdminDashboard() {
-  const router = useRouter()
   const { stats, isLoading: statsLoading, error: statsError } = useDashboardStats()
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
     <AdminGuard>
       <div className="space-y-6">
-
-        {/* --- 1. NUEVO HEADER --- */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-textpri">Dashboard</h1>
-            <p className="text-sm text-textsec mt-1">Resumen de la actividad de la academia.</p>
+        {/* Header */}
+        <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-accent">Dashboard</p>
+              <h1 className="mt-2 text-3xl font-bold text-textpri">Hub administrativo</h1>
+              <p className="mt-2 max-w-2xl text-sm text-textsec">
+                Vista general de la academia. Metricas, ocupacion y accesos directos.
+              </p>
+            </div>
+            <button
+              className="btn inline-flex items-center justify-center"
+              onClick={() => setIsModalOpen(true)}
+            >
+              Reserva rapida
+            </button>
           </div>
-          <button 
-            className="bg-accent text-white font-medium px-5 py-2.5 rounded-lg hover:bg-accent/90 transition-colors"
-            onClick={() => setIsModalOpen(true)}
-          >
-            Reserva Rápida
-          </button>
-        </div>
+        </section>
 
-        {/* --- 2. MÉTRICAS GENERALES (KPIs) --- */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3 text-textpri">Métricas Generales</h2>
-          {statsLoading && (
-            <div className="text-textsec text-sm">Cargando estadísticas...</div>
-          )}
-          {statsError && (
-            <div className="card p-4 bg-danger/10 border-danger/20 text-danger text-sm">
-              Error: {statsError}
+        {statsError && (
+          <div className="rounded-2xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
+            Error cargando estadisticas: {statsError}
+          </div>
+        )}
+
+        {/* KPI cards — 6 metricas principales */}
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <StatCard title="Alumnos activos" value={stats.total_alumnos_activos} icon="👤">
+            <span className="text-xs text-textsec">Alumnos con membresia vigente</span>
+          </StatCard>
+          <StatCard
+            title="Ocupacion semanal"
+            value={`${stats.ocupacion_semana_pct}%`}
+            icon="📊"
+          >
+            <div className="mt-1 h-2 w-full rounded-full bg-line/40">
+              <div
+                className="h-2 rounded-full bg-accent transition-all"
+                style={{ width: `${Math.min(stats.ocupacion_semana_pct, 100)}%` }}
+              />
             </div>
-          )}
-          {!statsLoading && !statsError && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="Alumnos Activos" value={stats.total_alumnos_activos}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Total de estudiantes activos</span>
-                  <span className="text-textsec"><IconAlumnos /></span>
-                </div>
-              </StatCard>
-              <StatCard title="Facturación del Mes" value={`S/. ${stats.facturacion_mes_actual.toLocaleString()}`}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Ingresos mes actual</span>
-                  <span className="text-yellow-400"><IconFacturacion /></span>
-                </div>
-              </StatCard>
-              <StatCard title="Membresías por Vencer" value={stats.membresias_por_vencer}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Próximos 7 días</span>
-                  <span className="text-warning"><IconVencer /></span>
-                </div>
-              </StatCard>
-              <StatCard title="Alumnos sin Clases" value={stats.alumnos_sin_clases}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-textsec">Requieren renovación</span>
-                  <span className="text-danger"><IconSinClases /></span>
-                </div>
-              </StatCard>
-            </div>
-          )}
-        </div>
-        
-        {/* --- 3. GRÁFICO Y RESERVAS --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Gráfico de Ocupación (2/3 del ancho) */}
-          <div className="lg:col-span-2">
+          </StatCard>
+          <StatCard title="Facturacion del mes" value={`S/. ${stats.facturacion_mes_actual.toLocaleString()}`} icon="💰">
+            <span className="text-xs text-textsec">Ingresos registrados este mes</span>
+          </StatCard>
+          <StatCard title="Membresias por vencer" value={stats.membresias_por_vencer} icon="⚠️">
+            <span className="text-xs text-textsec">Proximos 7 dias</span>
+          </StatCard>
+          <StatCard title="Alumnos sin clases" value={stats.alumnos_sin_clases} icon="🚫">
+            <span className="text-xs text-textsec">Requieren renovacion</span>
+          </StatCard>
+          <StatCard title="Turnos disponibles" value={stats.turnos_disponibles_semana} icon="📅">
+            <span className="text-xs text-textsec">Esta semana</span>
+          </StatCard>
+        </section>
+
+        {/* Ocupacion semanal (gráfico principal) + Reservas activas */}
+        <section className="grid gap-6 xl:grid-cols-3">
+          <div className="xl:col-span-2">
             <div className="card p-5">
-              {statsLoading && (
-                <div className="h-[300px] flex items-center justify-center text-textsec">Cargando gráfico...</div>
-              )}
-              {!statsLoading && !statsError && (
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-textpri">Ocupacion semanal</h2>
+                <p className="text-sm text-textsec">Demanda y disponibilidad por dia de la semana.</p>
+              </div>
+
+              {statsLoading ? (
+                <div className="flex h-[300px] items-center justify-center text-textsec">Cargando grafico...</div>
+              ) : (
                 <WeeklyOccupancyChart data={stats.ocupacion_por_dia} />
               )}
             </div>
           </div>
 
-          {/* Reservas Activas (1/3 del ancho) */}
-          <div className="lg:col-span-1">
+          <div>
             <ActiveBookingsWidget />
           </div>
-        </div>
-        
-        {/* --- 5. MODAL --- */}
-        <Modal 
-          title="Reserva Rápida" 
-          isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)}
-        >
+        </section>
+
+        {/* Secciones del panel */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-textpri">Secciones del panel</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {menuCards.map((card) => (
+              <HubLinkCard key={card.title} card={card} />
+            ))}
+          </div>
+        </section>
+
+        <Modal title="Reserva rapida" isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
           <AdminQuickBooking />
         </Modal>
-        
       </div>
     </AdminGuard>
   )

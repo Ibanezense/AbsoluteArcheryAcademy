@@ -34,7 +34,7 @@ export class IntroClassesService {
       `)
             .not('intro_client_id', 'is', 'null')
             .gte('sessions.start_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
-            .order('sessions.start_at', { ascending: true });
+            .order('start_at', { foreignTable: 'sessions', ascending: true });
 
         if (error) {
             console.error('Error fetching intro classes:', error);

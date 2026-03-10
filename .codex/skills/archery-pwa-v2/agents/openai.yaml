@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archery PWA V2"
+  short_description: "Reglas V2 para academia y Supabase"
+  default_prompt: "Use $archery-pwa-v2 to work on the academy PWA with the V2 data model and access-code flow."

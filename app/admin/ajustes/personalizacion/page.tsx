@@ -21,7 +21,7 @@ export default function PersonalizacionPage() {
 
   useEffect(() => {
     setMounted(true);
-    
+
     // Cargar color guardado
     const savedColor = localStorage.getItem('accentColor') as AccentColor;
     if (savedColor) setAccentColor(savedColor);
@@ -31,7 +31,7 @@ export default function PersonalizacionPage() {
     if (!mounted) return;
 
     const root = document.documentElement;
-    
+
     // Aplicar color de acento
     accentColors.forEach(color => {
       root.classList.remove(`accent-${color.name}`);
@@ -40,7 +40,7 @@ export default function PersonalizacionPage() {
 
     // Guardar en localStorage
     localStorage.setItem('accentColor', accentColor);
-    
+
     // Aplicar CSS variables para el color de acento
     const selectedColor = accentColors.find(c => c.name === accentColor);
     if (selectedColor) {
@@ -52,9 +52,9 @@ export default function PersonalizacionPage() {
     return (
       <div className="p-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-700 rounded w-1/4 mb-6"></div>
+          <div className="h-8 bg-line/40 rounded w-1/4 mb-6"></div>
           <div className="grid gap-6">
-            <div className="h-48 bg-gray-700 rounded"></div>
+            <div className="h-48 bg-line/40 rounded"></div>
           </div>
         </div>
       </div>
@@ -64,23 +64,23 @@ export default function PersonalizacionPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-textpri">
           Personalización
         </h1>
-        <p className="text-gray-400 mt-1">
+        <p className="text-textsec mt-1">
           Adapta el color de acento de la aplicación a tus preferencias
         </p>
       </div>
 
       {/* Color de Acento */}
-      <Card className="p-6 bg-gray-800 border-gray-700">
-        <h2 className="text-lg font-semibold text-white mb-4">
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold text-textpri mb-4">
           Color de acento
         </h2>
-        <p className="text-gray-400 mb-6">
+        <p className="text-textsec mb-6">
           Personaliza el color principal de botones, elementos destacados y efectos hover en los menús
         </p>
-        
+
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
           {accentColors.map((color) => (
             <button
@@ -88,21 +88,21 @@ export default function PersonalizacionPage() {
               onClick={() => setAccentColor(color.name)}
               className={`
                 relative p-6 rounded-xl border-2 transition-all hover:scale-105
-                ${accentColor === color.name 
-                  ? 'border-white scale-105' 
-                  : 'border-gray-600 hover:border-gray-500'
+                ${accentColor === color.name
+                  ? 'border-accent scale-105'
+                  : 'border-line hover:border-textsec'
                 }
               `}
             >
-              <div 
+              <div
                 className="w-12 h-12 rounded-full mx-auto mb-3"
                 style={{ backgroundColor: color.color }}
               />
-              <div className="text-sm font-medium text-white">
+              <div className="text-sm font-medium text-textpri">
                 {color.label}
               </div>
               {accentColor === color.name && (
-                <div 
+                <div
                   className="absolute -top-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center"
                   style={{ backgroundColor: color.color }}
                 >
@@ -116,36 +116,36 @@ export default function PersonalizacionPage() {
         </div>
 
         {/* Vista previa del color */}
-        <div className="mt-8 p-6 bg-gray-900 rounded-xl">
-          <div className="text-sm text-gray-400 mb-4">
+        <div className="mt-8 p-6 bg-bg/40 border border-white/10 rounded-xl">
+          <div className="text-sm text-textsec mb-4">
             Vista previa:
           </div>
           <div className="flex gap-4 flex-wrap">
-            <Button 
+            <Button
               className="text-white font-medium"
               style={{ backgroundColor: accentColors.find(c => c.name === accentColor)?.color }}
             >
               Botón Principal
             </Button>
-            <div 
+            <div
               className="px-4 py-2 rounded-lg border-2 font-medium transition-colors"
-              style={{ 
+              style={{
                 borderColor: accentColors.find(c => c.name === accentColor)?.color,
                 color: accentColors.find(c => c.name === accentColor)?.color
               }}
             >
               Elemento destacado
             </div>
-            <div className="px-4 py-2 bg-gray-800 rounded-lg font-medium text-gray-300 hover:text-white transition-colors"
-                 style={{ 
-                   '--hover-color': accentColors.find(c => c.name === accentColor)?.color
-                 } as any}
-                 onMouseEnter={(e) => {
-                   e.currentTarget.style.color = accentColors.find(c => c.name === accentColor)?.color || '';
-                 }}
-                 onMouseLeave={(e) => {
-                   e.currentTarget.style.color = '';
-                 }}>
+            <div className="px-4 py-2 bg-bg/40 rounded-lg font-medium text-textsec hover:text-textpri transition-colors"
+              style={{
+                '--hover-color': accentColors.find(c => c.name === accentColor)?.color
+              } as any}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = accentColors.find(c => c.name === accentColor)?.color || '';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '';
+              }}>
               Efecto Hover (pasa el mouse)
             </div>
           </div>
@@ -153,17 +153,17 @@ export default function PersonalizacionPage() {
       </Card>
 
       {/* Información */}
-      <Card className="p-6 bg-blue-900/20 border-blue-800">
+      <Card className="p-6 bg-info/10 border-info/30">
         <div className="flex items-start gap-3">
-          <div className="text-blue-400 text-xl">ℹ️</div>
+          <div className="text-info text-xl">ℹ️</div>
           <div>
-            <h3 className="font-semibold text-blue-100 mb-2">
+            <h3 className="font-semibold text-textpri mb-2">
               Aplicación automática
             </h3>
-            <p className="text-blue-200 text-sm">
+            <p className="text-textsec text-sm">
               Tu color de acento se aplica automáticamente a:
             </p>
-            <ul className="text-blue-200 text-sm mt-2 space-y-1">
+            <ul className="text-textsec text-sm mt-2 space-y-1">
               <li>• Elementos del menú lateral al hacer hover</li>
               <li>• Botones principales y elementos destacados</li>
               <li>• Navegación de ajustes y submenús</li>

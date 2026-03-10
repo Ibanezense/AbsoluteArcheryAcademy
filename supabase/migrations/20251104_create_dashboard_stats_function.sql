@@ -32,11 +32,12 @@ BEGIN
 
   -- 2. Facturación del mes actual (America/Lima timezone)
   -- Suma los pagos del mes calendario actual
-  SELECT COALESCE(SUM(amount_paid), 0)::INTEGER
+  SELECT COALESCE(SUM(amount), 0)::INTEGER
   INTO v_facturacion_mes_actual
-  FROM profile_memberships
-  WHERE created_at >= date_trunc('month', NOW() AT TIME ZONE 'America/Lima')
-    AND created_at < date_trunc('month', NOW() AT TIME ZONE 'America/Lima') + INTERVAL '1 month';
+  FROM student_membership_payments
+  WHERE payment_status = 'paid'
+    AND paid_at >= date_trunc('month', NOW() AT TIME ZONE 'America/Lima')
+    AND paid_at < date_trunc('month', NOW() AT TIME ZONE 'America/Lima') + INTERVAL '1 month';
 
   -- 3. Membresías por vencer (próximos 7 días)
   -- Cuenta perfiles activos cuya membresía vence entre hoy y hoy+7 días

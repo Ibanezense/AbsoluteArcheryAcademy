@@ -7,7 +7,7 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-  <aside className="bg-[#0e1116] border-r border-white/20 flex flex-col">
+    <aside className="bg-[#0e1116] border-r border-white/20 flex flex-col">
       {/* Logo y Título */}
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
@@ -21,7 +21,7 @@ export function Sidebar() {
       </div>
 
       {/* Navegación */}
-  <nav className="flex-1 p-4">
+      <nav className="flex-1 p-4">
         <div className="space-y-1">
           <NavItem
             href="/admin/dashboard"
@@ -33,7 +33,7 @@ export function Sidebar() {
             label="Inicio"
             active={pathname === '/admin/dashboard'}
           />
-          
+
           <NavItem
             href="/admin/alumnos"
             icon={
@@ -47,7 +47,7 @@ export function Sidebar() {
             label="Alumnos"
             active={pathname.startsWith('/admin/alumnos')}
           />
-          
+
           <NavItem
             href="/admin/sesiones"
             icon={
@@ -58,7 +58,7 @@ export function Sidebar() {
             label="Clases"
             active={pathname.startsWith('/admin/sesiones')}
           />
-          
+
           <NavItem
             href="/admin/ajustes"
             icon={
@@ -87,11 +87,10 @@ function NavItem({ href, icon, label, active }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`sidebar-item menu-item hover-accent flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-        active
+      className={`sidebar-item menu-item hover-accent flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active
           ? 'sidebar-active text-white'
-          : 'text-slate-300'
-      }`}
+          : 'text-textsec'
+        }`}
     >
       <span className="inline-flex h-6 w-6 items-center justify-center text-current">{icon}</span>
       <span className="font-medium">{label}</span>

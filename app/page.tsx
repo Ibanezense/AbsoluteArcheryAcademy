@@ -1,66 +1,62 @@
-// Contenido COMPLETO y CORREGIDO para: app/page.tsx
 'use client'
 
 import { useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { CalendarPlus, Ticket, MessagesSquare, LogOut } from 'lucide-react'
+import { supabase } from '@/lib/supabaseClient'
 import { AuthGuard } from '@/components/AuthGuard'
 import Avatar from '@/components/ui/Avatar'
 import { Spinner } from '@/components/ui/Spinner'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { MembershipAlert } from '@/components/ui/MembershipAlert'
 import { NextBookingWidget } from '@/components/ui/NextBookingWidget'
-import { useProfile } from '@/lib/hooks/useProfile'
+import { useStudentContext } from '@/lib/hooks/useStudentContext'
+import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
-import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
-import { formatDateOnly } from '@/lib/utils/dateUtils'
-import Link from 'next/link'
 import dayjs from 'dayjs'
 
-// Etiquetas para el grupo
-const groupLabels: Record<string, string> = {
-  children: 'Niños',
-  youth: 'Jóvenes',
-  adult: 'Adultos',
-  assigned: 'Asignados',
-  ownbow: 'Arco propio',
-}
-
-// Función para calcular edad
-const calculateAge = (birthDate: string | null): number | null => {
-  if (!birthDate) return null
-  const today = dayjs()
-  const birth = dayjs(birthDate)
-  return today.diff(birth, 'year')
-}
-
 export default function HomePage() {
-  // --- 1. CARGA DE DATOS ---
-  const { profile, isLoading: isProfileLoading, error: profileError } = useProfile()
-  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(profile)
-  const { 
-    bookings: history, 
-    isLoading: isHistoryLoading, 
-    error: historyError,
-    hasMore: hasMoreHistory, 
-    loadMoreBookings 
-  } = useBookingHistory()
+  const router = useRouter()
+  const {
+    account,
+    students,
+    activeStudent,
+    activeStudentId,
+    loading: contextLoading,
+    error: contextError,
+  } = useStudentContext()
+  const {
+    dashboard,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useStudentDashboard(activeStudentId)
 
-  // Cargar primera página del historial automáticamente solo una vez
+  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(dashboard)
+
   useEffect(() => {
-    if (profile && history.length === 0 && !isHistoryLoading && hasMoreHistory) {
-      loadMoreBookings()
+    if (account?.role === 'admin') {
+      router.replace('/admin')
     }
-  }, [profile, history.length, isHistoryLoading, hasMoreHistory, loadMoreBookings])
+  }, [account?.role, router])
 
-  // Calcular edad del perfil
-  const age = profile ? calculateAge(profile.date_of_birth) : null
+  useEffect(() => {
+    // Si es tutor y tiene más de 1 alumno, PERO no ha seleccionado uno, forzar hub
+    if (account?.role === 'guardian' && students.length > 1 && !activeStudentId) {
+      router.replace('/hub')
+    }
+    // NOTA: Si es tutor de 1 solo alumno, el context ya autoseleccionó activeStudentId.
+  }, [account?.role, students.length, activeStudentId, router])
 
-  // Lógica para la tarjeta inteligente de clases
-  const classes = profile?.classes_remaining ?? 0
-  const classesStatus: 'normal' | 'low' | 'empty' = 
-    classes === 0 ? 'empty' : classes <= 2 ? 'low' : 'normal'
+  const signOut = async () => {
+    await supabase.auth.signOut()
+    router.replace('/login')
+  }
 
-  // --- 2. ESTADOS DE CARGA Y ERROR ---
-  if (isProfileLoading) {
+
+
+  const loading = contextLoading || dashboardLoading
+  const error = contextError || dashboardError
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
         <Spinner />
@@ -68,13 +64,11 @@ export default function HomePage() {
     )
   }
 
-  if (profileError || !profile) {
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg">
         <div className="card p-8 text-center max-w-md">
-          <p className="text-danger mb-4">
-            {profileError ? `Error: ${profileError.message}` : 'No se pudo cargar tu perfil'}
-          </p>
+          <p className="text-danger mb-4">{error}</p>
           <button className="btn" onClick={() => window.location.reload()}>
             Reintentar
           </button>
@@ -83,164 +77,169 @@ export default function HomePage() {
     )
   }
 
-  // --- 3. RENDER DE LA PÁGINA ---
+  // Si por alguna razón el activeStudentId no carga, pero sabemos que la cuenta terminó de cargar
+  if (account?.role === 'guardian' && !activeStudentId && students.length > 1) {
+    return (
+      <AuthGuard>
+        <div className="min-h-screen bg-bg text-textpri flex items-center justify-center">
+          <div className="card p-8 text-center max-w-md">
+            <p className="text-textsec mb-4">
+              Selecciona un hijo en el hub para ver su informacion.
+            </p>
+            <Link href="/hub" className="btn inline-flex justify-center">
+              Ir al hub
+            </Link>
+          </div>
+        </div>
+      </AuthGuard>
+    )
+  }
+
+  if (!dashboard) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg">
+        <div className="card p-8 text-center max-w-md">
+          <p className="text-danger mb-4">No se pudo cargar el resumen del alumno</p>
+          <button className="btn" onClick={() => window.location.reload()}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+
 
   return (
     <AuthGuard>
       <div className="min-h-screen bg-bg text-textpri">
-        {/* Padding inferior para dejar espacio al menú de navegación fijo */}
         <div className="mx-auto w-full max-w-screen-2xl px-0 sm:px-4 lg:px-8 py-6 pb-24 space-y-5">
-          
-          {/* --- SECCIÓN 1: DATOS PERSONALES --- */}
-          <div className="w-full flex flex-col sm:flex-row items-center gap-4 bg-card p-4 sm:rounded-2xl shadow-md border border-white/10">
-            <div className="flex-shrink-0">
-              <Avatar
-                url={profile.avatar_url}
-                name={profile.full_name || 'Usuario'}
-                size="lg"
-                className="!h-24 !w-24 !text-2xl"
-              />
-            </div>
-            <div className="flex-1 space-y-3 text-center sm:text-left">
+          {account?.role === 'guardian' && activeStudent && students.length > 1 && (
+            <div className="card p-4 flex items-center justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold text-textpri leading-tight">
-                  {profile.full_name || 'Usuario'}
-                </h1>
-                <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-x-4 gap-y-1 mt-1">
-                  {age && (
-                    <p className="text-base text-textsec">
-                      {age} años
-                    </p>
-                  )}
-                  <p className="text-base text-textsec">
-                    Distancia: <span className="font-semibold text-textpri">
-                      {profile.distance_m ? `${profile.distance_m}m` : 'No asignada'}
-                    </span>
-                  </p>
-                </div>
+                <p className="text-sm text-textsec">Viendo alumno</p>
+                <p className="font-medium truncate max-w-[150px] sm:max-w-[200px]">{activeStudent.full_name}</p>
               </div>
-              {/* Fila de Badges: Estado y Membresía */}
-              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${
-                  profile.is_active 
-                    ? 'bg-success/20 text-success' 
-                    : 'bg-danger/20 text-danger'
-                }`}>
-                  {profile.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-                <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-info/20 text-info">
-                  {profile.membership_type || 'Sin membresía'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* --- SECCIÓN 2: MEMBRESÍA Y ACCIÓN --- */}
-          
-          {/* Botón "Reservar" - Full bleed en móvil */}
-          <div className="-mx-0 sm:mx-0">
-            {classes === 0 || isExpired ? (
-              <button 
-                className="btn w-full text-center py-3 bg-gray-500/20 text-textsec/50 cursor-not-allowed rounded-none sm:rounded-lg"
-                disabled
-              >
-                {isExpired ? 'Membresía vencida' : 'No tienes clases disponibles'}
-              </button>
-            ) : (
-              <Link href="/reservar" className="btn w-full text-center block py-3 bg-accent text-white hover:bg-accent/90 transition-colors rounded-none sm:rounded-lg">
-                Reservar nueva clase
+              <Link href="/hub" className="btn-outline text-xs px-3">
+                Cambiar
               </Link>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Alertas de membresía */}
-          <MembershipAlert 
-            isExpired={isExpired} 
-            isExpiringSoon={isExpiringSoon} 
-            daysUntilExpiry={daysUntilExpiry} 
-          />
+          {/* Perfil del Alumno - Estilo App Nativa / Social */}
+          <div className="w-full bg-card rounded-2xl shadow-soft border border-line overflow-hidden relative pb-6">
+            {/* Banner Background */}
+            <div className="h-32 w-full bg-gradient-to-r from-accent/20 to-accent/5 relative">
+              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+              {/* Boton Cerrar Sesion */}
+              <button
+                onClick={signOut}
+                className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 text-white backdrop-blur-md border border-white/10 hover:bg-black/40 transition-colors"
+                aria-label="Cerrar sesion"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
 
-          {/* Tarjetas de Membresía y Clases */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Tarjeta de Clases (Inteligente) */}
-            <div className={`w-full rounded-none sm:rounded-xl border p-4 flex items-center justify-between
-              ${classesStatus === 'empty' ? 'bg-danger/10 border-danger/30' :
-                classesStatus === 'low' ? 'bg-warning/10 border-warning/30' :
-                'border-white/10 bg-card'}
-            `}>
-              <div>
-                <p className={`text-sm mb-1 ${
-                  classesStatus === 'empty' ? 'text-danger' :
-                  classesStatus === 'low' ? 'text-warning' :
-                  'text-textsec'
-                }`}>
-                  {classesStatus === 'empty' ? 'No tienes clases' : 'Clases disponibles'}
-                </p>
-                <p className={`text-4xl font-bold ${
-                  classesStatus === 'empty' ? 'text-danger' :
-                  classesStatus === 'low' ? 'text-warning' :
-                  'text-accent'
-                }`}>
-                  {classes}
-                </p>
-              </div>
-              <div className={`text-5xl ${classesStatus === 'empty' ? 'opacity-30' : 'opacity-20'}`}>
-                {classesStatus === 'empty' ? '🚫' : '🎯'}
+            {/* Avatar Superpuesto Centrado */}
+            <div className="flex justify-center -mt-16 relative z-10">
+              <div className="rounded-full p-1.5 bg-card">
+                <Avatar
+                  url={dashboard.avatar_url}
+                  name={dashboard.full_name || 'Alumno'}
+                  size="lg"
+                  className="!h-28 !w-28 !text-3xl shadow-md border-2 border-line/40"
+                />
               </div>
             </div>
 
-            {/* Tarjeta de Vigencia */}
-            <div className="w-full rounded-none sm:rounded-xl border border-white/10 bg-card p-4">
-              <h3 className="font-semibold text-textpri mb-2">Vigencia</h3>
-              <p className="text-sm text-textsec">
-                Inicio: <span className="font-medium">{formatDateOnly(profile.membership_start) || '—'}</span>
-              </p>
-              <p className="text-sm text-textsec">
-                Vencimiento: <span className="font-medium">{formatDateOnly(profile.membership_end) || '—'}</span>
-              </p>
-            </div>
-          </div>
+            {/* Info del Atleta */}
+            <div className="text-center px-4 mt-3 space-y-1.5">
+              <h1 className="text-2xl font-bold text-textpri leading-tight">
+                {dashboard.full_name || 'Alumno'}
+              </h1>
 
-          {/* --- SECCIÓN 3: PRÓXIMAS CLASES E HISTORIAL --- */}
-          
-          {/* Próxima Clase (Widget) */}
-          <div className="w-full space-y-4">
-            <h2 className="text-lg font-semibold text-textpri px-4 sm:px-0">Próximas Clases</h2>
-            <NextBookingWidget />
-          </div>
+              <div className="flex items-center justify-center gap-2 text-textsec text-sm">
+                {dashboard.age && <span>{dashboard.age} años</span>}
+                {dashboard.age && dashboard.current_distance_m && <span className="opacity-50">•</span>}
+                {dashboard.current_distance_m && (
+                  <span>Distancia: <strong className="text-textpri font-medium">{dashboard.current_distance_m}m</strong></span>
+                )}
+              </div>
 
-          {/* Historial Paginado */}
-          <div className="w-full space-y-4">
-            <h2 className="text-lg font-semibold text-textpri px-4 sm:px-0">Historial de Clases</h2>
-            <div className="card w-full max-w-none p-4 rounded-none sm:rounded-xl2 space-y-3">
-              {history.length === 0 && !isHistoryLoading && (
-                <p className="text-textsec text-sm text-center py-4">No tienes historial de reservas.</p>
-              )}
-              {history.map(booking => (
-                <div key={booking.booking_id} className="flex items-center justify-between p-3 rounded-lg bg-bg/50 border border-white/5">
-                  <div>
-                    <p className="font-medium text-textpri">{dayjs(booking.start_at).format('ddd, D [de] MMM, YYYY')}</p>
-                    <p className="text-sm text-textsec">{dayjs(booking.start_at).format('hh:mm A')}</p>
+              {/* Badges y status */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase ${dashboard.student_is_active ? 'bg-success/10 text-success border border-success/20' : 'bg-danger/10 text-danger border border-danger/20'
+                  }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${dashboard.student_is_active ? 'bg-success animate-pulse' : 'bg-danger'}`}></span>
+                  {dashboard.student_is_active ? 'Activo' : 'Inactivo'}
+                </span>
+
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-accent/10 border border-accent/20 text-accent">
+                  {dashboard.membership_name || 'Sin membresía'}
+                </span>
+
+                {dashboard.category && (
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-background border border-line text-textsec">
+                    {dashboard.category} {dashboard.level ? `· ${dashboard.level}` : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* Mini-Resumen de Membresia Interactivo */}
+              {dashboard.membership_status === 'active' && (
+                <div className="mt-5 pt-4 border-t border-line/50">
+                  <div className="grid grid-cols-2 gap-3 mx-auto max-w-sm">
+                    <div className={`flex flex-col items-center justify-center p-2.5 rounded-xl border ${(dashboard.classes_remaining ?? 0) === 0 ? 'bg-danger/10 border-danger/20 text-danger' :
+                        (dashboard.classes_remaining ?? 0) <= 2 ? 'bg-warning/10 border-warning/20 text-warning' :
+                          'bg-success/10 border-success/20 text-success'
+                      }`}>
+                      <span className="text-2xl font-bold leading-none mb-1">{dashboard.classes_remaining ?? 0}</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider opacity-80">Clases Libres</span>
+                    </div>
+                    <div className={`flex flex-col items-center justify-center p-2.5 rounded-xl border ${isExpired ? 'bg-danger/10 border-danger/20 text-danger' :
+                        isExpiringSoon ? 'bg-warning/10 border-warning/20 text-warning' :
+                          'bg-background border-line text-textpri'
+                      }`}>
+                      <span className="text-sm font-bold leading-none mb-1">
+                        {dashboard.membership_end ? dayjs(dashboard.membership_end).format('D MMM') : 'N/A'}
+                      </span>
+                      <span className="text-[10px] text-textsec font-semibold uppercase tracking-wider">Vence</span>
+                    </div>
                   </div>
-                  <StatusBadge status={booking.status} />
-                </div>
-              ))}
-              {isHistoryLoading && (
-                <div className="flex justify-center py-4">
-                  <Spinner />
                 </div>
               )}
-              {historyError && (
-                <p className="text-danger text-sm text-center py-4">{historyError}</p>
-              )}
-              {hasMoreHistory && !isHistoryLoading && (
-                <button 
-                  onClick={loadMoreBookings}
-                  className="btn-outline w-full"
-                >
-                  Cargar más
-                </button>
-              )}
+            </div>
+          </div>
+
+          {/* Acciones Rapidas (Quick Actions Grid) */}
+          <div className="grid grid-cols-3 gap-3 w-full px-1 sm:px-0">
+            <Link href="/reservar" className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm hover:scale-95 hover:bg-accent/5 transition-all text-center group">
+              <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent group-hover:text-white transition-colors">
+                <CalendarPlus size={22} />
+              </div>
+              <span className="text-xs font-medium text-textpri">Agendar</span>
+            </Link>
+
+            <Link href="/membresias" className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm hover:scale-95 transition-all text-center group">
+              <div className="w-12 h-12 rounded-full bg-background border border-line text-textpri flex items-center justify-center group-hover:bg-line transition-colors">
+                <Ticket size={22} className="opacity-80" />
+              </div>
+              <span className="text-xs font-medium text-textpri">Mi Cuenta</span>
+            </Link>
+
+            <button disabled className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm opacity-50 cursor-not-allowed text-center">
+              <div className="w-12 h-12 rounded-full bg-background border border-line text-textsec flex items-center justify-center">
+                <MessagesSquare size={22} className="opacity-60" />
+              </div>
+              <span className="text-xs font-medium text-textsec">Soporte</span>
+            </button>
+          </div>
+
+          <div className="w-full space-y-3 px-1 sm:px-0">
+            <h2 className="text-sm font-semibold text-textsec uppercase tracking-wider pl-1">Agenda</h2>
+            <div className="shadow-sm rounded-2xl overflow-hidden border border-line">
+              <NextBookingWidget studentId={activeStudentId} />
             </div>
           </div>
         </div>
