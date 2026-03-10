@@ -1,5 +1,4 @@
 import './globals.css'
-import NavBar from '@/components/NavBar'
 import Providers from '@/components/Providers'
 import LayoutWrapper from './LayoutWrapper'
 import type { Metadata } from 'next'
@@ -39,13 +38,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LayoutWrapper>
             {children}
           </LayoutWrapper>
-
-          {/* Barra inferior SOLO para vistas de alumno (se oculta en /admin) */}
-          <div className="fixed inset-x-0 bottom-0">
-            <div className="mx-auto w-full max-w-[430px] px-4">
-              <NavBar />
-            </div>
-          </div>
         </Providers>
       </body>
     </html>
