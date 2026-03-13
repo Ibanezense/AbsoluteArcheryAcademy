@@ -20,7 +20,150 @@ export type AvailableIntroSession = {
     available: number;
 };
 
+export type IntroSessionGroup = {
+    session_id: string;
+    start_at: string;
+    end_at: string;
+    capacity: number;
+    booked_total: number; // bookings totales (regulares + intro) para calcular cupo real
+    clients: { booking_id: string; full_name: string; age: number; phone?: string }[];
+};
+
+export type IntroDayData = {
+    date: string;
+    sessions: IntroSessionGroup[];
+};
+
+export type IntroWeekendData = {
+    saturday: IntroDayData;
+    sunday: IntroDayData;
+};
+
 export class IntroClassesService {
+
+    /**
+     * Obtiene las sesiones del próximo fin de semana (o el actual)
+     * agrupadas por sábado y domingo, con clientes intro y cupo real.
+     */
+    static async getIntrosByWeekend(): Promise<IntroWeekendData> {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0=Dom, 6=Sáb
+
+        // Calcular el próximo sábado (o hoy si ya es sáb/dom)
+        let satDate: Date;
+        if (dayOfWeek === 6) {
+            satDate = new Date(now);
+        } else if (dayOfWeek === 0) {
+            satDate = new Date(now);
+            satDate.setDate(satDate.getDate() - 1); // retroceder al sábado
+        } else {
+            const daysUntilSat = 6 - dayOfWeek;
+            satDate = new Date(now);
+            satDate.setDate(satDate.getDate() + daysUntilSat);
+        }
+
+        const sunDate = new Date(satDate);
+        sunDate.setDate(sunDate.getDate() + 1);
+
+        const satStart = new Date(satDate.setHours(0, 0, 0, 0)).toISOString();
+        const satEnd = new Date(new Date(satDate).setHours(23, 59, 59, 999)).toISOString();
+        const sunStart = new Date(sunDate.setHours(0, 0, 0, 0)).toISOString();
+        const sunEnd = new Date(new Date(sunDate).setHours(23, 59, 59, 999)).toISOString();
+
+        // Traer todas las sesiones del sáb y dom con su capacidad de 10m
+        const { data: sessionsData, error: sessionsError } = await supabase
+            .from('sessions')
+            .select(`
+                id, start_at, end_at,
+                session_distance_allocations ( distance_m, slot_capacity, targets )
+            `)
+            .gte('start_at', satStart)
+            .lte('start_at', sunEnd)
+            .order('start_at', { ascending: true });
+
+        if (sessionsError) throw sessionsError;
+
+        const sessionIds = (sessionsData || []).map(s => s.id);
+
+        // Traer TODOS los bookings de esas sesiones (para contar cupo real ocupado)
+        let allBookings: any[] = [];
+        if (sessionIds.length > 0) {
+            const { data: bkData, error: bkErr } = await supabase
+                .from('bookings')
+                .select('id, session_id, intro_client_id, status, distance_m')
+                .in('session_id', sessionIds)
+                .in('status', ['reserved', 'attended', 'no_show']);
+
+            if (bkErr) throw bkErr;
+            allBookings = bkData || [];
+        }
+
+        // Traer info de los clientes intro que están en esos bookings
+        const introBookingIds = allBookings
+            .filter(b => b.intro_client_id)
+            .map(b => b.intro_client_id);
+
+        let introClientsMap: Record<string, any> = {};
+        if (introBookingIds.length > 0) {
+            const { data: icData, error: icErr } = await supabase
+                .from('intro_clients')
+                .select('id, full_name, age, phone')
+                .in('id', introBookingIds);
+
+            if (icErr) throw icErr;
+            (icData || []).forEach(c => { introClientsMap[c.id] = c; });
+        }
+
+        // Construir los grupos por sesión
+        const buildGroup = (session: any): IntroSessionGroup => {
+            const alloc = Array.isArray(session.session_distance_allocations)
+                ? session.session_distance_allocations.find((a: any) => a.distance_m === 10)
+                : session.session_distance_allocations?.distance_m === 10
+                    ? session.session_distance_allocations
+                    : null;
+
+            const slotCapacity = alloc?.slot_capacity || (alloc?.targets ? alloc.targets * 4 : 0);
+            const capacity = slotCapacity === 0 ? 12 : slotCapacity;
+
+            const sessionBookings = allBookings.filter(b => b.session_id === session.id);
+            const bookedTotal = sessionBookings.filter(b => b.distance_m === 10).length;
+
+            const introClients = sessionBookings
+                .filter(b => b.intro_client_id)
+                .map(b => {
+                    const client = introClientsMap[b.intro_client_id];
+                    return client ? {
+                        booking_id: b.id,
+                        full_name: client.full_name,
+                        age: client.age,
+                        phone: client.phone,
+                    } : null;
+                })
+                .filter(Boolean) as IntroSessionGroup['clients'];
+
+            return {
+                session_id: session.id,
+                start_at: session.start_at,
+                end_at: session.end_at,
+                capacity,
+                booked_total: bookedTotal,
+                clients: introClients,
+            };
+        };
+
+        const satSessions = (sessionsData || [])
+            .filter(s => s.start_at >= satStart && s.start_at <= satEnd)
+            .map(buildGroup);
+
+        const sunSessions = (sessionsData || [])
+            .filter(s => s.start_at >= sunStart && s.start_at <= sunEnd)
+            .map(buildGroup);
+
+        return {
+            saturday: { date: satStart.split('T')[0], sessions: satSessions },
+            sunday: { date: sunStart.split('T')[0], sessions: sunSessions },
+        };
+    }
 
     // 1. Obtener los alumnos que vienen de prueba
     static async getUpcomingIntros(): Promise<IntroClientRecord[]> {

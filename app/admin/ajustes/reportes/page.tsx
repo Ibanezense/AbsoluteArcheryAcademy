@@ -125,27 +125,40 @@ export default function ReportesPage() {
 
             const doc = new jsPDF()
 
-            // Header config
-            doc.setFontSize(20)
-            doc.text('Lista de Ingreso al Club', 14, 22)
-            doc.setFontSize(11)
-            doc.setTextColor(100)
-            doc.text(`Fecha: ${localFormatDate}`, 14, 30)
-
             const tableRows = students.map((st, index) => [
                 (index + 1).toString(),
                 st.name,
                 st.dni || '-'
             ])
 
-            autoTable(doc, {
-                startY: 40,
-                head: [['N°', 'Nombres Completos', 'DNI']],
-                body: tableRows,
-                theme: 'striped',
-                headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-                styles: { fontSize: 10, cellPadding: 5 }
-            })
+            const ROWS_PER_PAGE = 30;
+            const totalChunks = Math.ceil(tableRows.length / ROWS_PER_PAGE);
+
+            for (let i = 0; i < totalChunks; i++) {
+                if (i > 0) doc.addPage();
+
+                const chunk = tableRows.slice(i * ROWS_PER_PAGE, (i + 1) * ROWS_PER_PAGE);
+                const isFirstPage = i === 0;
+
+                if (isFirstPage) {
+                    // Header solo en la primera página
+                    doc.setFontSize(20)
+                    doc.setTextColor(0)
+                    doc.text('Lista de Ingreso al Club', 14, 22)
+                    doc.setFontSize(11)
+                    doc.setTextColor(100)
+                    doc.text(`Fecha: ${localFormatDate}`, 14, 30)
+                }
+
+                autoTable(doc, {
+                    startY: isFirstPage ? 40 : 15,
+                    head: [['N°', 'Nombres Completos', 'DNI']],
+                    body: chunk,
+                    theme: 'striped',
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+                    styles: { fontSize: 10, cellPadding: 5 }
+                })
+            }
 
             // Download file
             const fileName = `ingreso-archery-${dayjs(dateString).format('DD-MM-YYYY')}.pdf`
