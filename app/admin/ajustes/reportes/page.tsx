@@ -131,7 +131,7 @@ export default function ReportesPage() {
                 st.dni || '-'
             ])
 
-            const ROWS_PER_PAGE = 30;
+            const ROWS_PER_PAGE = 32;
             const totalChunks = Math.ceil(tableRows.length / ROWS_PER_PAGE);
 
             for (let i = 0; i < totalChunks; i++) {
@@ -155,8 +155,8 @@ export default function ReportesPage() {
                     head: [['N°', 'Nombres Completos', 'DNI']],
                     body: chunk,
                     theme: 'striped',
-                    headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-                    styles: { fontSize: 10, cellPadding: 5 }
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 8 },
+                    styles: { fontSize: 8, cellPadding: 2 }
                 })
             }
 
