@@ -191,8 +191,10 @@ export default function AdminAlumnoEditorPage() {
       return
     }
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
+    // refreshSession() fuerza la renovación del JWT si está expirado,
+    // evitando enviar tokens caducados al API (causa del 401 "Sesion expirada")
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    const accessToken = refreshed.session?.access_token
 
     if (!accessToken) {
       toast.push({ message: 'Sesion expirada. Vuelve a iniciar sesion.', type: 'error' })

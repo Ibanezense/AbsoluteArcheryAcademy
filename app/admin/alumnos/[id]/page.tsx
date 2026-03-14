@@ -131,8 +131,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
     try {
       setDeleting(true)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const accessToken = sessionData.session?.access_token
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const accessToken = refreshed.session?.access_token
 
       if (!accessToken) {
         throw new Error('Sesion expirada. Vuelve a iniciar sesion.')
