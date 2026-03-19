@@ -183,7 +183,7 @@ export default function FinancesClient() {
 
             {actionable && (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                             <p className="text-sm text-gray-500 font-medium">Proyeccion mensual</p>
                             <h3 className="mt-2 text-3xl font-bold text-gray-900">S/ {Number(actionable.projection_month || 0).toFixed(2)}</h3>
@@ -195,11 +195,6 @@ export default function FinancesClient() {
                             <p className="text-sm text-gray-500 font-medium">Morosidad acumulada</p>
                             <h3 className="mt-2 text-3xl font-bold text-red-600">S/ {Number(actionable.overdue_amount || 0).toFixed(2)}</h3>
                             <p className="mt-2 text-xs text-gray-500">{actionable.overdue_count || 0} pagos atrasados</p>
-                        </div>
-                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                            <p className="text-sm text-gray-500 font-medium">Alertas pendientes</p>
-                            <h3 className="mt-2 text-3xl font-bold text-amber-600">{actionable.pending_alerts || 0}</h3>
-                            <p className="mt-2 text-xs text-gray-500">En cola automatica (email/whatsapp/in-app)</p>
                         </div>
                     </div>
 

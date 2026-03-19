@@ -41,7 +41,6 @@ export type FinanceActionableDashboard = {
     projection_month: number;
     overdue_amount: number;
     overdue_count: number;
-    pending_alerts: number;
     top_debtors: FinanceDebtor[];
     overdue_rows: FinanceOverdueRow[];
 };
@@ -82,7 +81,6 @@ export class FinancesService {
             projection_month: 0,
             overdue_amount: 0,
             overdue_count: 0,
-            pending_alerts: 0,
             top_debtors: [],
             overdue_rows: [],
         }) as FinanceActionableDashboard;
