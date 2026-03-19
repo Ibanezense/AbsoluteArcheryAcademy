@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/admin/alerts/process",
-      "schedule": "0 * * * *"
+      "schedule": "0 13 * * *"
     }
   ],
   "headers": [
