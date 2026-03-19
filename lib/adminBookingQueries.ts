@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabaseClient'
+import { adminBookSession, adminCancelBooking } from '@/lib/services/adminBookingService'
 
 // Tipos para las funciones de admin
 export interface AdminBooking {
@@ -215,15 +216,12 @@ export function useAdminBookSession() {
       adminNotes?: string 
       forceBooking?: boolean
     }) => {
-      const { data, error } = await supabase.rpc('admin_book_session', {
-        p_session_id: sessionId,
-        p_student_id: studentId,
-        p_admin_notes: adminNotes || null,
-        p_force: forceBooking || false,
+      return adminBookSession(supabase as any, {
+        sessionId,
+        studentId,
+        adminNotes,
+        forceBooking,
       })
-
-      if (error) throw error
-      return data
     },
     onSuccess: () => {
       // Invalidar múltiples queries para actualizar la UI
@@ -241,12 +239,7 @@ export function useAdminCancelBooking() {
 
   return useMutation({
     mutationFn: async (bookingId: string) => {
-      const { data, error } = await supabase.rpc('admin_cancel_booking', {
-        p_booking_id: bookingId,
-      })
-
-      if (error) throw error
-      return data
+      return adminCancelBooking(supabase as any, bookingId)
     },
     onSuccess: () => {
       // Invalidar múltiples queries para actualizar la UI

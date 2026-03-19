@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { FinancesService, FinanceRecord } from '@/lib/services/FinancesService';
+import { FinancesService, FinanceRecord, FinanceActionableDashboard } from '@/lib/services/FinancesService';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
 import { Download, TrendingUp, TrendingDown, Clock, Search, Loader2 } from 'lucide-react';
@@ -19,6 +19,7 @@ export default function FinancesClient() {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
     const [records, setRecords] = useState<FinanceRecord[]>([]);
+    const [actionable, setActionable] = useState<FinanceActionableDashboard | null>(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
@@ -32,8 +33,13 @@ export default function FinancesClient() {
                 const nextYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
                 const endDateString = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-01`;
 
-                const data = await FinancesService.getMonthlyReport(startDateString, endDateString);
+                const [data, dashboard] = await Promise.all([
+                    FinancesService.getMonthlyReport(startDateString, endDateString),
+                    FinancesService.getActionableDashboard(startDateString, endDateString),
+                ]);
+
                 setRecords(data);
+                setActionable(dashboard);
             } catch (error) {
                 console.error('Error loading finances:', error);
             } finally {
@@ -174,6 +180,74 @@ export default function FinancesClient() {
                     </div>
                 </div>
             </div>
+
+            {actionable && (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                            <p className="text-sm text-gray-500 font-medium">Proyeccion mensual</p>
+                            <h3 className="mt-2 text-3xl font-bold text-gray-900">S/ {Number(actionable.projection_month || 0).toFixed(2)}</h3>
+                            <p className="mt-2 text-xs text-gray-500">
+                                Cobrado: S/ {Number(actionable.paid_month || 0).toFixed(2)} · Pendiente del mes: S/ {Number(actionable.pending_month || 0).toFixed(2)}
+                            </p>
+                        </div>
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                            <p className="text-sm text-gray-500 font-medium">Morosidad acumulada</p>
+                            <h3 className="mt-2 text-3xl font-bold text-red-600">S/ {Number(actionable.overdue_amount || 0).toFixed(2)}</h3>
+                            <p className="mt-2 text-xs text-gray-500">{actionable.overdue_count || 0} pagos atrasados</p>
+                        </div>
+                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                            <p className="text-sm text-gray-500 font-medium">Alertas pendientes</p>
+                            <h3 className="mt-2 text-3xl font-bold text-amber-600">{actionable.pending_alerts || 0}</h3>
+                            <p className="mt-2 text-xs text-gray-500">En cola automatica (email/whatsapp/in-app)</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                                <h3 className="text-base font-semibold text-gray-800">Top morosos</h3>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                {actionable.top_debtors?.length ? actionable.top_debtors.map((debtor) => (
+                                    <div key={debtor.student_id} className="rounded-xl border border-gray-100 p-3 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-gray-900 truncate">{debtor.student_name}</p>
+                                            <p className="text-xs text-gray-500">
+                                                {debtor.overdue_count} pagos · desde {debtor.oldest_due_date ? dayjs(debtor.oldest_due_date).format('DD/MM/YYYY') : 'sin fecha'}
+                                            </p>
+                                        </div>
+                                        <span className="text-sm font-semibold text-red-600">S/ {Number(debtor.overdue_amount || 0).toFixed(2)}</span>
+                                    </div>
+                                )) : (
+                                    <p className="text-sm text-gray-500">No hay alumnos con pagos vencidos.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                                <h3 className="text-base font-semibold text-gray-800">Alertas de atraso</h3>
+                            </div>
+                            <div className="p-4 space-y-3 max-h-[360px] overflow-y-auto">
+                                {actionable.overdue_rows?.length ? actionable.overdue_rows.map((row) => (
+                                    <div key={row.payment_id} className="rounded-xl border border-gray-100 p-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="font-medium text-gray-900 truncate">{row.student_name}</p>
+                                            <span className="text-sm font-semibold text-red-600">S/ {Number(row.amount || 0).toFixed(2)}</span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            {row.membership_name} · vence {row.due_date ? dayjs(row.due_date).format('DD/MM/YYYY') : 'sin fecha'} · {row.days_late} dias de atraso
+                                        </p>
+                                    </div>
+                                )) : (
+                                    <p className="text-sm text-gray-500">No hay pagos atrasados para mostrar.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* Main Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

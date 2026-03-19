@@ -48,11 +48,17 @@ function emptyPlanForm(): PlanFormState {
   }
 }
 
+function getTodayLocalISODate() {
+  const now = new Date()
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
 function emptyAssignmentForm(): AssignmentFormState {
   return {
     student_id: '',
     membership_plan_id: '',
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: getTodayLocalISODate(),
     discount_type: 'none',
     discount_value: '',
     payment_amount: '',

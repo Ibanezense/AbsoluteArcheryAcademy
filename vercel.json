@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/admin/alerts/process",
+      "schedule": "0 * * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/:path*",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import { Camera, ChevronRight, Plus, ShieldCheck, UserRound } from 'lucide-react'
@@ -9,6 +9,8 @@ import Avatar from '@/components/ui/Avatar'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudents, useToggleStudentActive } from '@/lib/queries/studentQueries'
 import { norm } from '@/lib/utils/searchUtils'
+
+type StudentsTab = 'active' | 'inactive'
 
 function badgeTone(status: string | null, classesRemaining: number) {
   if (status === 'active' && classesRemaining === 0) return 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30'
@@ -20,10 +22,16 @@ function badgeTone(status: string | null, classesRemaining: number) {
 export default function AdminAlumnosPage() {
   const toast = useToast()
   const [query, setQuery] = useState('')
+  const [activeTab, setActiveTab] = useState<StudentsTab>('active')
   const { data: students = [], isLoading } = useStudents()
   const toggleStudentActive = useToggleStudentActive()
 
-  const filteredStudents = useMemo(() => {
+  useEffect(() => {
+    const tabFromUrl = new URLSearchParams(window.location.search).get('tab')
+    setActiveTab(tabFromUrl === 'inactive' ? 'inactive' : 'active')
+  }, [])
+
+  const searchedStudents = useMemo(() => {
     const needle = norm(query)
 
     return students.filter((student) => {
@@ -40,6 +48,18 @@ export default function AdminAlumnosPage() {
       return needle === '' || haystack.includes(needle)
     })
   }, [students, query])
+
+  const activeStudents = useMemo(
+    () => searchedStudents.filter((student) => student.is_active),
+    [searchedStudents]
+  )
+
+  const inactiveStudents = useMemo(
+    () => searchedStudents.filter((student) => !student.is_active),
+    [searchedStudents]
+  )
+
+  const visibleStudents = activeTab === 'active' ? activeStudents : inactiveStudents
 
   const stats = useMemo(() => {
     const today = dayjs().startOf('day')
@@ -70,6 +90,24 @@ export default function AdminAlumnosPage() {
     } catch (error: any) {
       toast.push({ message: error.message || 'No se pudo actualizar el estado.', type: 'error' })
     }
+  }
+
+  function handleTabChange(nextTab: StudentsTab) {
+    if (nextTab === activeTab) return
+
+    setActiveTab(nextTab)
+
+    const nextSearchParams = new URLSearchParams(window.location.search)
+
+    if (nextTab === 'active') {
+      nextSearchParams.delete('tab')
+    } else {
+      nextSearchParams.set('tab', 'inactive')
+    }
+
+    const nextQuery = nextSearchParams.toString()
+    const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname
+    window.history.replaceState(null, '', nextUrl)
   }
 
   return (
@@ -123,15 +161,44 @@ export default function AdminAlumnosPage() {
               className="input w-full lg:max-w-sm"
             />
           </div>
+
+          <div className="mt-4 inline-flex rounded-full border border-white/10 bg-bg/60 p-1">
+            <button
+              type="button"
+              onClick={() => handleTabChange('active')}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                activeTab === 'active'
+                  ? 'bg-emerald-500/20 text-emerald-200'
+                  : 'text-textsec hover:text-textpri'
+              }`}
+            >
+              Activos ({activeStudents.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('inactive')}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                activeTab === 'inactive'
+                  ? 'bg-red-500/20 text-red-200'
+                  : 'text-textsec hover:text-textpri'
+              }`}
+            >
+              Inactivos ({inactiveStudents.length})
+            </button>
+          </div>
         </section>
 
         {isLoading ? (
           <div className="card p-8 text-center text-textsec">Cargando alumnos...</div>
-        ) : filteredStudents.length === 0 ? (
-          <div className="card p-8 text-center text-textsec">No hay alumnos que coincidan con la busqueda.</div>
+        ) : visibleStudents.length === 0 ? (
+          <div className="card p-8 text-center text-textsec">
+            {activeTab === 'active'
+              ? 'No hay alumnos activos que coincidan con la busqueda.'
+              : 'No hay alumnos inactivos que coincidan con la busqueda.'}
+          </div>
         ) : (
           <section className="grid gap-4 lg:grid-cols-2">
-            {filteredStudents.map((student) => {
+            {visibleStudents.map((student) => {
               const membershipTone = badgeTone(student.membership_status, student.classes_remaining)
               const statusLabel =
                 student.membership_status === 'active' && student.classes_remaining === 0

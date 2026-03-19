@@ -22,6 +22,9 @@ export type AccessibleStudent = {
   is_active: boolean
   relationship: string | null
   self_profile_id: string | null
+  classes_remaining: number | null
+  membership_status: string | null
+  next_booking_at: string | null
 }
 
 export function useStudentContext() {
@@ -63,7 +66,12 @@ export function useStudentContext() {
           throw new Error(studentsError.message)
         }
 
-        const availableStudents = (studentsData || []) as AccessibleStudent[]
+        const availableStudents = ((studentsData || []) as any[]).map((student) => ({
+          ...student,
+          classes_remaining: student?.classes_remaining ?? null,
+          membership_status: student?.membership_status ?? null,
+          next_booking_at: student?.next_booking_at ?? null,
+        })) as AccessibleStudent[]
         setStudents(availableStudents)
 
         const storedStudentId = typeof window === 'undefined'

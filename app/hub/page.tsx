@@ -98,10 +98,9 @@ export default function HubPage() {
           <div className="space-y-3">
             {students.map((student) => {
               const isSelected = student.student_id === activeStudentId
-              const stData = student as any
-              const classesRem = stData.classes_remaining ?? null
-              const nextBooking = stData.next_booking_at ?? null
-              const memStatus = stData.membership_status ?? null
+              const classesRem = student.classes_remaining
+              const nextBooking = student.next_booking_at
+              const memStatus = student.membership_status
 
               return (
                 <button
@@ -140,9 +139,17 @@ export default function HubPage() {
                             }`}>
                             {classesRem} {classesRem === 1 ? 'clase' : 'clases'}
                           </span>
+                        ) : memStatus === 'expired' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-danger/10 text-danger font-medium">
+                            Membresia vencida
+                          </span>
+                        ) : memStatus ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-line/40 text-textsec font-medium">
+                            {memStatus}
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-line/40 text-textsec font-medium">
-                            Sin membresía
+                            Sin membresia
                           </span>
                         )}
                         {nextBooking && (

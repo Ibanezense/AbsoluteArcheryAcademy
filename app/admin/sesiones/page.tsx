@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dayjs from 'dayjs'
@@ -9,6 +9,7 @@ import AdminGuard from '@/components/AdminGuard'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
+import { adminCancelSession } from '@/lib/services/adminBookingService'
 
 type SessionRow = {
   id: string
@@ -105,13 +106,14 @@ export default function AdminSessionsPage() {
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [allocations, setAllocations] = useState<Record<string, DistanceAllocation[]>>({})
   const [reservedBookings, setReservedBookings] = useState<ReservedBooking[]>([])
+  const [liveUpdateAt, setLiveUpdateAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [rosterModalOpen, setRosterModalOpen] = useState(false)
   const [rosterModalSession, setRosterModalSession] = useState<SessionRow | null>(null)
   const [rosterModalData, setRosterModalData] = useState<RosterBooking[]>([])
   const [loadingRoster, setLoadingRoster] = useState(false)
 
-  const loadMonth = async (nextYear = year, nextMonth = month) => {
+  const loadMonth = useCallback(async (nextYear: number, nextMonth: number) => {
     try {
       setLoading(true)
 
@@ -139,47 +141,67 @@ export default function AdminSessionsPage() {
         return
       }
 
-      const { data: allocationRows, error: allocationsError } = await supabase
-        .from('session_distance_allocations')
-        .select('session_id, distance_m, slot_capacity, targets')
-        .in('session_id', sessionIds)
-        .order('distance_m', { ascending: true })
+      const [
+        { data: allocationRows, error: allocationsError },
+        { data: bookingRows, error: bookingsError },
+      ] = await Promise.all([
+        supabase
+          .from('session_distance_allocations')
+          .select('session_id, distance_m, slot_capacity, targets')
+          .in('session_id', sessionIds)
+          .order('distance_m', { ascending: true }),
+        supabase
+          .from('bookings')
+          .select('session_id, distance_m, bow_usage_type, bow_poundage')
+          .eq('status', 'reserved')
+          .in('session_id', sessionIds),
+      ])
 
-      if (allocationsError) {
-        throw allocationsError
-      }
+      if (allocationsError) throw allocationsError
+      if (bookingsError) throw bookingsError
 
       const groupedAllocations: Record<string, DistanceAllocation[]> = {}
-        ; ((allocationRows || []) as DistanceAllocation[]).forEach((allocation) => {
-          if (!groupedAllocations[allocation.session_id]) {
-            groupedAllocations[allocation.session_id] = []
-          }
-          groupedAllocations[allocation.session_id].push(allocation)
-        })
+      ;((allocationRows || []) as DistanceAllocation[]).forEach((allocation) => {
+        if (!groupedAllocations[allocation.session_id]) {
+          groupedAllocations[allocation.session_id] = []
+        }
+        groupedAllocations[allocation.session_id].push(allocation)
+      })
       setAllocations(groupedAllocations)
-
-      const { data: bookingRows, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('session_id, distance_m, bow_usage_type, bow_poundage')
-        .eq('status', 'reserved')
-        .in('session_id', sessionIds)
-
-      if (bookingsError) {
-        throw bookingsError
-      }
-
       setReservedBookings((bookingRows || []) as ReservedBooking[])
     } catch (loadError: any) {
       toast.push({ message: loadError?.message || 'No se pudieron cargar los turnos.', type: 'error' })
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
-    loadMonth()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month])
+    void loadMonth(year, month)
+  }, [year, month, loadMonth])
+
+  useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(async () => {
+        await loadMonth(year, month)
+        setLiveUpdateAt(dayjs().format('HH:mm:ss'))
+      }, 500)
+    }
+
+    const channel = supabase
+      .channel(`admin-sessions-live-${year}-${month}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'session_distance_allocations' }, scheduleRefresh)
+      .subscribe()
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer)
+      void supabase.removeChannel(channel)
+    }
+  }, [year, month, loadMonth])
 
   const sessionsByDay = useMemo(() => {
     const grouped: Record<string, SessionRow[]> = {}
@@ -337,18 +359,17 @@ export default function AdminSessionsPage() {
     const ok = await confirm(`Cancelar este turno${refund ? ' con reembolso' : ''}?`)
     if (!ok) return
 
-    const { data, error } = await supabase.rpc('admin_cancel_session', {
-      p_session: sessionId,
-      p_refund: refund,
-    })
-
-    if (error) {
-      toast.push({ message: error.message, type: 'error' })
+    try {
+      const data = await adminCancelSession(supabase as any, {
+        sessionId,
+        refund,
+      })
+      toast.push({ message: `Turno cancelado. Reservas afectadas: ${data ?? 0}`, type: 'success' })
+      await loadMonth(year, month)
+    } catch (error: any) {
+      toast.push({ message: error?.message || 'No se pudo cancelar el turno.', type: 'error' })
       return
     }
-
-    toast.push({ message: `Turno cancelado. Reservas afectadas: ${data ?? 0}`, type: 'success' })
-    await loadMonth()
   }
 
   return (
@@ -430,10 +451,13 @@ export default function AdminSessionsPage() {
           </div>
 
           <div className="lg:col-span-8 xl:col-span-9 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-textpri">Semana {weekRangeLabel}</h2>
                 <p className="text-sm text-textsec">Selecciona un dia o revisa toda la semana.</p>
+                {liveUpdateAt && (
+                  <p className="mt-1 text-xs text-success">Actualizacion en tiempo real: {liveUpdateAt}</p>
+                )}
               </div>
             </div>
 
