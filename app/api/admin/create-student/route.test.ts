@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { normalizeBooleanValue } from './route'
+import { normalizeBooleanValue } from './route-helpers'
 
 const mockCreateClient = vi.hoisted(() => vi.fn())
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
+import { normalizeBooleanValue } from './route-helpers'
 
 type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
@@ -65,12 +66,6 @@ function normalizeOptionalDni(value: unknown) {
   const normalized = normalizeText(value)
   if (normalized === '') return null
   return normalized
-}
-
-export function normalizeBooleanValue(value: unknown, fallback = false) {
-  if (value === true) return true
-  if (value === false) return false
-  return fallback
 }
 
 function formatErrorMessage(stage: string, error: any, fallback: string) {
