@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { normalizeBooleanValue } from './route'
 
-const mockCreateClient = vi.fn()
+const mockCreateClient = vi.hoisted(() => vi.fn())
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: mockCreateClient,
@@ -264,5 +265,14 @@ describe('PUT /api/admin/create-student', () => {
       })
     )
     expect(studentSelectMaybeSingle).toHaveBeenCalled()
+  })
+})
+
+describe('normalizeBooleanValue', () => {
+  it('only accepts actual booleans and preserves the fallback for undefined input', () => {
+    expect(normalizeBooleanValue(true, false)).toBe(true)
+    expect(normalizeBooleanValue(false, true)).toBe(false)
+    expect(normalizeBooleanValue(undefined, false)).toBe(false)
+    expect(normalizeBooleanValue(undefined, true)).toBe(true)
   })
 })

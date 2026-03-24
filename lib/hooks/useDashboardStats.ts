@@ -104,6 +104,20 @@ export function normalizeDashboardStats(parsedData: Partial<DashboardStatsRpc> |
   }
 }
 
+export function applyDashboardStatsFallback(
+  statsFromRpc: DashboardStatsRpc,
+  fallbackStats: Partial<DashboardStats> | null | undefined,
+): DashboardStatsRpc {
+  if (!fallbackStats) {
+    return statsFromRpc
+  }
+
+  return {
+    ...statsFromRpc,
+    ...fallbackStats,
+  }
+}
+
 function normalizeLevel(value: string | null | undefined) {
   return (value || '')
     .normalize('NFD')
@@ -206,10 +220,7 @@ export function useDashboardStats() {
 
       if (!hasNewKpis || needsCctFallback) {
         const fallbackStats = await loadDashboardKpiFallback()
-        setStats({
-          ...statsFromRpc,
-          ...fallbackStats,
-        })
+        setStats(applyDashboardStatsFallback(statsFromRpc, fallbackStats))
       } else {
         setStats(statsFromRpc)
       }

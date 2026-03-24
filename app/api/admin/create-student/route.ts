@@ -67,6 +67,12 @@ function normalizeOptionalDni(value: unknown) {
   return normalized
 }
 
+export function normalizeBooleanValue(value: unknown, fallback = false) {
+  if (value === true) return true
+  if (value === false) return false
+  return fallback
+}
+
 function formatErrorMessage(stage: string, error: any, fallback: string) {
   const parts = [
     error?.message,
@@ -502,8 +508,10 @@ function studentRowFromPayload(student: StudentPayload, existingAffiliation?: bo
     assigned_bow: !!student.assigned_bow,
     bow_poundage: student.bow_poundage ?? null,
     is_active: student.is_active ?? true,
-    is_country_club_tiabaya_member:
-      student.is_country_club_tiabaya_member ?? existingAffiliation ?? false,
+    is_country_club_tiabaya_member: normalizeBooleanValue(
+      student.is_country_club_tiabaya_member,
+      existingAffiliation ?? false,
+    ),
   }
 }
 
