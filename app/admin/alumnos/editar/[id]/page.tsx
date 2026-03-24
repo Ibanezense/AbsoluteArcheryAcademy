@@ -28,6 +28,7 @@ type StudentFormState = {
   assigned_bow: boolean
   bow_poundage: string
   is_active: boolean
+  is_country_club_tiabaya_member: boolean
 }
 
 type GuardianFormState = {
@@ -64,6 +65,7 @@ function emptyStudentForm(): StudentFormState {
     assigned_bow: false,
     bow_poundage: '',
     is_active: true,
+    is_country_club_tiabaya_member: false,
   }
 }
 
@@ -120,6 +122,7 @@ export default function AdminAlumnoEditorPage() {
       assigned_bow: data.assigned_bow,
       bow_poundage: data.bow_poundage ? String(data.bow_poundage) : '',
       is_active: data.is_active,
+      is_country_club_tiabaya_member: data.is_country_club_tiabaya_member,
     })
 
     setGuardianForm({
@@ -223,6 +226,7 @@ export default function AdminAlumnoEditorPage() {
           assigned_bow: studentForm.assigned_bow,
           bow_poundage: studentForm.bow_poundage ? Number(studentForm.bow_poundage) : null,
           is_active: studentForm.is_active,
+          is_country_club_tiabaya_member: studentForm.is_country_club_tiabaya_member,
         },
         guardian: showGuardianFields
           ? {
@@ -508,6 +512,19 @@ export default function AdminAlumnoEditorPage() {
                         }
                       />
                       Tiene arco asignado
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-bg/40 p-4 text-sm text-textpri">
+                      <input
+                        type="checkbox"
+                        checked={studentForm.is_country_club_tiabaya_member}
+                        onChange={(event) =>
+                          setStudentForm((current) => ({
+                            ...current,
+                            is_country_club_tiabaya_member: event.target.checked,
+                          }))
+                        }
+                      />
+                      Afiliado al Country Club Tiabaya
                     </label>
                     <div className="grid gap-2 sm:col-span-2">
                       <label className="text-sm text-textsec">Notas medicas o restricciones</label>

@@ -21,6 +21,7 @@ type StudentPayload = {
   assigned_bow?: boolean
   bow_poundage?: number | null
   is_active?: boolean
+  is_country_club_tiabaya_member?: boolean
 }
 
 type GuardianPayload = {
@@ -501,6 +502,7 @@ function studentRowFromPayload(student: StudentPayload) {
     assigned_bow: !!student.assigned_bow,
     bow_poundage: student.bow_poundage ?? null,
     is_active: student.is_active ?? true,
+    is_country_club_tiabaya_member: !!student.is_country_club_tiabaya_member,
   }
 }
 
@@ -577,6 +579,7 @@ async function handleCreate(req: Request) {
       .from('students')
       .insert({
         ...student,
+        is_country_club_tiabaya_member: student.is_country_club_tiabaya_member,
         self_profile_id: selfProfileId,
         created_by: actorId,
       })
@@ -661,6 +664,7 @@ async function handleUpdate(req: Request) {
       .from('students')
       .update({
         ...student,
+        is_country_club_tiabaya_member: student.is_country_club_tiabaya_member,
         updated_at: new Date().toISOString(),
       })
       .eq('id', body.studentId)
