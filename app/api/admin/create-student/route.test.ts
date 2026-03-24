@@ -131,3 +131,138 @@ describe('POST /api/admin/create-student', () => {
     expect(actorStudentInsert).not.toHaveBeenCalled()
   })
 })
+
+describe('PUT /api/admin/create-student', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
+  })
+
+  it('preserves the existing CCT affiliation flag when the PUT payload omits it', async () => {
+    const studentSelectMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'student-1',
+        self_profile_id: 'profile-1',
+        is_country_club_tiabaya_member: true,
+        guardians: [],
+      },
+      error: null,
+    })
+
+    const studentSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: studentSelectMaybeSingle,
+      }),
+    })
+
+    const studentUpdateEq = vi.fn().mockResolvedValue({ error: null })
+    const studentUpdate = vi.fn().mockReturnValue({
+      eq: studentUpdateEq,
+    })
+
+    const profilesSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { access_code: 'access-1' },
+          error: null,
+        }),
+      }),
+    })
+
+    const profilesUpdateEq = vi.fn().mockResolvedValue({ error: null })
+    const profilesUpdate = vi.fn().mockReturnValue({
+      eq: profilesUpdateEq,
+    })
+
+    const actorClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'admin-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'admin-1', role: 'admin', is_active: true },
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    const adminClient = {
+      auth: {
+        admin: {
+          createUser: vi.fn(),
+          deleteUser: vi.fn(),
+          listUsers: vi.fn(),
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: profilesSelect,
+            upsert: vi.fn(),
+            update: profilesUpdate,
+          }
+        }
+
+        if (table === 'students') {
+          return {
+            select: studentSelect,
+            update: studentUpdate,
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    mockCreateClient.mockImplementation((url: string, key: string) => {
+      if (key === 'service-key') return adminClient
+      return actorClient
+    })
+
+    const { PUT } = await import('./route')
+
+    const response = await PUT(
+      new Request('http://localhost/api/admin/create-student', {
+        method: 'PUT',
+        headers: {
+          authorization: 'Bearer admin-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId: 'student-1',
+          accountMode: 'student_only',
+          student: {
+            full_name: 'Alumno CCT',
+            email: 'cct@example.com',
+            is_active: true,
+          },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(studentUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        is_country_club_tiabaya_member: true,
+      })
+    )
+    expect(studentSelectMaybeSingle).toHaveBeenCalled()
+  })
+})

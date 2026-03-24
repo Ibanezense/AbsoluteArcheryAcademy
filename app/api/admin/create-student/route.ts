@@ -475,7 +475,7 @@ function validateUpdateBody(body: UpdateBody) {
   })
 }
 
-function studentRowFromPayload(student: StudentPayload) {
+function studentRowFromPayload(student: StudentPayload, existingAffiliation?: boolean | null) {
   const dateOfBirth = normalizeOptionalDate(student.date_of_birth)
   const division = normalizeNullableText(student.division)
   const gender = normalizeNullableText(student.gender)
@@ -502,7 +502,8 @@ function studentRowFromPayload(student: StudentPayload) {
     assigned_bow: !!student.assigned_bow,
     bow_poundage: student.bow_poundage ?? null,
     is_active: student.is_active ?? true,
-    is_country_club_tiabaya_member: !!student.is_country_club_tiabaya_member,
+    is_country_club_tiabaya_member:
+      student.is_country_club_tiabaya_member ?? existingAffiliation ?? false,
   }
 }
 
@@ -640,6 +641,7 @@ async function handleUpdate(req: Request) {
     .select(`
       id,
       self_profile_id,
+      is_country_club_tiabaya_member,
       guardians:student_guardians (
         id,
         relationship,
@@ -655,7 +657,10 @@ async function handleUpdate(req: Request) {
 
   try {
     stage = 'update:normalize-student'
-    const student = studentRowFromPayload(body.student)
+    const student = studentRowFromPayload(
+      body.student,
+      (existingStudent as any).is_country_club_tiabaya_member
+    )
     const accountMode = body.accountMode
     const existingGuardianLink = getSingleRelation((existingStudent as any).guardians)
 
