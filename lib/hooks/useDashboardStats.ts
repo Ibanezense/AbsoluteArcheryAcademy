@@ -23,6 +23,10 @@ export type DashboardStats = {
   alumnos_competitivos: number
 }
 
+export type DashboardStatsRpc = DashboardStats & {
+  alumnos_cct_activos?: number
+}
+
 // Un estado inicial vacío
 const initialState: DashboardStats = {
   total_alumnos_activos: 0,
@@ -39,7 +43,7 @@ const initialState: DashboardStats = {
   alumnos_competitivos: 0,
 }
 
-export function normalizeDashboardStats(parsedData: Partial<DashboardStats> | null | undefined) {
+export function normalizeDashboardStats(parsedData: Partial<DashboardStatsRpc> | null | undefined): DashboardStatsRpc {
   const source = parsedData ?? {}
 
   return {
@@ -179,7 +183,7 @@ export function useDashboardStats() {
       
       // La RPC devuelve el JSON, puede venir como string o como objeto
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data
-      const statsFromRpc = normalizeDashboardStats(parsedData as Partial<DashboardStats>)
+      const statsFromRpc = normalizeDashboardStats(parsedData as Partial<DashboardStatsRpc>)
 
       const hasNewKpis =
         typeof (parsedData as any)?.clases_prueba_mes_actual === 'number' &&

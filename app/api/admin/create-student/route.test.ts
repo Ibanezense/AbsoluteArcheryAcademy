@@ -17,7 +17,8 @@ describe('POST /api/admin/create-student', () => {
   })
 
   it('persists the CCT affiliation flag on the student insert payload', async () => {
-    const studentInsert = vi.fn().mockReturnValue({
+    const actorStudentInsert = vi.fn()
+    const adminStudentInsert = vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         single: vi.fn().mockResolvedValue({
           data: { id: 'student-1' },
@@ -59,7 +60,7 @@ describe('POST /api/admin/create-student', () => {
         }
 
         return {
-          insert: studentInsert,
+          insert: actorStudentInsert,
         }
       }),
     }
@@ -87,7 +88,7 @@ describe('POST /api/admin/create-student', () => {
 
         if (table === 'students') {
           return {
-            insert: studentInsert,
+            insert: adminStudentInsert,
           }
         }
 
@@ -122,10 +123,11 @@ describe('POST /api/admin/create-student', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(studentInsert).toHaveBeenCalledWith(
+    expect(adminStudentInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         is_country_club_tiabaya_member: true,
       })
     )
+    expect(actorStudentInsert).not.toHaveBeenCalled()
   })
 })
