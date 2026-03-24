@@ -10,6 +10,7 @@ export type DailyOccupancy = {
 // Este es el tipo de datos que esperamos de nuestra función RPC
 export type DashboardStats = {
   total_alumnos_activos: number
+  alumnos_cct_activos: number
   facturacion_mes_actual: number
   membresias_por_vencer: number
   alumnos_sin_clases: number
@@ -30,6 +31,7 @@ export type DashboardStatsRpc = DashboardStats & {
 // Un estado inicial vacío
 const initialState: DashboardStats = {
   total_alumnos_activos: 0,
+  alumnos_cct_activos: 0,
   facturacion_mes_actual: 0,
   membresias_por_vencer: 0,
   alumnos_sin_clases: 0,
@@ -48,6 +50,10 @@ export function normalizeDashboardStats(parsedData: Partial<DashboardStatsRpc> |
 
   return {
     ...initialState,
+    alumnos_cct_activos:
+      typeof source.alumnos_cct_activos === 'number'
+        ? source.alumnos_cct_activos
+        : initialState.alumnos_cct_activos,
     total_alumnos_activos:
       typeof source.total_alumnos_activos === 'number'
         ? source.total_alumnos_activos

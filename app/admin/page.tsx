@@ -35,7 +35,7 @@ type PrimaryKpi = {
   value: string | number
   helper: string
   icon: ReactNode
-  accent: 'orange' | 'sky' | 'emerald' | 'rose' | 'slate'
+  accent: 'orange' | 'sky' | 'emerald' | 'green' | 'rose' | 'slate'
 }
 
 const menuCards: HubCard[] = [
@@ -99,6 +99,8 @@ function accentClasses(accent: PrimaryKpi['accent']) {
       return 'from-sky-200/50 to-sky-100/20 text-sky-600'
     case 'emerald':
       return 'from-emerald-200/50 to-emerald-100/20 text-emerald-600'
+    case 'green':
+      return 'from-green-200/50 to-green-100/20 text-green-600'
     case 'rose':
       return 'from-rose-200/50 to-rose-100/20 text-rose-600'
     default:
@@ -182,6 +184,13 @@ export default function AdminDashboard() {
       helper: 'Base activa actual',
       icon: <Users className="h-5 w-5" />,
       accent: 'orange',
+    },
+    {
+      title: 'Alumnos CCT activos',
+      value: stats.alumnos_cct_activos,
+      helper: 'Afiliados activos del club',
+      icon: <BadgeCheck className="h-5 w-5" />,
+      accent: 'green',
     },
     {
       title: 'Ocupacion semanal',
