@@ -68,6 +68,10 @@ function normalizeOptionalDni(value: unknown) {
   return normalized
 }
 
+function isAlreadyRegisteredAuthError(error: any) {
+  return error?.message?.toLowerCase().includes('already been registered')
+}
+
 function formatErrorMessage(stage: string, error: any, fallback: string) {
   const parts = [
     error?.message,
@@ -189,6 +193,36 @@ async function generateUniqueAccessCode(admin: SupabaseClient) {
   throw new Error('No se pudo generar un codigo de acceso unico.')
 }
 
+async function findAuthUserByEmail(admin: SupabaseClient, email: string) {
+  const normalizedEmail = email.trim().toLowerCase()
+  let page = 1
+
+  while (page > 0) {
+    const { data: userList, error: listError } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    })
+
+    if (listError) {
+      throw new Error(listError.message)
+    }
+
+    const matchedUser = userList.users.find(
+      (user) => user.email?.trim().toLowerCase() === normalizedEmail
+    )
+
+    if (matchedUser) return matchedUser
+
+    if (!userList.nextPage || userList.nextPage === page) {
+      break
+    }
+
+    page = userList.nextPage
+  }
+
+  return null
+}
+
 async function findGuardianProfile(admin: SupabaseClient, guardian: GuardianPayload) {
   const email = normalizeNullableText(guardian.email)
   const dni = normalizeOptionalDni(guardian.dni)
@@ -280,18 +314,13 @@ async function findOrCreateGuardianForStudent(
 
   if (createError) {
     // Si el email ya existe en auth.users (usuario huerfano sin profile)
-    const isEmailTaken = createError.message?.toLowerCase().includes('already been registered')
+    const isEmailTaken = isAlreadyRegisteredAuthError(createError)
     if (!isEmailTaken) {
       throw new Error(createError.message || 'No se pudo crear la cuenta del tutor.')
     }
 
     // Buscar el usuario auth huerfano
-    const { data: userList, error: listError } = await admin.auth.admin.listUsers()
-    if (listError) throw new Error(listError.message)
-
-    const orphanUser = userList.users.find(
-      (u) => u.email?.toLowerCase() === email.toLowerCase()
-    )
+    const orphanUser = await findAuthUserByEmail(admin, email)
     if (!orphanUser) {
       throw new Error('El email ya esta registrado pero no se pudo encontrar la cuenta.')
     }
@@ -349,11 +378,8 @@ async function createManagedProfile(
   })
 
   // Si el email ya existe en auth, reusar el usuario existente (caso: alumno eliminado y re-registrado)
-  if (createError?.message?.includes('already been registered')) {
-    const { data: existingUsers } = await admin.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find(
-      (u) => u.email?.toLowerCase() === input.email.toLowerCase()
-    )
+  if (isAlreadyRegisteredAuthError(createError)) {
+    const existingUser = await findAuthUserByEmail(admin, input.email)
 
     if (!existingUser) {
       throw new Error('El email esta registrado en auth pero no se encontro el usuario.')
@@ -560,7 +586,9 @@ async function handleCreate(req: Request) {
         is_active: student.is_active,
       })
 
-      createdUserIds.push(createdStudentProfile.id)
+      if (!createdStudentProfile.reused) {
+        createdUserIds.push(createdStudentProfile.id)
+      }
       selfProfileId = createdStudentProfile.id
       studentAccessCode = createdStudentProfile.access_code
     }

@@ -131,6 +131,244 @@ describe('POST /api/admin/create-student', () => {
     )
     expect(actorStudentInsert).not.toHaveBeenCalled()
   })
+
+  it('reuses an auth user found on a later listUsers page when createUser reports the email already exists', async () => {
+    const adminStudentInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: { id: 'student-1' },
+          error: null,
+        }),
+      }),
+    })
+
+    const profilesSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: null,
+          error: null,
+        }),
+      }),
+    })
+
+    const profilesUpsert = vi.fn().mockResolvedValue({ error: null })
+    const listUsers = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          users: [{ id: 'other-user', email: 'other@example.com' }],
+          nextPage: 2,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          users: [{ id: 'existing-student-auth', email: 'cct@example.com' }],
+          nextPage: null,
+        },
+        error: null,
+      })
+
+    const actorClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'admin-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'admin-1', role: 'admin', is_active: true },
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    const adminClient = {
+      auth: {
+        admin: {
+          createUser: vi.fn().mockResolvedValue({
+            data: { user: null },
+            error: { message: 'User has already been registered' },
+          }),
+          deleteUser: vi.fn().mockResolvedValue({ error: null }),
+          listUsers,
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: profilesSelect,
+            upsert: profilesUpsert,
+          }
+        }
+
+        if (table === 'students') {
+          return {
+            insert: adminStudentInsert,
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    mockCreateClient.mockImplementation((url: string, key: string) => {
+      if (key === 'service-key') return adminClient
+      return actorClient
+    })
+
+    const { POST } = await import('./route')
+
+    const response = await POST(
+      new Request('http://localhost/api/admin/create-student', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer admin-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountMode: 'student_only',
+          student: {
+            full_name: 'Alumno Reutilizado',
+            email: 'cct@example.com',
+            is_active: true,
+          },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(listUsers).toHaveBeenNthCalledWith(1, { page: 1, perPage: 1000 })
+    expect(listUsers).toHaveBeenNthCalledWith(2, { page: 2, perPage: 1000 })
+    expect(adminStudentInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        self_profile_id: 'existing-student-auth',
+      })
+    )
+  })
+
+  it('does not delete a reused auth user if the student insert fails after reusing it', async () => {
+    const deleteUser = vi.fn().mockResolvedValue({ error: null })
+    const adminStudentInsert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'insert failed' },
+        }),
+      }),
+    })
+
+    const profilesSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: null,
+          error: null,
+        }),
+      }),
+    })
+
+    const profilesUpsert = vi.fn().mockResolvedValue({ error: null })
+    const listUsers = vi.fn().mockResolvedValue({
+      data: {
+        users: [{ id: 'existing-student-auth', email: 'cct@example.com' }],
+        nextPage: null,
+      },
+      error: null,
+    })
+
+    const actorClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: 'admin-1' } },
+          error: null,
+        }),
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'admin-1', role: 'admin', is_active: true },
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    const adminClient = {
+      auth: {
+        admin: {
+          createUser: vi.fn().mockResolvedValue({
+            data: { user: null },
+            error: { message: 'User has already been registered' },
+          }),
+          deleteUser,
+          listUsers,
+        },
+      },
+      from: vi.fn((table: string) => {
+        if (table === 'profiles') {
+          return {
+            select: profilesSelect,
+            upsert: profilesUpsert,
+          }
+        }
+
+        if (table === 'students') {
+          return {
+            insert: adminStudentInsert,
+          }
+        }
+
+        return {}
+      }),
+    }
+
+    mockCreateClient.mockImplementation((url: string, key: string) => {
+      if (key === 'service-key') return adminClient
+      return actorClient
+    })
+
+    const { POST } = await import('./route')
+
+    const response = await POST(
+      new Request('http://localhost/api/admin/create-student', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer admin-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          accountMode: 'student_only',
+          student: {
+            full_name: 'Alumno Reutilizado',
+            email: 'cct@example.com',
+            is_active: true,
+          },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(500)
+    expect(deleteUser).not.toHaveBeenCalled()
+  })
 })
 
 describe('PUT /api/admin/create-student', () => {
