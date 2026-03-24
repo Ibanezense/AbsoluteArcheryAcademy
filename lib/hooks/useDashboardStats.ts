@@ -117,7 +117,7 @@ async function loadDashboardKpiFallback(): Promise<Partial<DashboardStats>> {
 
   const { data: studentsData, error: studentsError } = await supabase
     .from('students')
-    .select('level, is_active')
+    .select('level, is_active, is_country_club_tiabaya_member')
     .eq('is_active', true)
 
   if (!studentsError && Array.isArray(studentsData)) {
@@ -125,8 +125,12 @@ async function loadDashboardKpiFallback(): Promise<Partial<DashboardStats>> {
     let desarrollo = 0
     let avanzados = 0
     let competitivos = 0
+    let cctActivos = 0
 
     for (const row of studentsData) {
+      if ((row as any)?.is_country_club_tiabaya_member === true) {
+        cctActivos += 1
+      }
       const normalized = normalizeLevel((row as any)?.level)
       if (!normalized) continue
       if (normalized.includes('competit')) {
@@ -144,6 +148,7 @@ async function loadDashboardKpiFallback(): Promise<Partial<DashboardStats>> {
     fallback.alumnos_en_desarrollo = desarrollo
     fallback.alumnos_avanzados = avanzados
     fallback.alumnos_competitivos = competitivos
+    fallback.alumnos_cct_activos = cctActivos
   }
 
   // Fallback solo para no dejar la card vacia si la RPC vieja aun no trae este KPI.
@@ -190,6 +195,7 @@ export function useDashboardStats() {
       // La RPC devuelve el JSON, puede venir como string o como objeto
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data
       const statsFromRpc = normalizeDashboardStats(parsedData as Partial<DashboardStatsRpc>)
+      const needsCctFallback = typeof (parsedData as any)?.alumnos_cct_activos !== 'number'
 
       const hasNewKpis =
         typeof (parsedData as any)?.clases_prueba_mes_actual === 'number' &&
@@ -198,7 +204,7 @@ export function useDashboardStats() {
         typeof (parsedData as any)?.alumnos_avanzados === 'number' &&
         typeof (parsedData as any)?.alumnos_competitivos === 'number'
 
-      if (!hasNewKpis) {
+      if (!hasNewKpis || needsCctFallback) {
         const fallbackStats = await loadDashboardKpiFallback()
         setStats({
           ...statsFromRpc,

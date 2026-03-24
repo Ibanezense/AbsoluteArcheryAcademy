@@ -1,10 +1,9 @@
 -- ============================================================================
--- DASHBOARD KPIS: CLASES INTRO Y NIVELES ACTIVOS
--- Fecha: 2026-03-18
+-- DASHBOARD KPI: ALUMNOS CCT ACTIVOS
+-- Fecha: 2026-03-24
 -- Proposito:
--- 1. Agregar KPI de clases de prueba del mes
--- 2. Agregar KPIs de niveles (solo alumnos activos)
--- 3. Alinear metricas base al modelo V2 (students + memberships)
+-- 1. Re-definir get_dashboard_stats() despues de la migracion del campo CCT
+-- 2. Agregar KPI de alumnos activos afiliados al Country Club Tiabaya
 -- ============================================================================
 
 DROP FUNCTION IF EXISTS public.get_dashboard_stats();
@@ -20,6 +19,7 @@ DECLARE
   v_month_start_lima timestamp := date_trunc('month', now() AT TIME ZONE 'America/Lima');
   v_month_end_lima timestamp := date_trunc('month', now() AT TIME ZONE 'America/Lima') + INTERVAL '1 month';
   v_total_alumnos_activos integer := 0;
+  v_alumnos_cct_activos integer := 0;
   v_facturacion_mes_actual integer := 0;
   v_membresias_por_vencer integer := 0;
   v_alumnos_sin_clases integer := 0;
@@ -37,6 +37,13 @@ BEGIN
   INTO v_total_alumnos_activos
   FROM public.students s
   WHERE COALESCE(s.is_active, true) = true;
+
+  -- 1b) Alumnos activos afiliados al Country Club Tiabaya
+  SELECT COUNT(*)::integer
+  INTO v_alumnos_cct_activos
+  FROM public.students s
+  WHERE COALESCE(s.is_active, true) = true
+    AND COALESCE(s.is_country_club_tiabaya_member, false) = true;
 
   -- 2) Facturacion del mes actual (pagos de membresias)
   SELECT COALESCE(SUM(p.amount), 0)::integer
@@ -215,6 +222,7 @@ BEGIN
 
   RETURN json_build_object(
     'total_alumnos_activos', v_total_alumnos_activos,
+    'alumnos_cct_activos', v_alumnos_cct_activos,
     'facturacion_mes_actual', v_facturacion_mes_actual,
     'membresias_por_vencer', v_membresias_por_vencer,
     'alumnos_sin_clases', v_alumnos_sin_clases,
@@ -233,4 +241,4 @@ $$;
 GRANT EXECUTE ON FUNCTION public.get_dashboard_stats() TO authenticated;
 
 COMMENT ON FUNCTION public.get_dashboard_stats() IS
-  'Retorna KPIs del dashboard admin: base operativa, clases de prueba del mes y distribucion de niveles (solo alumnos activos).';
+  'Retorna KPIs del dashboard admin: base operativa, clases de prueba del mes, distribucion de niveles y alumnos CCT activos (solo alumnos activos).';
