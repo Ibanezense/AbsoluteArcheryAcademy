@@ -215,6 +215,11 @@ export default function AdminAlumnosPage() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="truncate text-lg font-semibold text-textpri">{student.full_name}</h3>
+                            {student.is_country_club_tiabaya_member && (
+                              <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 text-[11px] font-medium text-emerald-300">
+                                CCT
+                              </span>
+                            )}
                             {!student.avatar_url && (
                               <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[11px] text-yellow-300">
                                 <Camera className="h-3 w-3" />
