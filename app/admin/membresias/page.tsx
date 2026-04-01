@@ -463,7 +463,7 @@ export default function AdminMembershipsPage() {
                 <div>
                   <h2 className="text-xl font-semibold text-textpri">Venta o renovacion</h2>
                   <p className="mt-1 text-sm text-textsec">
-                    Activa un plan para un alumno. Si ya tenia una membresia activa, se pasa a historico.
+                    Activa un plan para un alumno. Si ya tiene una membresia activa, las clases nuevas se acumulan sobre el saldo actual.
                   </p>
                 </div>
               </div>
