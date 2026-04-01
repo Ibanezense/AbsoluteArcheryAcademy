@@ -886,8 +886,10 @@ CREATE TABLE IF NOT EXISTS public.student_credit_ledger (
   movement_type text NOT NULL CHECK (
     movement_type IN (
       'membership_activation',
+      'membership_renewal',
       'booking_reserved',
       'booking_cancelled_refund',
+      'booking_cancelled_no_refund',
       'admin_adjustment',
       'reward_credit',
       'migration_seed',
@@ -2811,7 +2813,7 @@ COMMENT ON FUNCTION public.admin_cancel_session(uuid, boolean) IS
 -- Fecha: 2026-02-28
 -- Proposito:
 -- 1. Permitir vender o renovar membresias V2 desde admin
--- 2. Cerrar membresias activas anteriores antes de activar una nueva
+-- 2. Acumular una renovacion sobre la membresia activa existente
 -- 3. Registrar ledger inicial y pago opcional
 -- ============================================================================
 
@@ -2833,11 +2835,13 @@ DECLARE
   v_actor_id uuid;
   v_student public.students;
   v_plan public.membership_plans;
+  v_active_membership public.student_memberships;
   v_membership_id uuid;
   v_start_date date;
   v_end_date date;
   v_total_amount numeric;
   v_payment_amount numeric;
+  v_balance_after integer;
 BEGIN
   v_actor_id := auth.uid();
 
@@ -2889,69 +2893,116 @@ BEGIN
     v_end_date := v_start_date + (v_plan.duration_days - 1);
   END IF;
 
-  UPDATE public.student_memberships
-  SET
-    status = 'historical',
-    updated_at = now()
+  SELECT *
+  INTO v_active_membership
+  FROM public.student_memberships
   WHERE student_id = p_student_id
-    AND status = 'active';
+    AND status = 'active'
+  ORDER BY start_date DESC, created_at DESC
+  LIMIT 1
+  FOR UPDATE;
 
-  INSERT INTO public.student_memberships (
-    student_id,
-    membership_plan_id,
-    custom_name,
-    classes_total,
-    classes_used,
-    classes_remaining,
-    start_date,
-    end_date,
-    status,
-    total_amount,
-    currency,
-    notes,
-    sold_by_profile_id,
-    created_at,
-    updated_at
-  )
-  VALUES (
-    p_student_id,
-    v_plan.id,
-    v_plan.name,
-    v_plan.classes_included,
-    0,
-    v_plan.classes_included,
-    v_start_date,
-    v_end_date,
-    'active',
-    v_total_amount,
-    COALESCE(v_plan.currency, 'PEN'),
-    NULLIF(btrim(p_notes), ''),
-    v_actor_id,
-    now(),
-    now()
-  )
-  RETURNING id INTO v_membership_id;
+  IF v_active_membership IS NOT NULL THEN
+    UPDATE public.student_memberships
+    SET
+      membership_plan_id = v_plan.id,
+      custom_name = v_plan.name,
+      classes_total = v_active_membership.classes_total + v_plan.classes_included,
+      classes_remaining = v_active_membership.classes_remaining + v_plan.classes_included,
+      start_date = LEAST(v_active_membership.start_date, v_start_date),
+      end_date = CASE
+        WHEN v_active_membership.end_date IS NULL OR v_end_date IS NULL THEN NULL
+        ELSE GREATEST(v_active_membership.end_date, v_end_date)
+      END,
+      total_amount = COALESCE(v_active_membership.total_amount, 0) + v_total_amount,
+      currency = COALESCE(v_plan.currency, v_active_membership.currency, 'PEN'),
+      notes = CASE
+        WHEN NULLIF(btrim(p_notes), '') IS NULL THEN v_active_membership.notes
+        ELSE concat_ws(' | ', NULLIF(btrim(v_active_membership.notes), ''), NULLIF(btrim(p_notes), ''))
+      END,
+      sold_by_profile_id = v_actor_id,
+      updated_at = now()
+    WHERE id = v_active_membership.id
+    RETURNING id, classes_remaining INTO v_membership_id, v_balance_after;
 
-  INSERT INTO public.student_credit_ledger (
-    student_id,
-    student_membership_id,
-    movement_type,
-    delta,
-    balance_after,
-    reason,
-    performed_by_profile_id,
-    created_at
-  )
-  VALUES (
-    p_student_id,
-    v_membership_id,
-    'membership_activation',
-    v_plan.classes_included,
-    v_plan.classes_included,
-    format('Activacion de plan %s', v_plan.name),
-    v_actor_id,
-    now()
-  );
+    INSERT INTO public.student_credit_ledger (
+      student_id,
+      student_membership_id,
+      movement_type,
+      delta,
+      balance_after,
+      reason,
+      performed_by_profile_id,
+      created_at
+    )
+    VALUES (
+      p_student_id,
+      v_membership_id,
+      'membership_renewal',
+      v_plan.classes_included,
+      v_balance_after,
+      format('Renovacion de plan %s', v_plan.name),
+      v_actor_id,
+      now()
+    );
+  ELSE
+    INSERT INTO public.student_memberships (
+      student_id,
+      membership_plan_id,
+      custom_name,
+      classes_total,
+      classes_used,
+      classes_remaining,
+      start_date,
+      end_date,
+      status,
+      total_amount,
+      currency,
+      notes,
+      sold_by_profile_id,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      p_student_id,
+      v_plan.id,
+      v_plan.name,
+      v_plan.classes_included,
+      0,
+      v_plan.classes_included,
+      v_start_date,
+      v_end_date,
+      'active',
+      v_total_amount,
+      COALESCE(v_plan.currency, 'PEN'),
+      NULLIF(btrim(p_notes), ''),
+      v_actor_id,
+      now(),
+      now()
+    )
+    RETURNING id, classes_remaining INTO v_membership_id, v_balance_after;
+
+    INSERT INTO public.student_credit_ledger (
+      student_id,
+      student_membership_id,
+      movement_type,
+      delta,
+      balance_after,
+      reason,
+      performed_by_profile_id,
+      created_at
+    )
+    VALUES (
+      p_student_id,
+      v_membership_id,
+      'membership_activation',
+      v_plan.classes_included,
+      v_balance_after,
+      format('Activacion de plan %s', v_plan.name),
+      v_actor_id,
+      now()
+    );
+  END IF;
 
   IF v_payment_amount IS NOT NULL THEN
     INSERT INTO public.student_membership_payments (
@@ -2984,8 +3035,14 @@ BEGIN
       END,
       0,
       NULL,
-      'Pago inicial registrado al vender la membresia',
-      'admin_assignment',
+      CASE
+        WHEN v_active_membership IS NOT NULL THEN 'Pago registrado al renovar la membresia'
+        ELSE 'Pago inicial registrado al vender la membresia'
+      END,
+      CASE
+        WHEN v_active_membership IS NOT NULL THEN 'admin_renewal'
+        ELSE 'admin_assignment'
+      END,
       v_actor_id,
       now()
     );
@@ -2998,7 +3055,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_assign_membership_plan(uuid, uuid, date, numeric, numeric, text) TO authenticated;
 
 COMMENT ON FUNCTION public.admin_assign_membership_plan(uuid, uuid, date, numeric, numeric, text) IS
-  'Vende o renueva una membresia V2 para un alumno, cierra cualquier membresia activa previa y registra ledger inicial y pago opcional.';
+  'Vende o renueva una membresia V2 para un alumno. Si ya existe una activa, acumula nuevas clases sobre la misma membresia y registra ledger/pago en ese mismo registro.';
 
 
 
