@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
+import { hasBookingDayCutoffPassed } from '@/lib/utils/bookingCutoff'
 
 type Row = {
   booking_id: string
@@ -17,6 +18,7 @@ type Row = {
   bow_poundage: number | null
   start_at: string
   end_at: string
+  booking_day_cutoff_at: string | null
 }
 
 function labelBowUsage(row: Row) {
@@ -133,7 +135,10 @@ export default function MisReservasPage() {
             const start = new Date(row.start_at)
             const end = new Date(row.end_at)
             const cancelable = row.status === 'reserved' && start.getTime() > Date.now() + (4 * 60 * 60 * 1000)
-            const editable = row.status === 'reserved' && start.getTime() > Date.now() + (12 * 60 * 60 * 1000)
+            const editable =
+              row.status === 'reserved' &&
+              start.getTime() > Date.now() &&
+              !hasBookingDayCutoffPassed(row.booking_day_cutoff_at)
 
             return (
               <div key={row.booking_id} className={`card p-4 ${style.card}`}>

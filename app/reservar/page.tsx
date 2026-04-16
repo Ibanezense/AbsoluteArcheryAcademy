@@ -8,6 +8,11 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { useStudentClassCards } from '@/lib/hooks/useStudentClassCards'
 import { ClassCardsBoard } from '@/components/ui/ClassCardsBoard'
 import { useToast } from '@/components/ui/ToastProvider'
+import {
+  buildBookingCutoffByDay,
+  getBookingDayKey,
+  hasBookingDayCutoffPassed,
+} from '@/lib/utils/bookingCutoff'
 
 type StudentBookingProfile = {
   has_own_bow: boolean
@@ -153,9 +158,21 @@ export default function ReservarPage() {
   const sessionsOfSelected = useMemo(() => {
     return sessions.filter(session => sameYMD(new Date(session.start_at), selected))
   }, [sessions, selected])
+  const bookingCutoffByDay = useMemo(() => buildBookingCutoffByDay(sessions), [sessions])
 
   async function reservar(sessionId: string) {
     if (!activeStudentId) return
+
+    const session = sessions.find((row) => row.session_id === sessionId)
+    const bookingDayCutoffAt = session ? bookingCutoffByDay[getBookingDayKey(session.start_at)] : null
+
+    if (hasBookingDayCutoffPassed(bookingDayCutoffAt)) {
+      toast.push({
+        message: 'Las reservas para este dia se cerraron 2 horas antes del primer turno.',
+        type: 'error',
+      })
+      return
+    }
 
     try {
       setBooking(true)
@@ -321,11 +338,14 @@ export default function ReservarPage() {
             const end = new Date(session.end_at)
             const spots = session.spots_for_student
             const isPast = start.getTime() <= Date.now()
+            const bookingDayCutoffAt = bookingCutoffByDay[getBookingDayKey(session.start_at)]
+            const isDayClosed = hasBookingDayCutoffPassed(bookingDayCutoffAt)
             const disabled =
               session.status !== 'scheduled' ||
               session.already_reserved ||
               spots <= 0 ||
               isPast ||
+              isDayClosed ||
               cannotBook ||
               booking
 
@@ -349,11 +369,15 @@ export default function ReservarPage() {
                   <p className={`text-sm ${spots > 0 ? 'text-success' : 'text-textsec'}`}>
                     {session.status === 'cancelled'
                       ? 'Cancelado'
-                      : session.already_reserved
-                        ? 'Ya reservado'
-                        : spots > 0
-                          ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
-                          : 'Completo'}
+                      : isPast
+                        ? 'Turno iniciado'
+                        : isDayClosed
+                          ? 'Reservas cerradas para este dia'
+                          : session.already_reserved
+                            ? 'Ya reservado'
+                            : spots > 0
+                              ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
+                              : 'Completo'}
                   </p>
                   <p className="text-xs text-textsec mt-1">
                     {session.distance_m} m · {usageLabel}

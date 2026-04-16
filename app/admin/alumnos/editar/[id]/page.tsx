@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ImagePlus, KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
@@ -7,6 +8,7 @@ import AdminGuard from '@/components/AdminGuard'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
+import { studentKeys } from '@/lib/queries/studentQueries'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
 
@@ -86,6 +88,7 @@ function buildAccountMode(hasStudentAccess: boolean, hasGuardianAccess: boolean)
 }
 
 export default function AdminAlumnoEditorPage() {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
   const isNew = id === 'new'
@@ -277,11 +280,16 @@ export default function AdminAlumnoEditorPage() {
       })
 
       if (isNew && result.student_id) {
+        await queryClient.invalidateQueries({ queryKey: studentKeys.all })
         router.replace(`/admin/alumnos/${result.student_id}`)
         return
       }
 
-      detailQuery.refetch()
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: studentKeys.detail(id) }),
+        detailQuery.refetch(),
+      ])
     } catch (error: any) {
       toast.push({ message: error.message || 'No se pudo guardar el alumno.', type: 'error' })
     } finally {

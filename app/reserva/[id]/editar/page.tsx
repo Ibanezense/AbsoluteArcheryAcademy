@@ -8,6 +8,11 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { useStudentClassCards } from '@/lib/hooks/useStudentClassCards'
 import { ClassCardsBoard } from '@/components/ui/ClassCardsBoard'
 import { useToast } from '@/components/ui/ToastProvider'
+import {
+  buildBookingCutoffByDay,
+  getBookingDayKey,
+  hasBookingDayCutoffPassed,
+} from '@/lib/utils/bookingCutoff'
 
 type StudentBookingProfile = {
   has_own_bow: boolean
@@ -29,6 +34,19 @@ type AvailableSessionRow = {
   bow_capacity: number | null
   bow_reserved: number | null
   spots_for_student: number
+}
+
+type BookingDetail = {
+  booking_id: string
+  student_id: string
+  status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
+  group_type: string | null
+  distance_m: number | null
+  bow_usage_type: 'shared_inventory' | 'assigned' | 'own' | null
+  bow_poundage: number | null
+  start_at: string
+  end_at: string
+  booking_day_cutoff_at: string | null
 }
 
 function sameYMD(a: Date, b: Date) {
@@ -57,7 +75,7 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
   const [bookingProfile, setBookingProfile] = useState<StudentBookingProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [booking, setBooking] = useState(false)
-  const [originalBooking, setOriginalBooking] = useState<any>(null)
+  const [originalBooking, setOriginalBooking] = useState<BookingDetail | null>(null)
 
   const {
     account,
@@ -111,7 +129,7 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
         if (bError) throw bError
         if (!bData || bData.length === 0) throw new Error('Reserva no encontrada')
 
-        const bookingDetail = bData[0]
+        const bookingDetail = bData[0] as BookingDetail
         setOriginalBooking(bookingDetail)
         if (bookingDetail.student_id !== activeStudentId) {
           throw new Error('Esta reserva no pertenece al alumno activo.')
@@ -165,9 +183,30 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
   const sessionsOfSelected = useMemo(() => {
     return sessions.filter(session => sameYMD(new Date(session.start_at), selected))
   }, [sessions, selected])
+  const bookingCutoffByDay = useMemo(() => buildBookingCutoffByDay(sessions), [sessions])
+  const isOriginalDayClosed = hasBookingDayCutoffPassed(originalBooking?.booking_day_cutoff_at)
 
   async function editarReserva(newSessionId: string) {
     if (!activeStudentId || !originalBooking) return
+
+    if (isOriginalDayClosed) {
+      toast.push({
+        message: 'Los cambios para el dia de esta reserva se cerraron 2 horas antes del primer turno.',
+        type: 'error',
+      })
+      return
+    }
+
+    const newSession = sessions.find((row) => row.session_id === newSessionId)
+    const bookingDayCutoffAt = newSession ? bookingCutoffByDay[getBookingDayKey(newSession.start_at)] : null
+
+    if (hasBookingDayCutoffPassed(bookingDayCutoffAt)) {
+      toast.push({
+        message: 'Los cambios para este dia se cerraron 2 horas antes del primer turno.',
+        type: 'error',
+      })
+      return
+    }
 
     try {
       setBooking(true)
@@ -233,6 +272,11 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
           <p className="font-medium">
             {new Date(originalBooking.start_at).toLocaleDateString()} · {new Date(originalBooking.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </p>
+          {isOriginalDayClosed && (
+            <p className="mt-2 text-sm text-warning">
+              Los cambios para el dia de esta reserva ya se cerraron.
+            </p>
+          )}
         </div>
       )}
 
@@ -345,11 +389,15 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
             const end = new Date(session.end_at)
             const spots = session.spots_for_student
             const isPast = start.getTime() <= Date.now()
+            const bookingDayCutoffAt = bookingCutoffByDay[getBookingDayKey(session.start_at)]
+            const isDayClosed = hasBookingDayCutoffPassed(bookingDayCutoffAt)
             const disabled =
               session.status !== 'scheduled' ||
               session.already_reserved ||
               spots <= 0 ||
               isPast ||
+              isOriginalDayClosed ||
+              isDayClosed ||
               cannotBook ||
               booking
 
@@ -373,11 +421,15 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
                   <p className={`text-sm ${spots > 0 ? 'text-success' : 'text-textsec'}`}>
                     {session.status === 'cancelled'
                       ? 'Cancelado'
-                      : session.already_reserved
-                        ? 'Ya reservado'
-                        : spots > 0
-                          ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
-                          : 'Completo'}
+                      : isPast
+                        ? 'Turno iniciado'
+                        : isOriginalDayClosed || isDayClosed
+                          ? 'Cambios cerrados para este dia'
+                          : session.already_reserved
+                            ? 'Ya reservado'
+                            : spots > 0
+                              ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
+                              : 'Completo'}
                   </p>
                   <p className="text-xs text-textsec mt-1">
                     {session.distance_m} m · {usageLabel}

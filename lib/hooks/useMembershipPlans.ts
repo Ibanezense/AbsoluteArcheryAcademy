@@ -24,7 +24,6 @@ export type AdminStudentMembership = {
   total_amount: number
   currency: string
   created_at: string
-  updated_at: string
   student: {
     id: string
     full_name: string
@@ -70,14 +69,13 @@ export function useRecentStudentMemberships() {
           total_amount,
           currency,
           created_at,
-          updated_at,
           student:students (
             id,
             full_name,
             avatar_url
           )
         `)
-        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(12)
 
       if (error) throw error
@@ -93,7 +91,6 @@ export function useRecentStudentMemberships() {
         total_amount: row.total_amount,
         currency: row.currency,
         created_at: row.created_at,
-        updated_at: row.updated_at,
         student: Array.isArray(row.student) ? row.student[0] || null : row.student || null,
       }))
     },
