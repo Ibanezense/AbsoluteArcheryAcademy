@@ -93,7 +93,7 @@ export default function AsistenciaPage() {
   }
 
   const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Se cancelara esta reserva y se devolvera la clase al alumno. Continuar?')) {
+    if (!confirm('Se cancelara esta reserva pendiente. Como reservar ya no consume clases, no se ajustara el saldo. Continuar?')) {
       return
     }
 

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  checkAccessCodeLoginRateLimit,
+  recordAccessCodeLoginAttempt,
+} from '@/lib/security/accessCodeRateLimit'
 
 function normalizeAccessCode(value: unknown) {
   if (typeof value !== 'string') return ''
@@ -46,6 +50,24 @@ export async function POST(req: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
+    const rateLimit = await checkAccessCodeLoginRateLimit(admin, {
+      request: req,
+      accessCode,
+      secret: serviceKey,
+    })
+
+    if (rateLimit.blocked) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos fallidos. Intenta nuevamente en unos minutos.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimit.retryAfterSeconds),
+          },
+        },
+      )
+    }
+
     const { data: profile, error: profileError } = await admin
       .from('profiles')
       .select('id, role, full_name, is_active')
@@ -60,6 +82,12 @@ export async function POST(req: Request) {
     }
 
     if (!profile) {
+      await recordAccessCodeLoginAttempt(admin, {
+        request: req,
+        accessCode,
+        secret: serviceKey,
+        success: false,
+      })
       return NextResponse.json(
         { error: 'Codigo no reconocido.' },
         { status: 401 }
@@ -67,6 +95,12 @@ export async function POST(req: Request) {
     }
 
     if (profile.is_active === false) {
+      await recordAccessCodeLoginAttempt(admin, {
+        request: req,
+        accessCode,
+        secret: serviceKey,
+        success: false,
+      })
       return NextResponse.json(
         { error: 'Esta cuenta esta inactiva. Contacta al administrador.' },
         { status: 403 }
@@ -100,11 +134,24 @@ export async function POST(req: Request) {
     })
 
     if (verifyError || !authData.session) {
+      await recordAccessCodeLoginAttempt(admin, {
+        request: req,
+        accessCode,
+        secret: serviceKey,
+        success: false,
+      })
       return NextResponse.json(
         { error: verifyError?.message || 'No se pudo abrir la sesion.' },
         { status: 500 }
       )
     }
+
+    await recordAccessCodeLoginAttempt(admin, {
+      request: req,
+      accessCode,
+      secret: serviceKey,
+      success: true,
+    })
 
     return NextResponse.json({
       role: profile.role,

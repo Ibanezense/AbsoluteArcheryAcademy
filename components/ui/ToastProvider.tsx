@@ -3,7 +3,6 @@ import React, { createContext, useCallback, useContext, useState } from 'react'
 type Toast = { id: string; message: string; type?: 'info' | 'error' | 'success' }
 
 const ToastsContext = createContext<{
-  toasts: Toast[]
   push: (t: Omit<Toast, 'id'>) => void
   remove: (id: string) => void
 } | null>(null)
@@ -19,9 +18,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const remove = useCallback((id: string) => setToasts(s => s.filter(x => x.id !== id)), [])
+  const value = React.useMemo(() => ({ push, remove }), [push, remove])
 
   return (
-    <ToastsContext.Provider value={{ toasts, push, remove }}>
+    <ToastsContext.Provider value={value}>
       {children}
       <div aria-live="polite" className="fixed right-4 top-4 flex flex-col gap-2 z-50">
         {toasts.map(t => (
@@ -45,7 +45,7 @@ export function useToast() {
       }
     }
     return { push: ctx.push, remove: ctx.remove }
-  }, [ctx?.push, ctx?.remove])
+  }, [ctx])
 }
 
 export default ToastProvider

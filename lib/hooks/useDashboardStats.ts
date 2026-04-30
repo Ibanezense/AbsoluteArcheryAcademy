@@ -104,95 +104,6 @@ export function normalizeDashboardStats(parsedData: Partial<DashboardStatsRpc> |
   }
 }
 
-export function applyDashboardStatsFallback(
-  statsFromRpc: DashboardStatsRpc,
-  fallbackStats: Partial<DashboardStats> | null | undefined,
-): DashboardStatsRpc {
-  if (!fallbackStats) {
-    return statsFromRpc
-  }
-
-  return {
-    ...statsFromRpc,
-    ...fallbackStats,
-  }
-}
-
-function normalizeLevel(value: string | null | undefined) {
-  return (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
-async function loadDashboardKpiFallback(): Promise<Partial<DashboardStats>> {
-  const fallback: Partial<DashboardStats> = {}
-
-  const { data: studentsData, error: studentsError } = await supabase
-    .from('students')
-    .select('level, is_active, is_country_club_tiabaya_member')
-    .eq('is_active', true)
-
-  if (!studentsError && Array.isArray(studentsData)) {
-    let principiantes = 0
-    let desarrollo = 0
-    let avanzados = 0
-    let competitivos = 0
-    let cctActivos = 0
-
-    for (const row of studentsData) {
-      if ((row as any)?.is_country_club_tiabaya_member === true) {
-        cctActivos += 1
-      }
-      const normalized = normalizeLevel((row as any)?.level)
-      if (!normalized) continue
-      if (normalized.includes('competit')) {
-        competitivos += 1
-      } else if (normalized.includes('avanzad')) {
-        avanzados += 1
-      } else if (normalized.includes('desarroll')) {
-        desarrollo += 1
-      } else if (normalized.includes('princip')) {
-        principiantes += 1
-      }
-    }
-
-    fallback.alumnos_principiantes = principiantes
-    fallback.alumnos_en_desarrollo = desarrollo
-    fallback.alumnos_avanzados = avanzados
-    fallback.alumnos_competitivos = competitivos
-    fallback.alumnos_cct_activos = cctActivos
-  }
-
-  // Fallback solo para no dejar la card vacia si la RPC vieja aun no trae este KPI.
-  const { data: introRows, error: introError } = await supabase
-    .from('bookings')
-    .select('intro_client_id, status, sessions!inner(start_at)')
-    .not('intro_client_id', 'is', null)
-    .in('status', ['reserved', 'attended', 'no_show'])
-
-  if (!introError && Array.isArray(introRows)) {
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-
-    const count = introRows.reduce((acc, row: any) => {
-      const sessionStartRaw = Array.isArray(row.sessions)
-        ? row.sessions[0]?.start_at
-        : row.sessions?.start_at
-      if (!sessionStartRaw) return acc
-      const sessionStart = new Date(sessionStartRaw)
-      if (sessionStart >= monthStart && sessionStart < monthEnd) return acc + 1
-      return acc
-    }, 0)
-
-    fallback.clases_prueba_mes_actual = count
-  }
-
-  return fallback
-}
-
 export function useDashboardStats() {
   const [stats, setStats] = useState<DashboardStats>(initialState)
   const [isLoading, setIsLoading] = useState(true)
@@ -208,22 +119,7 @@ export function useDashboardStats() {
       
       // La RPC devuelve el JSON, puede venir como string o como objeto
       const parsedData = typeof data === 'string' ? JSON.parse(data) : data
-      const statsFromRpc = normalizeDashboardStats(parsedData as Partial<DashboardStatsRpc>)
-      const needsCctFallback = typeof (parsedData as any)?.alumnos_cct_activos !== 'number'
-
-      const hasNewKpis =
-        typeof (parsedData as any)?.clases_prueba_mes_actual === 'number' &&
-        typeof (parsedData as any)?.alumnos_principiantes === 'number' &&
-        typeof (parsedData as any)?.alumnos_en_desarrollo === 'number' &&
-        typeof (parsedData as any)?.alumnos_avanzados === 'number' &&
-        typeof (parsedData as any)?.alumnos_competitivos === 'number'
-
-      if (!hasNewKpis || needsCctFallback) {
-        const fallbackStats = await loadDashboardKpiFallback()
-        setStats(applyDashboardStatsFallback(statsFromRpc, fallbackStats))
-      } else {
-        setStats(statsFromRpc)
-      }
+      setStats(normalizeDashboardStats(parsedData as Partial<DashboardStatsRpc>))
     } catch (err) {
       console.error('Error en useDashboardStats:', err)
       setError(err instanceof Error ? err.message : 'Error al cargar estadísticas')

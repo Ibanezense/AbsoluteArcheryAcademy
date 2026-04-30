@@ -1,5 +1,7 @@
 "use client"
 
+import Image from 'next/image'
+
 interface AvatarProps {
   name: string
   url?: string | null
@@ -16,9 +18,12 @@ const sizeClasses = {
 export default function Avatar({ name, url, size = 'md', className = '' }: AvatarProps) {
   if (url) {
     return (
-      <img
+      <Image
         src={url}
         alt={name}
+        width={64}
+        height={64}
+        unoptimized
         className={`${sizeClasses[size]} rounded-full object-cover ${className}`}
       />
     )

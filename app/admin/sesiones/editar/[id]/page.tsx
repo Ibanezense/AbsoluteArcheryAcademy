@@ -90,7 +90,7 @@ export default function EditarSesionPage() {
     }
 
     loadSession()
-  }, [id, isNew]) // Removed toast to avoid any potential loops
+  }, [id, isNew, toast])
 
   const totalSlots = useMemo(
     () => Object.values(distanceCaps).reduce((sum, value) => sum + (value * 4), 0),

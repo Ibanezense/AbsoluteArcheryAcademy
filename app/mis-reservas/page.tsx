@@ -8,6 +8,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { hasBookingDayCutoffPassed } from '@/lib/utils/bookingCutoff'
+import { canStudentCancelBooking } from '@/lib/utils/bookingCancellation'
 
 type Row = {
   booking_id: string
@@ -134,7 +135,7 @@ export default function MisReservasPage() {
             const style = statusStyle[row.status]
             const start = new Date(row.start_at)
             const end = new Date(row.end_at)
-            const cancelable = row.status === 'reserved' && start.getTime() > Date.now() + (4 * 60 * 60 * 1000)
+            const cancelable = canStudentCancelBooking(row)
             const editable =
               row.status === 'reserved' &&
               start.getTime() > Date.now() &&

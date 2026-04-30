@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { ReactNode } from 'react'
 import StudentBottomNav from '@/components/StudentBottomNav'
+import MembershipRenewalPrompt from '@/components/MembershipRenewalPrompt'
 
 export default function LayoutWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -20,9 +21,10 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
   // Vista estudiante: contenedor móvil centrado
   return (
     <>
-      <main className="mx-auto w-full max-w-[430px] px-4 pb-[96px] pt-5">
+      <main className="mx-auto w-full max-w-[430px] px-4 pb-[96px] pt-5 sm:max-w-2xl lg:max-w-4xl">
         {children}
       </main>
+      {showStudentNav && <MembershipRenewalPrompt />}
       {showStudentNav && <StudentBottomNav />}
     </>
   )

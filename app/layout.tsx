@@ -1,7 +1,8 @@
 import './globals.css'
 import Providers from '@/components/Providers'
+import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar'
 import LayoutWrapper from './LayoutWrapper'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Poppins } from 'next/font/google'
 
 const inter = Inter({
@@ -18,8 +19,15 @@ const poppins = Poppins({
 })
 
 export const metadata: Metadata = {
+  applicationName: 'Absolute Archery Academy',
   title: 'Absolute Archery Academy',
   description: 'Panel de control de la academia',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Absolute Archery',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: [
       { url: '/favicon.ico', type: 'image/x-icon' },
@@ -30,11 +38,16 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: '#F97316',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
       <body className={`${inter.variable} ${poppins.variable} bg-bg text-textpri`}>
         <Providers>
+          <ServiceWorkerRegistrar />
           <LayoutWrapper>
             {children}
           </LayoutWrapper>
