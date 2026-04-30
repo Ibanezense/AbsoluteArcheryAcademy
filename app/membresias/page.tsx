@@ -12,6 +12,7 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
+import { openMembershipRenewalPrompt } from '@/lib/utils/membershipRenewal'
 
 export default function MembresiasPage() {
     const router = useRouter()
@@ -61,6 +62,7 @@ export default function MembresiasPage() {
     const classes = dashboard.classes_remaining ?? 0
     const classesStatus: 'normal' | 'low' | 'empty' =
         classes === 0 ? 'empty' : classes <= 2 ? 'low' : 'normal'
+    const canRenewMembership = isExpired && classes <= 0
 
     return (
         <AuthGuard>
@@ -74,6 +76,8 @@ export default function MembresiasPage() {
                     isExpired={isExpired}
                     isExpiringSoon={isExpiringSoon}
                     daysUntilExpiry={daysUntilExpiry}
+                    canRenew={canRenewMembership}
+                    onRenew={openMembershipRenewalPrompt}
                 />
 
                 <div className="grid grid-cols-1 gap-3">

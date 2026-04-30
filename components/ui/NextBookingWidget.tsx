@@ -1,10 +1,38 @@
 'use client'
 
+import { useState } from 'react'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
+import { useToast } from '@/components/ui/ToastProvider'
+import { supabase } from '@/lib/supabaseClient'
+import { canStudentCancelBooking } from '@/lib/utils/bookingCancellation'
 import dayjs from 'dayjs'
 
 export function NextBookingWidget({ studentId }: { studentId?: string | null }) {
-  const { booking, isLoading, error } = useNextBooking(studentId)
+  const { booking, isLoading, error, refetch } = useNextBooking(studentId)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const toast = useToast()
+
+  async function handleCancelBooking() {
+    if (!booking?.booking_id) return
+    if (!confirm('Estas seguro que deseas cancelar esta reserva?')) return
+
+    try {
+      setIsCancelling(true)
+
+      const { error: cancelError } = await supabase.rpc('cancel_booking', {
+        p_booking: booking.booking_id,
+      })
+
+      if (cancelError) throw cancelError
+
+      toast.push({ message: 'Reserva cancelada correctamente.', type: 'info' })
+      await refetch()
+    } catch (cancelError: any) {
+      toast.push({ message: cancelError?.message || 'No se pudo cancelar la reserva.', type: 'error' })
+    } finally {
+      setIsCancelling(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -39,6 +67,10 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
   let dateLabel = date.format('dddd, D [de] MMMM')
   if (isToday) dateLabel = 'Hoy'
   if (isTomorrow) dateLabel = 'Manana'
+  const isCancelable = !!booking.booking_id && !!booking.end_at && canStudentCancelBooking({
+    status: booking.status || 'reserved',
+    end_at: booking.end_at,
+  })
 
   return (
     <div className="w-full p-5 bg-gradient-to-br from-card to-accent/5">
@@ -69,6 +101,19 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
           </div>
         )}
       </div>
+
+      {isCancelable && (
+        <div className="mt-4 border-t border-line/60 pt-4">
+          <button
+            type="button"
+            onClick={handleCancelBooking}
+            disabled={isCancelling}
+            className="btn-outline w-full justify-center text-sm"
+          >
+            {isCancelling ? 'Cancelando...' : 'Cancelar reserva'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

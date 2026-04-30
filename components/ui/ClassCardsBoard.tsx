@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import type { StudentClassCard } from '@/lib/hooks/useStudentClassCards'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
+import { canStudentCancelBooking } from '@/lib/utils/bookingCancellation'
 
 type Props = {
   cards: StudentClassCard[]
@@ -194,12 +195,9 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
             return entry
           }
 
-          const nextRemaining = Math.max((entry.classes_remaining ?? 0) - 1, 0)
-
           if (entry.card_index === card.card_index) {
             return {
               ...entry,
-              classes_remaining: nextRemaining,
               card_status: 'reserved',
               booking_id: data?.id || null,
               session_id: selectedSession.session_id,
@@ -212,7 +210,6 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
 
           return {
             ...entry,
-            classes_remaining: nextRemaining,
           }
         })
       )
@@ -236,7 +233,7 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
   async function handleCancelBooking(card: StudentClassCard) {
     if (!studentId || !card.booking_id) return
 
-    if (!confirm('¿Estás seguro que deseas cancelar tu turno para poder elegir otro? La clase se devolverá a tus clases disponibles.')) return
+    if (!confirm('Estas seguro que deseas cancelar tu turno para poder elegir otro?')) return
 
     try {
       const key = cardKey(card)
@@ -248,13 +245,12 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
 
       if (cancelError) throw cancelError
 
-      // Devolver la UI al estado local disponible y clase + 1 (evitando recargar la DB completa)
+      // Devolver la UI al estado local disponible evitando recargar la DB completa.
       setLocalCards((current) =>
         current.map((entry) => {
           if (entry.card_index === card.card_index && entry.student_membership_id === card.student_membership_id) {
             return {
               ...entry,
-              classes_remaining: (entry.classes_remaining ?? 0) + 1,
               card_status: 'available',
               booking_id: null,
               session_id: null,
@@ -267,7 +263,6 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
           if (entry.student_membership_id === card.student_membership_id) {
             return {
               ...entry,
-              classes_remaining: (entry.classes_remaining ?? 0) + 1,
             }
           }
           return entry
@@ -351,7 +346,10 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
           const selectedSession = sessionsForDate.find((session) => session.session_id === selectedSessionId) || null
           const selectedSessionIsBookable = !!selectedSession && isSessionBookable(selectedSession)
 
-          const editable = card.card_status === 'reserved' && dayjs(card.start_at).isAfter(dayjs().add(12, 'hour'))
+          const editable = !!card.end_at && canStudentCancelBooking({
+            status: card.card_status,
+            end_at: card.end_at,
+          })
 
           return (
             <div

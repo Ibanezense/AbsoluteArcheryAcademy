@@ -65,7 +65,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       >
         <div className="border-b border-line px-6 py-5">
           <Image
-            src="/aa-academy-logo.png"
+            src="/aa-academy-logo-720.png"
             alt="Absolute Archery Academy"
             width={180}
             height={48}

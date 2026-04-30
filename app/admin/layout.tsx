@@ -28,7 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex items-center justify-between">
             <div>
               <Image
-                src="/aa-academy-logo.png"
+                src="/aa-academy-logo-720.png"
                 alt="Absolute Archery Academy"
                 width={140}
                 height={36}

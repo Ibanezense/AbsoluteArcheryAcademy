@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { normalizeBooleanValue } from './route-helpers'
 
 const mockCreateClient = vi.hoisted(() => vi.fn())
@@ -11,10 +11,15 @@ describe('POST /api/admin/create-student', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('persists the CCT affiliation flag on the student insert payload', async () => {

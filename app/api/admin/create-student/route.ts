@@ -558,6 +558,7 @@ async function handleCreate(req: Request) {
 
   const { admin, actorId } = auth
   const createdUserIds: string[] = []
+  let createdStudentId: string | null = null
   let stage = 'create:init'
 
   try {
@@ -621,6 +622,7 @@ async function handleCreate(req: Request) {
     if (studentInsertError || !insertedStudent) {
       throw new Error(studentInsertError?.message || 'No se pudo crear el alumno.')
     }
+    createdStudentId = insertedStudent.id
 
     if (guardianProfileId) {
       stage = 'create:link-guardian'
@@ -643,6 +645,16 @@ async function handleCreate(req: Request) {
       guardian_reused: guardianReused,
     })
   } catch (error: any) {
+    if (createdStudentId) {
+      try {
+        await auth.admin
+          .from('students')
+          .delete()
+          .eq('id', createdStudentId)
+      } catch {
+        // Best-effort cleanup; preserve the original creation error below.
+      }
+    }
     await Promise.all(createdUserIds.map((userId) => auth.admin.auth.admin.deleteUser(userId).catch(() => undefined)))
     console.error('admin-create-student error', { stage, error })
 

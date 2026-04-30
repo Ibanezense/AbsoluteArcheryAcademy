@@ -29,7 +29,7 @@ export interface AdminStudent {
   membership_type: string
   membership_start: string
   membership_end: string
-  status: 'active' | 'expired' | 'no_classes'
+  status: 'active' | 'expired' | 'no_classes' | 'no_membership' | 'inactive'
   distance_m?: number | null
   bow_poundage?: number | null
   has_own_bow?: boolean
@@ -41,6 +41,25 @@ export function useAdminStudents() {
   return useQuery({
     queryKey: ['admin-students'],
     queryFn: async () => {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_quick_booking_students')
+
+      if (!rpcError) {
+        return ((rpcData || []) as any[]).map((student) => ({
+          id: student.id,
+          full_name: student.full_name,
+          avatar_url: student.avatar_url,
+          classes_remaining: student.classes_remaining || 0,
+          membership_type: student.membership_type || '',
+          membership_start: student.membership_start || '',
+          membership_end: student.membership_end || '',
+          status: student.status || 'no_membership',
+          distance_m: student.distance_m,
+          bow_poundage: student.bow_poundage,
+          has_own_bow: student.has_own_bow,
+          assigned_bow: student.assigned_bow,
+        })) as AdminStudent[]
+      }
+
       const { data, error } = await supabase
         .from('students')
         .select(`
@@ -66,23 +85,19 @@ export function useAdminStudents() {
       if (error) throw error
       
       return (data || []).map((student: any) => {
-        const now = new Date()
         const memberships = [...(student.student_memberships || [])].sort((left, right) =>
           new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
         )
         const activeMembership =
           memberships.find((membership: any) => membership.status === 'active') || memberships[0] || null
-        const membershipEnd = activeMembership?.end_date ? new Date(activeMembership.end_date) : null
-        const isExpired = membershipEnd && membershipEnd < now
-        const hasClasses = (activeMembership?.classes_remaining || 0) > 0
         
-        let status: 'active' | 'expired' | 'no_classes'
+        let status: AdminStudent['status']
         if (!student.is_active) {
-          status = 'expired'
-        } else if (!hasClasses) {
+          status = 'inactive'
+        } else if (!activeMembership) {
+          status = 'no_membership'
+        } else if ((activeMembership.classes_remaining || 0) <= 0) {
           status = 'no_classes'
-        } else if (isExpired) {
-          status = 'expired'
         } else {
           status = 'active'
         }

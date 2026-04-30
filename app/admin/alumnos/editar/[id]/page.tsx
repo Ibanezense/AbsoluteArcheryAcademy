@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ImagePlus, KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
 import AdminGuard from '@/components/AdminGuard'
@@ -347,7 +348,14 @@ export default function AdminAlumnoEditorPage() {
                     <div className="flex flex-col items-center gap-3">
                       <div className="h-24 w-24 overflow-hidden rounded-full bg-white/10">
                         {studentForm.avatar_url ? (
-                          <img src={studentForm.avatar_url} alt={studentForm.full_name || 'Alumno'} className="h-full w-full object-cover" />
+                          <Image
+                            src={studentForm.avatar_url}
+                            alt={studentForm.full_name || 'Alumno'}
+                            width={96}
+                            height={96}
+                            unoptimized
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
                           <div className="grid h-full w-full place-items-center text-xs text-textsec">Sin foto</div>
                         )}

@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabaseClient'
 export type NextBooking = {
   booking_id?: string
   start_at: string
+  end_at?: string
+  status?: string
   distance_m: number | null
 }
 
