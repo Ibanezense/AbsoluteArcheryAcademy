@@ -14,7 +14,7 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import dayjs from 'dayjs'
 
-export default function HomePage() {
+function StudentHomeContent() {
   const router = useRouter()
   const {
     account,
@@ -80,18 +80,16 @@ export default function HomePage() {
   // Si por alguna razón el activeStudentId no carga, pero sabemos que la cuenta terminó de cargar
   if (account?.role === 'guardian' && !activeStudentId && students.length > 1) {
     return (
-      <AuthGuard>
-        <div className="min-h-screen bg-bg text-textpri flex items-center justify-center">
-          <div className="card p-8 text-center max-w-md">
-            <p className="text-textsec mb-4">
-              Selecciona un hijo en el hub para ver su informacion.
-            </p>
-            <Link href="/hub" className="btn inline-flex justify-center">
-              Ir al hub
-            </Link>
-          </div>
+      <div className="min-h-screen bg-bg text-textpri flex items-center justify-center">
+        <div className="card p-8 text-center max-w-md">
+          <p className="text-textsec mb-4">
+            Selecciona un hijo en el hub para ver su informacion.
+          </p>
+          <Link href="/hub" className="btn inline-flex justify-center">
+            Ir al hub
+          </Link>
         </div>
-      </AuthGuard>
+      </div>
     )
   }
 
@@ -111,20 +109,19 @@ export default function HomePage() {
 
 
   return (
-    <AuthGuard>
-      <div className="min-h-screen bg-bg text-textpri">
-        <div className="mx-auto w-full max-w-screen-2xl px-0 sm:px-4 lg:px-8 py-6 pb-24 space-y-5">
-          {account?.role === 'guardian' && activeStudent && students.length > 1 && (
-            <div className="card p-4 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-textsec">Viendo alumno</p>
-                <p className="font-medium truncate max-w-[150px] sm:max-w-[200px]">{activeStudent.full_name}</p>
-              </div>
-              <Link href="/hub" className="btn-outline text-xs px-3">
-                Cambiar
-              </Link>
+    <div className="min-h-screen bg-bg text-textpri">
+      <div className="mx-auto w-full max-w-screen-2xl px-0 sm:px-4 lg:px-8 py-6 pb-24 space-y-5">
+        {account?.role === 'guardian' && activeStudent && students.length > 1 && (
+          <div className="card p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-textsec">Viendo alumno</p>
+              <p className="font-medium truncate max-w-[150px] sm:max-w-[200px]">{activeStudent.full_name}</p>
             </div>
-          )}
+            <Link href="/hub" className="btn-outline text-xs px-3">
+              Cambiar
+            </Link>
+          </div>
+        )}
 
           {/* Perfil del Alumno - Estilo App Nativa / Social */}
           <div className="w-full bg-card rounded-2xl shadow-soft border border-line overflow-hidden relative pb-6">
@@ -242,8 +239,15 @@ export default function HomePage() {
               <NextBookingWidget studentId={activeStudentId} />
             </div>
           </div>
-        </div>
       </div>
+    </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <AuthGuard>
+      <StudentHomeContent />
     </AuthGuard>
   )
 }
