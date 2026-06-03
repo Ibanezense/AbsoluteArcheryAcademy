@@ -23,7 +23,6 @@ import {
   type IntroClassType,
   type IntroPaymentStatus,
   type IntroSessionGroup,
-  type IntroWeekendData,
 } from '@/lib/services/IntroClassesService'
 import RegisterIntroModal from './components/RegisterIntroModal'
 
@@ -148,11 +147,8 @@ function Badge({ children, className }: { children: ReactNode; className: string
   )
 }
 
-function flattenWeekendData(data: IntroWeekendData | null): IntroClientRow[] {
-  if (!data) return []
-
-  return [data.saturday, data.sunday]
-    .flatMap((day) => day.sessions)
+function flattenIntroSessions(data: IntroSessionGroup[]): IntroClientRow[] {
+  return data
     .flatMap((session) =>
       session.clients.map((client) => ({
         ...client,
@@ -603,26 +599,21 @@ function IntroErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function IntroClient() {
-  const [weekendData, setWeekendData] = useState<IntroWeekendData | null>(null)
+  const [sessions, setSessions] = useState<IntroSessionGroup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<IntroClientRow | null>(null)
   const [filters, setFilters] = useState<IntroFiltersState>(initialFilters)
 
-  const sessions = useMemo(() => {
-    if (!weekendData) return []
-    return [weekendData.saturday.sessions, weekendData.sunday.sessions].flat()
-  }, [weekendData])
-
-  const clients = useMemo(() => flattenWeekendData(weekendData), [weekendData])
+  const clients = useMemo(() => flattenIntroSessions(sessions), [sessions])
 
   const fetchData = async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await IntroClassesService.getIntrosByWeekend()
-      setWeekendData(result)
+      const result = await IntroClassesService.getUpcomingIntroSchedule()
+      setSessions(result)
     } catch (err: any) {
       console.error(err)
       setError(err?.message || 'No pudimos cargar las clases intro.')

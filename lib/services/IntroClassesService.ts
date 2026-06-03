@@ -63,6 +63,118 @@ export type IntroWeekendData = {
 };
 
 export class IntroClassesService {
+    private static async fetchIntroSchedule({
+        startAt,
+        endAt,
+    }: {
+        startAt: string;
+        endAt: string;
+    }): Promise<IntroSessionGroup[]> {
+        const { data: sessionsData, error: sessionsError } = await supabase
+            .from('sessions')
+            .select(`
+                id, start_at, end_at,
+                session_distance_allocations ( distance_m, slot_capacity, targets )
+            `)
+            .gte('start_at', startAt)
+            .lte('start_at', endAt)
+            .order('start_at', { ascending: true });
+
+        if (sessionsError) throw sessionsError;
+
+        const sessionIds = (sessionsData || []).map((session) => session.id);
+
+        let allBookings: any[] = [];
+        if (sessionIds.length > 0) {
+            const { data: bookingsData, error: bookingsError } = await supabase
+                .from('bookings')
+                .select('id, session_id, intro_client_id, status, distance_m')
+                .in('session_id', sessionIds)
+                .in('status', ['reserved', 'attended', 'no_show']);
+
+            if (bookingsError) throw bookingsError;
+            allBookings = bookingsData || [];
+        }
+
+        const introClientIds = allBookings
+            .filter((booking) => booking.intro_client_id)
+            .map((booking) => booking.intro_client_id);
+
+        let introClientsMap: Record<string, any> = {};
+        if (introClientIds.length > 0) {
+            const { data: introClientsData, error: introClientsError } = await supabase
+                .from('intro_clients')
+                .select('id, full_name, age, phone')
+                .in('id', introClientIds);
+
+            if (introClientsError) throw introClientsError;
+            (introClientsData || []).forEach((client) => {
+                introClientsMap[client.id] = client;
+            });
+        }
+
+        let introPaymentsMap: Record<string, any> = {};
+        if (introClientIds.length > 0) {
+            const { data: paymentData, error: paymentError } = await supabase
+                .from('intro_payments')
+                .select('intro_client_id, amount, payment_method, paid_at, intro_class_type, payment_status, courtesy_reason')
+                .in('intro_client_id', introClientIds)
+                .order('paid_at', { ascending: false });
+
+            if (paymentError) throw paymentError;
+            (paymentData || []).forEach((payment) => {
+                if (!introPaymentsMap[payment.intro_client_id]) {
+                    introPaymentsMap[payment.intro_client_id] = payment;
+                }
+            });
+        }
+
+        return (sessionsData || []).map((session: any) => {
+            const allocation = Array.isArray(session.session_distance_allocations)
+                ? session.session_distance_allocations.find((item: any) => item.distance_m === 10)
+                : session.session_distance_allocations?.distance_m === 10
+                    ? session.session_distance_allocations
+                    : null;
+
+            const slotCapacity = allocation?.slot_capacity || (allocation?.targets ? allocation.targets * 4 : 0);
+            const capacity = slotCapacity === 0 ? 12 : slotCapacity;
+            const sessionBookings = allBookings.filter((booking) => booking.session_id === session.id);
+            const bookedTotal = sessionBookings.filter((booking) => booking.distance_m === 10).length;
+
+            const clients = sessionBookings
+                .filter((booking) => booking.intro_client_id)
+                .map((booking) => {
+                    const client = introClientsMap[booking.intro_client_id];
+                    const payment = introPaymentsMap[booking.intro_client_id];
+
+                    return client ? {
+                        booking_id: booking.id,
+                        intro_client_id: booking.intro_client_id,
+                        full_name: client.full_name,
+                        age: client.age,
+                        phone: client.phone,
+                        booking_status: booking.status,
+                        intro_class_type: payment?.intro_class_type || (Number(payment?.amount || 0) > 0 ? 'paid' : 'free'),
+                        payment_status: payment?.payment_status || (Number(payment?.amount || 0) > 0 ? 'paid' : 'not_applicable'),
+                        amount_paid: payment ? Number(payment.amount || 0) : null,
+                        payment_method: payment?.payment_method || null,
+                        paid_at: payment?.paid_at || null,
+                        courtesy_reason: payment?.courtesy_reason || null,
+                    } : null;
+                })
+                .filter(Boolean) as IntroSessionGroup['clients'];
+
+            return {
+                session_id: session.id,
+                start_at: session.start_at,
+                end_at: session.end_at,
+                capacity,
+                booked_total: bookedTotal,
+                clients,
+            };
+        });
+    }
+
     static async getIntrosByWeekend(): Promise<IntroWeekendData> {
         const now = new Date();
         const dayOfWeek = now.getDay();
@@ -86,121 +198,29 @@ export class IntroClassesService {
         const satEnd = new Date(new Date(satDate).setHours(23, 59, 59, 999)).toISOString();
         const sunStart = new Date(sunDate.setHours(0, 0, 0, 0)).toISOString();
         const sunEnd = new Date(new Date(sunDate).setHours(23, 59, 59, 999)).toISOString();
+        const sessions = await this.fetchIntroSchedule({ startAt: satStart, endAt: sunEnd });
 
-        const { data: sessionsData, error: sessionsError } = await supabase
-            .from('sessions')
-            .select(`
-                id, start_at, end_at,
-                session_distance_allocations ( distance_m, slot_capacity, targets )
-            `)
-            .gte('start_at', satStart)
-            .lte('start_at', sunEnd)
-            .order('start_at', { ascending: true });
-
-        if (sessionsError) throw sessionsError;
-
-        const sessionIds = (sessionsData || []).map(s => s.id);
-
-        let allBookings: any[] = [];
-        if (sessionIds.length > 0) {
-            const { data: bkData, error: bkErr } = await supabase
-                .from('bookings')
-                .select('id, session_id, intro_client_id, status, distance_m')
-                .in('session_id', sessionIds)
-                .in('status', ['reserved', 'attended', 'no_show']);
-
-            if (bkErr) throw bkErr;
-            allBookings = bkData || [];
-        }
-
-        const introBookingIds = allBookings
-            .filter(b => b.intro_client_id)
-            .map(b => b.intro_client_id);
-
-        let introClientsMap: Record<string, any> = {};
-        if (introBookingIds.length > 0) {
-            const { data: icData, error: icErr } = await supabase
-                .from('intro_clients')
-                .select('id, full_name, age, phone')
-                .in('id', introBookingIds);
-
-            if (icErr) throw icErr;
-            (icData || []).forEach(c => { introClientsMap[c.id] = c; });
-        }
-
-        let introPaymentsMap: Record<string, any> = {};
-        if (introBookingIds.length > 0) {
-            const { data: paymentData, error: paymentError } = await supabase
-                .from('intro_payments')
-                .select('intro_client_id, amount, payment_method, paid_at, intro_class_type, payment_status, courtesy_reason')
-                .in('intro_client_id', introBookingIds)
-                .order('paid_at', { ascending: false });
-
-            if (paymentError) throw paymentError;
-            (paymentData || []).forEach(payment => {
-                if (!introPaymentsMap[payment.intro_client_id]) {
-                    introPaymentsMap[payment.intro_client_id] = payment;
-                }
-            });
-        }
-
-        const buildGroup = (session: any): IntroSessionGroup => {
-            const alloc = Array.isArray(session.session_distance_allocations)
-                ? session.session_distance_allocations.find((a: any) => a.distance_m === 10)
-                : session.session_distance_allocations?.distance_m === 10
-                    ? session.session_distance_allocations
-                    : null;
-
-            const slotCapacity = alloc?.slot_capacity || (alloc?.targets ? alloc.targets * 4 : 0);
-            const capacity = slotCapacity === 0 ? 12 : slotCapacity;
-
-            const sessionBookings = allBookings.filter(b => b.session_id === session.id);
-            const bookedTotal = sessionBookings.filter(b => b.distance_m === 10).length;
-
-            const introClients = sessionBookings
-                .filter(b => b.intro_client_id)
-                .map(b => {
-                    const client = introClientsMap[b.intro_client_id];
-                    const payment = introPaymentsMap[b.intro_client_id];
-                    return client ? {
-                        booking_id: b.id,
-                        intro_client_id: b.intro_client_id,
-                        full_name: client.full_name,
-                        age: client.age,
-                        phone: client.phone,
-                        booking_status: b.status,
-                        intro_class_type: payment?.intro_class_type || (Number(payment?.amount || 0) > 0 ? 'paid' : 'free'),
-                        payment_status: payment?.payment_status || (Number(payment?.amount || 0) > 0 ? 'paid' : 'not_applicable'),
-                        amount_paid: payment ? Number(payment.amount || 0) : null,
-                        payment_method: payment?.payment_method || null,
-                        paid_at: payment?.paid_at || null,
-                        courtesy_reason: payment?.courtesy_reason || null,
-                    } : null;
-                })
-                .filter(Boolean) as IntroSessionGroup['clients'];
-
-            return {
-                session_id: session.id,
-                start_at: session.start_at,
-                end_at: session.end_at,
-                capacity,
-                booked_total: bookedTotal,
-                clients: introClients,
-            };
-        };
-
-        const satSessions = (sessionsData || [])
-            .filter(s => s.start_at >= satStart && s.start_at <= satEnd)
-            .map(buildGroup);
-
-        const sunSessions = (sessionsData || [])
-            .filter(s => s.start_at >= sunStart && s.start_at <= sunEnd)
-            .map(buildGroup);
+        const satSessions = sessions.filter((session) => session.start_at >= satStart && session.start_at <= satEnd);
+        const sunSessions = sessions.filter((session) => session.start_at >= sunStart && session.start_at <= sunEnd);
 
         return {
             saturday: { date: satStart.split('T')[0], sessions: satSessions },
             sunday: { date: sunStart.split('T')[0], sessions: sunSessions },
         };
+    }
+
+    static async getUpcomingIntroSchedule(daysAhead: number = 31): Promise<IntroSessionGroup[]> {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+
+        const end = new Date(start);
+        end.setDate(end.getDate() + daysAhead);
+        end.setHours(23, 59, 59, 999);
+
+        return this.fetchIntroSchedule({
+            startAt: start.toISOString(),
+            endAt: end.toISOString(),
+        });
     }
 
     static async getUpcomingIntros(): Promise<IntroClientRecord[]> {
