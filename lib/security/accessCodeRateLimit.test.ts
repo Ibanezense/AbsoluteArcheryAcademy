@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ACCESS_CODE_LOGIN_MAX_FAILURES,
   checkAccessCodeLoginRateLimit,
   getClientIp,
   hashRateLimitValue,
   recordAccessCodeLoginAttempt,
+  resetInMemoryAccessCodeRateLimitForTests,
 } from './accessCodeRateLimit'
 
 function createSelectClient(count: number | null, error: { message: string } | null = null) {
@@ -23,6 +24,10 @@ function createSelectClient(count: number | null, error: { message: string } | n
 }
 
 describe('access code login rate limiting', () => {
+  beforeEach(() => {
+    resetInMemoryAccessCodeRateLimitForTests()
+  })
+
   it('uses the first forwarded IP address', () => {
     const request = new Request('http://localhost/api/auth/access-code/login', {
       headers: {
@@ -62,18 +67,32 @@ describe('access code login rate limiting', () => {
     expect(gte).toHaveBeenCalledWith('attempted_at', '2026-04-30T09:45:00.000Z')
   })
 
-  it('fails open if the persistence table is unavailable', async () => {
+  it('uses a process-local fallback if persistence is unavailable', async () => {
     const { client } = createSelectClient(null, { message: 'relation does not exist' })
+    const request = new Request('http://localhost/api/auth/access-code/login', {
+      headers: { 'x-real-ip': '203.0.113.30' },
+    })
+
+    for (let attempt = 0; attempt < ACCESS_CODE_LOGIN_MAX_FAILURES; attempt += 1) {
+      await recordAccessCodeLoginAttempt(client, {
+        request,
+        accessCode: 'ABC123',
+        secret: 'test-secret',
+        success: false,
+        now: new Date('2026-04-30T10:00:00.000Z'),
+      })
+    }
 
     const result = await checkAccessCodeLoginRateLimit(client, {
-      request: new Request('http://localhost/api/auth/access-code/login'),
+      request,
       accessCode: 'ABC123',
       secret: 'test-secret',
       now: new Date('2026-04-30T10:00:00.000Z'),
     })
 
-    expect(result.blocked).toBe(false)
-    expect(result.failureCount).toBe(0)
+    expect(result.blocked).toBe(true)
+    expect(result.failureCount).toBe(ACCESS_CODE_LOGIN_MAX_FAILURES)
+    expect(result.retryAfterSeconds).toBe(900)
   })
 
   it('records login attempts with hashed IP and access code values', async () => {

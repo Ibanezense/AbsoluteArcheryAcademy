@@ -1,11 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import dayjs from 'dayjs'
+import { CalendarPlus, ChevronRight, Target } from 'lucide-react'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useToast } from '@/components/ui/ToastProvider'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StudentCard } from '@/components/student/StudentCard'
 import { supabase } from '@/lib/supabaseClient'
 import { canStudentCancelBooking } from '@/lib/utils/bookingCancellation'
-import dayjs from 'dayjs'
 
 export function NextBookingWidget({ studentId }: { studentId?: string | null }) {
   const { booking, isLoading, error, refetch } = useNextBooking(studentId)
@@ -14,7 +18,7 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
 
   async function handleCancelBooking() {
     if (!booking?.booking_id) return
-    if (!confirm('Estas seguro que deseas cancelar esta reserva?')) return
+    if (!confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.')) return
 
     try {
       setIsCancelling(true)
@@ -36,84 +40,79 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
 
   if (isLoading) {
     return (
-      <div className="w-full p-5 animate-pulse bg-card">
-        <div className="h-6 bg-line rounded w-1/3 mb-4"></div>
-        <div className="h-4 bg-line rounded w-2/3"></div>
-      </div>
+      <StudentCard className="p-5">
+        <div className="animate-pulse space-y-4">
+          <div className="h-5 w-36 rounded-full bg-line" />
+          <div className="h-4 w-56 rounded-full bg-line" />
+          <div className="h-11 w-40 rounded-xl bg-line" />
+        </div>
+      </StudentCard>
     )
   }
 
   if (error) {
     return (
-      <div className="w-full p-5 border-l-4 border-danger bg-danger/5">
-        <p className="text-danger text-sm font-medium">{error}</p>
-      </div>
+      <StudentCard variant="danger" className="p-5">
+        <p className="text-sm font-medium text-danger">{error}</p>
+      </StudentCard>
     )
   }
 
   if (!booking) {
     return (
-      <div className="w-full p-5 bg-card flex flex-col items-center justify-center text-center py-8">
-        <h3 className="font-semibold text-lg mb-1">Sin reservas</h3>
-        <p className="text-sm text-textsec">No hay reservas programadas próximamente</p>
-      </div>
+      <StudentCard className="relative overflow-hidden p-5">
+        <Target className="absolute -left-3 top-5 h-28 w-28 text-slate-200" strokeWidth={1.2} />
+        <div className="relative ml-24 space-y-3">
+          <h3 className="text-base font-black">Aún no tienes reservas</h3>
+          <p className="text-sm font-medium text-textsec">Reserva tu próxima clase y sigue mejorando.</p>
+          <Link href="/reservar" className="btn-outline btn-sm border-accent/40 text-accent">
+            <CalendarPlus className="h-5 w-5" />
+            Reservar ahora
+          </Link>
+        </div>
+      </StudentCard>
     )
   }
 
   const date = dayjs(booking.start_at)
-  const isToday = date.isSame(dayjs(), 'day')
-  const isTomorrow = date.isSame(dayjs().add(1, 'day'), 'day')
-
-  let dateLabel = date.format('dddd, D [de] MMMM')
-  if (isToday) dateLabel = 'Hoy'
-  if (isTomorrow) dateLabel = 'Manana'
-  const isCancelable = !!booking.booking_id && !!booking.end_at && canStudentCancelBooking({
+  const isCancelable = !!booking.booking_id && !!booking.start_at && canStudentCancelBooking({
     status: booking.status || 'reserved',
-    end_at: booking.end_at,
+    start_at: booking.start_at,
   })
 
   return (
-    <div className="w-full p-5 bg-gradient-to-br from-card to-accent/5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
-            <span className="font-semibold text-sm">{date.format('D')}</span>
-          </div>
-          <div>
-            <h3 className="font-semibold text-base text-textpri leading-tight">Proxima Reserva</h3>
-            <span className="text-xs text-textsec capitalize">{date.format('dddd, MMMM YYYY')}</span>
-          </div>
+    <StudentCard className="overflow-hidden p-4">
+      <div className="flex items-center gap-4">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-orange-50 text-accent">
+          <CalendarPlus className="h-7 w-7" />
         </div>
-        <span className="text-[11px] px-2.5 py-1 rounded-full bg-accent text-white font-medium uppercase tracking-wider">
-          {dateLabel}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-line/60">
-        <div>
-          <span className="text-xs text-textsec block mb-0.5">Hora:</span>
-          <span className="font-medium text-sm">{date.format('HH:mm')}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-black tracking-[-0.03em]">{date.format('ddd, D MMM YYYY')}</p>
+          <p className="truncate text-sm font-medium text-textsec">
+            {date.format('HH:mm')}
+            {booking.distance_m ? ` · ${booking.distance_m}m` : ''}
+          </p>
         </div>
-        {booking.distance_m && (
-          <div>
-            <span className="text-xs text-textsec block mb-0.5">Distancia:</span>
-            <span className="font-medium text-sm">{booking.distance_m}m</span>
-          </div>
+        <StatusBadge status={booking.status || 'reserved'} />
+        {booking.booking_id && (
+          <Link href={`/reserva/${booking.booking_id}`} aria-label="Ver detalle">
+            <ChevronRight className="h-6 w-6 text-textsec" />
+          </Link>
         )}
       </div>
 
       {isCancelable && (
-        <div className="mt-4 border-t border-line/60 pt-4">
+        <div className="mt-4 border-t border-line pt-4">
           <button
             type="button"
             onClick={handleCancelBooking}
             disabled={isCancelling}
-            className="btn-outline w-full justify-center text-sm"
+            className="btn-outline min-h-[44px] w-full justify-center text-sm"
           >
             {isCancelling ? 'Cancelando...' : 'Cancelar reserva'}
           </button>
         </div>
       )}
-    </div>
+    </StudentCard>
   )
 }

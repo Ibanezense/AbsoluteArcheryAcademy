@@ -13,7 +13,14 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   }
 
   if (!isAdmin) {
-    return null
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="rounded-2xl border border-line bg-card p-6 text-center shadow-card">
+          <p className="font-semibold text-textpri">Acceso administrativo requerido</p>
+          <p className="mt-2 text-sm text-textsec">Redirigiendo a tu area correspondiente...</p>
+        </div>
+      </div>
+    )
   }
 
   return <>{children}</>

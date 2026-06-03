@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, ImagePlus, KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
-import AdminGuard from '@/components/AdminGuard'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
@@ -299,8 +298,7 @@ export default function AdminAlumnoEditorPage() {
   }
 
   return (
-    <AdminGuard>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-start gap-3">
@@ -682,7 +680,6 @@ export default function AdminAlumnoEditorPage() {
             </div>
           </>
         )}
-      </div>
-    </AdminGuard>
+    </div>
   )
 }

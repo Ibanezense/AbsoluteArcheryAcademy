@@ -1,6 +1,6 @@
 type BookingCancellationState = {
   status: string
-  end_at: string
+  start_at: string
 }
 
 export function canStudentCancelBooking(
@@ -8,5 +8,5 @@ export function canStudentCancelBooking(
   now: Date = new Date(),
 ) {
   if (booking.status !== 'reserved') return false
-  return new Date(booking.end_at).getTime() > now.getTime()
+  return new Date(booking.start_at).getTime() >= now.getTime()
 }

@@ -1,6 +1,13 @@
 import React, { createContext, useCallback, useContext, useState } from 'react'
 
-type ConfirmOptions = { title?: string; description?: string }
+type ConfirmTone = 'default' | 'warning' | 'danger'
+type ConfirmOptions = {
+  title?: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  tone?: ConfirmTone
+}
 
 const ConfirmContext = createContext<{
   confirm: (message: string, opts?: ConfirmOptions) => Promise<boolean>
@@ -20,18 +27,44 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setState(null)
   }, [state])
 
+  const confirmButtonClass =
+    state?.opts?.tone === 'warning'
+      ? 'bg-warning text-black hover:brightness-110'
+      : state?.opts?.tone === 'danger'
+        ? 'bg-danger text-white hover:brightness-110'
+        : 'bg-accent text-black hover:brightness-110'
+
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       {state && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => handle(false)} />
-          <div className="bg-white rounded p-4 z-10 max-w-md w-full shadow">
-            <h3 className="font-medium text-lg">{state.opts?.title ?? 'Confirmar'}</h3>
-            <p className="mt-2 text-sm text-textsec">{state.message}</p>
-            <div className="mt-4 flex gap-2 justify-end">
-              <button onClick={() => handle(false)} className="px-3 py-1 rounded border">Cancelar</button>
-              <button onClick={() => handle(true)} className="px-3 py-1 rounded bg-red-600 text-white">Aceptar</button>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => handle(false)} />
+          <div className="z-10 mx-4 w-full max-w-lg rounded-2xl border border-line bg-card p-5 shadow-card">
+            <h3 className="text-lg font-semibold text-textpri">{state.opts?.title ?? 'Confirmar'}</h3>
+            <p className="mt-3 whitespace-pre-line rounded-xl border border-line bg-bg/70 p-4 text-sm leading-6 text-textpri">
+              {state.message}
+            </p>
+            {state.opts?.description && (
+              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-textsec">
+                {state.opts.description}
+              </p>
+            )}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => handle(false)}
+                className="rounded-xl border border-line px-4 py-2 text-sm font-medium text-textsec transition hover:text-textpri"
+              >
+                {state.opts?.cancelLabel ?? 'Cancelar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handle(true)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${confirmButtonClass}`}
+              >
+                {state.opts?.confirmLabel ?? 'Aceptar'}
+              </button>
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  Bell,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -24,9 +25,9 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import AdminGuard from '@/components/AdminGuard'
 import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalRequests'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
+import { AdminDonutChart, AdminMiniBarChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { Modal } from '@/components/ui/Modal'
 import {
   useAdminDashboardData,
@@ -132,13 +133,6 @@ function statusClasses(status: AdminDashboardAgendaItem['status']) {
   }
 }
 
-function severityClasses(count: number) {
-  const severity = getAlertSeverity(count)
-  if (severity === 'critical') return 'border-danger/30 bg-danger/5 text-danger'
-  if (severity === 'warning') return 'border-warning/30 bg-warning/5 text-warning'
-  return 'border-line bg-card text-textsec'
-}
-
 function whatsappHref(phone?: string | null) {
   const digits = (phone || '').replace(/\D/g, '')
   if (!digits) return null
@@ -148,15 +142,48 @@ function whatsappHref(phone?: string | null) {
 
 function SectionHeader({ title, helper }: { title: string; helper?: string }) {
   return (
-    <div className="flex items-end justify-between gap-3">
-      <div>
-        <h2 className="text-lg font-semibold text-textpri">{title}</h2>
-        {helper && <p className="mt-0.5 text-sm text-textsec">{helper}</p>}
-      </div>
+    <div className="flex flex-wrap items-center gap-3">
+      <h2 className="text-lg font-bold tracking-[-0.02em] text-slate-950">{title}</h2>
+      {helper && (
+        <>
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <p className="text-sm text-slate-500">{helper}</p>
+        </>
+      )}
     </div>
   )
 }
 
+function AdminSurface({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <section className={`rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] ${className}`}>
+      {children}
+    </section>
+  )
+}
+
+function IconBadge({ icon, tone = 'orange' }: { icon: ReactNode; tone?: 'orange' | 'green' | 'blue' | 'red' | 'amber' | 'teal' | 'purple' }) {
+  const toneClass =
+    tone === 'green'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-600'
+      : tone === 'blue'
+        ? 'border-blue-200 bg-blue-50 text-blue-600'
+        : tone === 'red'
+          ? 'border-rose-200 bg-rose-50 text-rose-600'
+          : tone === 'amber'
+            ? 'border-amber-200 bg-amber-50 text-amber-600'
+            : tone === 'teal'
+              ? 'border-teal-200 bg-teal-50 text-teal-600'
+              : tone === 'purple'
+                ? 'border-violet-200 bg-violet-50 text-violet-600'
+                : 'border-orange-200 bg-orange-50 text-accent'
+
+  return (
+    <div className={`grid h-11 w-11 place-items-center rounded-2xl border ${toneClass}`}>
+      {icon}
+    </div>
+  )
+}
 function StudentSearchBox() {
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
@@ -165,16 +192,16 @@ function StudentSearchBox() {
 
   return (
     <div className="relative w-full lg:max-w-md">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-textsec" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder="Buscar alumno, DNI o telefono..."
-        className="input h-11 pl-9 pr-3 text-sm"
+        className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 shadow-[0_10px_30px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
       />
 
       {showResults && (
-        <div className="absolute left-0 right-0 top-12 z-20 max-h-80 overflow-y-auto rounded-xl border border-line bg-card shadow-soft">
+        <div className="absolute left-0 right-0 top-14 z-20 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.16)]">
           {resultsQuery.isLoading && (
             <div className="flex items-center gap-2 px-4 py-3 text-sm text-textsec">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -232,25 +259,29 @@ function TodayCard({
 }) {
   const toneClass =
     tone === 'critical'
-      ? 'border-danger/30 bg-danger/5'
+      ? 'border-rose-200 bg-rose-50/80'
       : tone === 'warning'
-        ? 'border-warning/30 bg-warning/5'
-        : 'border-line bg-card'
+        ? 'border-amber-200 bg-amber-50/80'
+        : 'border-slate-200 bg-white'
+  const iconTone = tone === 'critical' ? 'red' : tone === 'warning' ? 'amber' : 'orange'
 
   return (
-    <article className={`rounded-xl border p-4 shadow-card ${toneClass}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-textsec">{title}</p>
-          <p className="mt-2 text-3xl font-bold text-textpri">{value}</p>
-          <p className="mt-1 text-xs text-textsec">{helper}</p>
-        </div>
-        <div className="rounded-lg border border-line bg-white p-2 text-accent">{icon}</div>
+    <article className={`group relative overflow-hidden rounded-2xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.1)] ${toneClass}`}>
+      <Link href={href} aria-label={action} className="absolute inset-0 z-10" />
+      <div className="relative flex items-start justify-between gap-3">
+        <IconBadge icon={icon} tone={iconTone} />
+        <ArrowRight className="mt-3 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-accent" />
       </div>
-      <Link href={href} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-accent">
-        {action}
-        <ArrowRight className="h-3.5 w-3.5" />
-      </Link>
+      <div className="relative mt-4">
+        <p className="text-sm font-semibold text-slate-700">{title}</p>
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <p className="font-heading text-4xl font-black leading-none tracking-[-0.05em] text-slate-950">{value}</p>
+          <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500 sm:inline-flex">
+            Hoy
+          </span>
+        </div>
+        <p className="mt-2 max-w-[12rem] text-xs leading-5 text-slate-500">{helper}</p>
+      </div>
     </article>
   )
 }
@@ -269,19 +300,31 @@ function AlertTask({
   href: string
 }) {
   const numericCount = count ?? 0
+  const isCritical = getAlertSeverity(numericCount) === 'critical'
+  const isWarning = getAlertSeverity(numericCount) === 'warning'
+  const toneClass = isCritical
+    ? 'border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50'
+    : isWarning
+      ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50'
+      : 'border-slate-200 bg-white'
+  const badgeClass = isCritical
+    ? 'bg-rose-500 text-white'
+    : isWarning
+      ? 'bg-amber-400 text-slate-950'
+      : 'bg-slate-100 text-slate-700'
 
   return (
-    <article className={`rounded-xl border p-4 ${severityClasses(numericCount)}`}>
+    <article className={`rounded-2xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-textpri">{title}</p>
-          <p className="mt-1 text-xs text-textsec">{description}</p>
+          <p className="max-w-[11rem] text-sm font-bold leading-5 text-slate-950">{title}</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
         </div>
-        <span className="rounded-full bg-white px-2.5 py-1 text-sm font-bold text-textpri shadow-card">
+        <span className={`rounded-xl px-3 py-1.5 text-sm font-black shadow-card ${badgeClass}`}>
           {count === null ? 'N/D' : count}
         </span>
       </div>
-      <Link href={href} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent">
+      <Link href={href} className="mt-7 inline-flex items-center gap-1 text-sm font-bold text-accent">
         {action}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -300,17 +343,84 @@ function MonthlyMetric({
   helper: string
   icon: ReactNode
 }) {
+  const tone =
+    title.includes('activos')
+      ? 'green'
+      : title.includes('Nuevos')
+        ? 'blue'
+        : title.includes('Conversion')
+          ? 'teal'
+          : title.includes('Facturacion')
+            ? 'orange'
+            : title.includes('Ocupacion')
+              ? 'blue'
+              : 'purple'
+
   return (
-    <article className="rounded-xl border border-line bg-card p-4 shadow-card">
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.055)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm text-textsec">{title}</p>
-          <p className="mt-2 text-2xl font-bold text-textpri">{value}</p>
+          <p className="max-w-[8rem] text-sm font-semibold leading-5 text-slate-700">{title}</p>
+          <p className="mt-3 font-heading text-3xl font-black tracking-[-0.045em] text-slate-950">{value}</p>
         </div>
-        <div className="rounded-lg border border-line bg-slate-50 p-2 text-textsec">{icon}</div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-500">{icon}</div>
       </div>
-      <p className="mt-3 border-t border-line pt-2 text-xs text-textsec">{helper}</p>
+      <div className="mt-4 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+        <p className="text-xs leading-4 text-slate-500">{helper}</p>
+        <AdminMiniBarChart
+          tone={tone as 'orange' | 'green' | 'blue' | 'purple' | 'teal'}
+          data={[16, 22, 18, 28, 24, 30, 26].map((item, index) => ({ name: `${index + 1}`, value: item }))}
+        />
+      </div>
     </article>
+  )
+}
+
+function StudentsLevelDistribution({
+  levels,
+}: {
+  levels: {
+    beginner: number
+    developing: number
+    advanced: number
+    competitive: number
+  }
+}) {
+  const data = [
+    { name: 'Principiantes', code: 'P1', value: levels.beginner, color: '#2563eb' },
+    { name: 'En desarrollo', code: 'D2', value: levels.developing, color: '#14b8a6' },
+    { name: 'Avanzados', code: 'A3', value: levels.advanced, color: '#f97316' },
+    { name: 'Competitivos', code: 'C4', value: levels.competitive, color: '#8b5cf6' },
+  ]
+  const total = data.reduce((sum, item) => sum + item.value, 0)
+
+  return (
+    <AdminSurface className="p-5">
+      <SectionHeader title="Distribucion de alumnos" helper="Solo alumnos activos." />
+      <div className="mt-5 grid gap-5 sm:grid-cols-[0.9fr_1.1fr] xl:grid-cols-1 2xl:grid-cols-[0.9fr_1.1fr]">
+        <AdminDonutChart data={data} total={total} label="Total" />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+          {data.map((item) => {
+            const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
+            return (
+              <div key={item.name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                    <p className="truncate text-sm font-bold text-slate-950">{item.name}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-500">{item.code}</span>
+                </div>
+                <div className="mt-3 flex items-end justify-between gap-2">
+                  <p className="font-heading text-3xl font-black tracking-[-0.04em] text-slate-950">{item.value}</p>
+                  <p className="text-sm font-black text-accent">{percent}%</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </AdminSurface>
   )
 }
 
@@ -318,7 +428,7 @@ function AgendaItem({ item }: { item: AdminDashboardAgendaItem }) {
   const whatsApp = whatsappHref(item.phone)
 
   return (
-    <div className="rounded-xl border border-line bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="space-y-2">
@@ -387,7 +497,7 @@ function WeeklyAgenda({
   const filteredAgenda = useMemo(() => filterAgendaItems(agenda, filter, today), [agenda, filter, today])
 
   return (
-    <section className="space-y-4">
+    <AdminSurface className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <SectionHeader title="Agenda semanal" helper="Reservas accionables de la semana actual." />
         <div className="flex flex-wrap gap-2">
@@ -397,8 +507,8 @@ function WeeklyAgenda({
               onClick={() => setFilter(item.key)}
               className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                 filter === item.key
-                  ? 'border-accent bg-accent text-white'
-                  : 'border-line bg-white text-textsec hover:text-textpri'
+                  ? 'border-accent bg-accent text-white shadow-[0_10px_25px_rgba(249,115,22,0.22)]'
+                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-950'
               }`}
             >
               {item.label}
@@ -407,10 +517,10 @@ function WeeklyAgenda({
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="mt-5 space-y-3">
         {filteredAgenda.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-line p-6 text-center">
-            <p className="text-sm font-medium text-textpri">No hay reservas para este filtro.</p>
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+            <p className="text-sm font-medium text-slate-950">No hay reservas para este filtro.</p>
             <Link href="/admin/sesiones" className="mt-3 inline-flex text-sm font-semibold text-accent">
               Ver turnos
             </Link>
@@ -419,7 +529,7 @@ function WeeklyAgenda({
           filteredAgenda.map((item) => <AgendaItem key={item.id} item={item} />)
         )}
       </div>
-    </section>
+    </AdminSurface>
   )
 }
 
@@ -429,14 +539,14 @@ function WeeklyOccupancy({
   rows: Array<{ day: string; usedSlots: number; totalSlots: number | null; occupancyRate: number | null }>
 }) {
   return (
-    <section className="card p-5">
+    <AdminSurface className="p-5">
       <SectionHeader
         title="Ocupacion semanal"
         helper="Cupos usados contra capacidad configurada por dia."
       />
 
       {rows.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed border-line p-6 text-center text-sm text-textsec">
+        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
           Todavia no hay suficientes datos para calcular la ocupacion semanal.
         </div>
       ) : (
@@ -467,7 +577,7 @@ function WeeklyOccupancy({
             })}
           </div>
 
-          <div className="rounded-xl border border-line bg-slate-50 p-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
             <div className="space-y-2">
               {rows.map((row) => (
                 <div key={row.day} className="flex items-center justify-between text-sm">
@@ -481,7 +591,7 @@ function WeeklyOccupancy({
           </div>
         </div>
       )}
-    </section>
+    </AdminSurface>
   )
 }
 
@@ -493,37 +603,45 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <AdminGuard>
-        <div className="card flex min-h-[420px] items-center justify-center p-8">
-          <div className="flex items-center gap-3 text-textsec">
-            <Loader2 className="h-5 w-5 animate-spin text-accent" />
-            Cargando dashboard administrativo...
-          </div>
+      <div className="flex min-h-[420px] items-center justify-center rounded-[1.5rem] border border-slate-200 bg-white p-8 shadow-[0_20px_55px_rgba(15,23,42,0.06)]">
+        <div className="flex items-center gap-3 text-slate-500">
+          <Loader2 className="h-5 w-5 animate-spin text-accent" />
+          Cargando dashboard administrativo...
         </div>
-      </AdminGuard>
+      </div>
     )
   }
 
   return (
-    <AdminGuard>
-      <div className="space-y-6">
-        <section className="rounded-2xl border border-line bg-card p-4 shadow-card">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-accent">{currentDate}</p>
-              <h1 className="mt-1 text-2xl font-bold text-textpri">Dashboard administrativo</h1>
-              <p className="mt-1 text-sm text-textsec">Operacion diaria, reservas, alumnos y membresias</p>
-            </div>
-
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+    <div className="space-y-7">
+        <AdminPageHeader
+          eyebrow={currentDate}
+          title="Dashboard administrativo"
+          description="Operacion diaria, reservas, alumnos y membresias"
+          actions={
+            <>
               <StudentSearchBox />
-              <button className="btn h-11 shrink-0 px-4 py-2.5" onClick={() => setIsQuickBookingOpen(true)}>
-                <Plus className="h-4 w-4" />
+              <button
+                className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition hover:text-accent"
+                aria-label="Notificaciones"
+              >
+                <Bell className="h-5 w-5" />
+                {dashboard.today.pendingConfirmations > 0 && (
+                  <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-accent px-1 text-xs font-black text-white">
+                    {Math.min(dashboard.today.pendingConfirmations, 9)}
+                  </span>
+                )}
+              </button>
+              <button
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-accent px-5 font-bold text-white shadow-[0_16px_35px_rgba(249,115,22,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
+                onClick={() => setIsQuickBookingOpen(true)}
+              >
+                <Plus className="h-5 w-5" />
                 Reserva rapida
               </button>
-            </div>
-          </div>
-        </section>
+            </>
+          }
+        />
 
         {error && (
           <section className="rounded-xl border border-danger/30 bg-danger/5 p-4">
@@ -680,35 +798,16 @@ export default function AdminDashboard() {
 
           <div className="space-y-6">
             <WeeklyOccupancy rows={dashboard.weeklyOccupancy} />
-
-            <section className="space-y-4">
-              <SectionHeader title="Distribucion de alumnos" helper="Solo alumnos activos." />
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ['Principiantes', 'P1', dashboard.studentsByLevel.beginner],
-                  ['En desarrollo', 'D2', dashboard.studentsByLevel.developing],
-                  ['Avanzados', 'A3', dashboard.studentsByLevel.advanced],
-                  ['Competitivos', 'C4', dashboard.studentsByLevel.competitive],
-                ].map(([label, code, value]) => (
-                  <div key={label} className="rounded-xl border border-line bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-textpri">{label}</p>
-                      <span className="rounded-full bg-white px-2 py-0.5 text-xs text-textsec">{code}</span>
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-textpri">{value}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <StudentsLevelDistribution levels={dashboard.studentsByLevel} />
           </div>
         </div>
 
-        <section className="card p-5">
+        <AdminSurface className="p-5">
           <SectionHeader title="Acciones rapidas" helper="Accesos operativos frecuentes." />
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
             <button
               onClick={() => setIsQuickBookingOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm font-semibold text-accent transition hover:bg-accent/15"
+              className="flex items-center gap-2 rounded-2xl border border-accent bg-accent px-3 py-3 text-sm font-bold text-white shadow-[0_14px_30px_rgba(249,115,22,0.22)] transition hover:-translate-y-0.5"
             >
               <Plus className="h-4 w-4" />
               Nueva reserva
@@ -717,19 +816,18 @@ export default function AdminDashboard() {
               <Link
                 key={action.label}
                 href={action.href}
-                className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-3 text-sm font-semibold text-textpri transition hover:border-accent/30 hover:text-accent"
+                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700 transition hover:-translate-y-0.5 hover:border-accent/30 hover:text-accent"
               >
                 {action.icon}
                 {action.label}
               </Link>
             ))}
           </div>
-        </section>
+        </AdminSurface>
 
         <Modal title="Reserva rapida" isOpen={isQuickBookingOpen} onClose={() => setIsQuickBookingOpen(false)}>
           <AdminQuickBooking />
         </Modal>
-      </div>
-    </AdminGuard>
+    </div>
   )
 }

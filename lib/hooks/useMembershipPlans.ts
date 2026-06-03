@@ -15,14 +15,17 @@ export type MembershipPlan = {
 
 export type AdminStudentMembership = {
   id: string
+  membership_plan_id: string | null
   custom_name: string
   status: string
   classes_total: number
+  classes_used: number
   classes_remaining: number
   start_date: string
   end_date: string | null
   total_amount: number
   currency: string
+  notes: string | null
   created_at: string
   student: {
     id: string
@@ -34,7 +37,48 @@ export type AdminStudentMembership = {
 export const membershipPlanKeys = {
   all: ['membership-plans'] as const,
   list: () => [...membershipPlanKeys.all, 'list'] as const,
+  allMemberships: () => [...membershipPlanKeys.all, 'all-memberships'] as const,
   recentMemberships: () => [...membershipPlanKeys.all, 'recent-memberships'] as const,
+}
+
+const studentMembershipSelect = `
+  id,
+  membership_plan_id,
+  custom_name,
+  status,
+  classes_total,
+  classes_used,
+  classes_remaining,
+  start_date,
+  end_date,
+  total_amount,
+  currency,
+  notes,
+  created_at,
+  student:students (
+    id,
+    full_name,
+    avatar_url
+  )
+`
+
+function mapAdminStudentMembership(row: any): AdminStudentMembership {
+  return {
+    id: row.id,
+    membership_plan_id: row.membership_plan_id,
+    custom_name: row.custom_name,
+    status: row.status,
+    classes_total: row.classes_total,
+    classes_used: row.classes_used,
+    classes_remaining: row.classes_remaining,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    total_amount: row.total_amount,
+    currency: row.currency,
+    notes: row.notes,
+    created_at: row.created_at,
+    student: Array.isArray(row.student) ? row.student[0] || null : row.student || null,
+  }
 }
 
 export function useMembershipPlans() {
@@ -58,41 +102,29 @@ export function useRecentStudentMemberships() {
     queryFn: async (): Promise<AdminStudentMembership[]> => {
       const { data, error } = await supabase
         .from('student_memberships')
-        .select(`
-          id,
-          custom_name,
-          status,
-          classes_total,
-          classes_remaining,
-          start_date,
-          end_date,
-          total_amount,
-          currency,
-          created_at,
-          student:students (
-            id,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select(studentMembershipSelect)
         .order('created_at', { ascending: false })
         .limit(12)
 
       if (error) throw error
 
-      return ((data || []) as any[]).map((row) => ({
-        id: row.id,
-        custom_name: row.custom_name,
-        status: row.status,
-        classes_total: row.classes_total,
-        classes_remaining: row.classes_remaining,
-        start_date: row.start_date,
-        end_date: row.end_date,
-        total_amount: row.total_amount,
-        currency: row.currency,
-        created_at: row.created_at,
-        student: Array.isArray(row.student) ? row.student[0] || null : row.student || null,
-      }))
+      return ((data || []) as any[]).map(mapAdminStudentMembership)
+    },
+  })
+}
+
+export function useAdminStudentMemberships() {
+  return useQuery({
+    queryKey: membershipPlanKeys.allMemberships(),
+    queryFn: async (): Promise<AdminStudentMembership[]> => {
+      const { data, error } = await supabase
+        .from('student_memberships')
+        .select(studentMembershipSelect)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      return ((data || []) as any[]).map(mapAdminStudentMembership)
     },
   })
 }

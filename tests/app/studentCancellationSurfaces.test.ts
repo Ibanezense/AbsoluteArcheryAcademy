@@ -24,4 +24,15 @@ describe('student cancellation surfaces', () => {
     expect(source).toContain("supabase.rpc('cancel_booking'")
     expect(source).toContain('Cancelar reserva')
   })
+
+  it('uses the shared cancelability rule in the booking detail page', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'app', 'reserva', '[id]', 'page.tsx'),
+      'utf8',
+    )
+
+    expect(source).toContain('canStudentCancelBooking')
+    expect(source).not.toContain('4 * 60 * 60 * 1000')
+    expect(source).not.toContain('4 horas antes')
+  })
 })

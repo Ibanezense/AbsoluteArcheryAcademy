@@ -1,18 +1,23 @@
 'use client'
 
 import { useEffect } from 'react'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CalendarPlus, Ticket, MessagesSquare, LogOut } from 'lucide-react'
-import { supabase } from '@/lib/supabaseClient'
+import dayjs from 'dayjs'
+import { CalendarClock, CalendarPlus, ChevronRight, Headphones, Medal, Target, Ticket } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 import Avatar from '@/components/ui/Avatar'
-import { Spinner } from '@/components/ui/Spinner'
 import { NextBookingWidget } from '@/components/ui/NextBookingWidget'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
+import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
+import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
+import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
+import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
+import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
-import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
-import dayjs from 'dayjs'
 
 function StudentHomeContent() {
   const router = useRouter()
@@ -29,8 +34,15 @@ function StudentHomeContent() {
     loading: dashboardLoading,
     error: dashboardError,
   } = useStudentDashboard(activeStudentId)
+  const {
+    bookings: history,
+    isLoading: historyLoading,
+    hasMore: hasMoreHistory,
+    loadMoreBookings,
+  } = useBookingHistory(activeStudentId)
+  const { booking: nextBooking } = useNextBooking(activeStudentId)
 
-  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(dashboard)
+  const { isExpired, isExpiringSoon } = useMembershipExpiry(dashboard)
 
   useEffect(() => {
     if (account?.role === 'admin') {
@@ -39,208 +51,264 @@ function StudentHomeContent() {
   }, [account?.role, router])
 
   useEffect(() => {
-    // Si es tutor y tiene más de 1 alumno, PERO no ha seleccionado uno, forzar hub
     if (account?.role === 'guardian' && students.length > 1 && !activeStudentId) {
       router.replace('/hub')
     }
-    // NOTA: Si es tutor de 1 solo alumno, el context ya autoseleccionó activeStudentId.
   }, [account?.role, students.length, activeStudentId, router])
 
-  const signOut = async () => {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
-
-
+  useEffect(() => {
+    if (activeStudentId && history.length === 0 && !historyLoading && hasMoreHistory) {
+      loadMoreBookings()
+    }
+  }, [activeStudentId, history.length, historyLoading, hasMoreHistory, loadMoreBookings])
 
   const loading = contextLoading || dashboardLoading
   const error = contextError || dashboardError
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <Spinner />
-      </div>
-    )
+    return <StudentPageSkeleton variant="home" />
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="card p-8 text-center max-w-md">
-          <p className="text-danger mb-4">{error}</p>
-          <button className="btn" onClick={() => window.location.reload()}>
+      <div className="grid min-h-screen place-items-center bg-bg px-4">
+        <StudentCard className="w-full p-6 text-center">
+          <p className="mb-4 text-sm font-medium text-danger">{error}</p>
+          <button className="btn w-full" onClick={() => window.location.reload()}>
             Reintentar
           </button>
-        </div>
+        </StudentCard>
       </div>
     )
   }
 
-  // Si por alguna razón el activeStudentId no carga, pero sabemos que la cuenta terminó de cargar
   if (account?.role === 'guardian' && !activeStudentId && students.length > 1) {
     return (
-      <div className="min-h-screen bg-bg text-textpri flex items-center justify-center">
-        <div className="card p-8 text-center max-w-md">
-          <p className="text-textsec mb-4">
-            Selecciona un hijo en el hub para ver su informacion.
-          </p>
-          <Link href="/hub" className="btn inline-flex justify-center">
+      <div className="grid min-h-screen place-items-center bg-bg px-4">
+        <StudentCard className="w-full p-6 text-center">
+          <p className="mb-4 text-sm text-textsec">Selecciona un hijo en el hub para ver su información.</p>
+          <Link href="/hub" className="btn inline-flex w-full justify-center">
             Ir al hub
           </Link>
-        </div>
+        </StudentCard>
       </div>
     )
   }
 
   if (!dashboard) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
-        <div className="card p-8 text-center max-w-md">
-          <p className="text-danger mb-4">No se pudo cargar el resumen del alumno</p>
-          <button className="btn" onClick={() => window.location.reload()}>
+      <div className="grid min-h-screen place-items-center bg-bg px-4">
+        <StudentCard className="w-full p-6 text-center">
+          <p className="mb-4 text-sm font-medium text-danger">No se pudo cargar el resumen del alumno</p>
+          <button className="btn w-full" onClick={() => window.location.reload()}>
             Reintentar
           </button>
-        </div>
+        </StudentCard>
       </div>
     )
   }
 
-
+  const membershipEnd = dashboard.membership_end ? dayjs(dashboard.membership_end) : null
+  const membershipStatus = isExpired ? 'expired' : isExpiringSoon ? 'expiring' : 'active'
+  const nextReservationLabel = nextBooking ? dayjs(nextBooking.start_at).format('D MMM') : 'Sin reserva'
+  const nextReservationDetail = nextBooking ? dayjs(nextBooking.start_at).format('HH:mm') : 'Aún no tienes reservas'
+  const recentHistory = history.slice(0, 4)
 
   return (
-    <div className="min-h-screen bg-bg text-textpri">
-      <div className="mx-auto w-full max-w-screen-2xl px-0 sm:px-4 lg:px-8 py-6 pb-24 space-y-5">
+    <div className="min-h-screen bg-[#F7F8FA] text-textpri">
+      <MobileStudentHeader showLogo />
+
+      <div className="space-y-4 px-4 py-5">
         {account?.role === 'guardian' && activeStudent && students.length > 1 && (
-          <div className="card p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-textsec">Viendo alumno</p>
-              <p className="font-medium truncate max-w-[150px] sm:max-w-[200px]">{activeStudent.full_name}</p>
+          <StudentCard className="flex items-center justify-between gap-4 p-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textsec">Viendo alumno</p>
+              <p className="truncate font-semibold">{activeStudent.full_name}</p>
             </div>
-            <Link href="/hub" className="btn-outline text-xs px-3">
+            <Link href="/hub" className="btn-outline btn-sm shrink-0">
               Cambiar
             </Link>
-          </div>
+          </StudentCard>
         )}
 
-          {/* Perfil del Alumno - Estilo App Nativa / Social */}
-          <div className="w-full bg-card rounded-2xl shadow-soft border border-line overflow-hidden relative pb-6">
-            {/* Banner Background */}
-            <div className="h-32 w-full bg-gradient-to-r from-accent/20 to-accent/5 relative">
-              <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
-              {/* Boton Cerrar Sesion */}
-              <button
-                onClick={signOut}
-                className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/20 text-white backdrop-blur-md border border-white/10 hover:bg-black/40 transition-colors"
-                aria-label="Cerrar sesion"
-              >
-                <LogOut size={18} />
-              </button>
+        <StudentCard className="relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_88%_26%,rgba(249,115,22,0.14),transparent_28%),linear-gradient(105deg,#FFF3E9,#FFFFFF)]" />
+          <Target className="absolute right-6 top-6 h-28 w-28 text-accent/10" strokeWidth={1.2} />
+          <div className="relative flex items-center gap-4 p-4 pt-8">
+            <div className="shrink-0 rounded-full border-4 border-white bg-white shadow-card">
+              <Avatar
+                url={dashboard.avatar_url}
+                name={dashboard.full_name || 'Alumno'}
+                size="lg"
+                className="!h-24 !w-24 !text-3xl"
+              />
             </div>
-
-            {/* Avatar Superpuesto Centrado */}
-            <div className="flex justify-center -mt-16 relative z-10">
-              <div className="rounded-full p-1.5 bg-card">
-                <Avatar
-                  url={dashboard.avatar_url}
-                  name={dashboard.full_name || 'Alumno'}
-                  size="lg"
-                  className="!h-28 !w-28 !text-3xl shadow-md border-2 border-line/40"
-                />
-              </div>
-            </div>
-
-            {/* Info del Atleta */}
-            <div className="text-center px-4 mt-3 space-y-1.5">
-              <h1 className="text-2xl font-bold text-textpri leading-tight">
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[1.7rem] font-black leading-tight tracking-[-0.04em] text-slate-900">
                 {dashboard.full_name || 'Alumno'}
               </h1>
-
-              <div className="flex items-center justify-center gap-2 text-textsec text-sm">
-                {dashboard.age && <span>{dashboard.age} años</span>}
-                {dashboard.age && dashboard.current_distance_m && <span className="opacity-50">•</span>}
-                {dashboard.current_distance_m && (
-                  <span>Distancia: <strong className="text-textpri font-medium">{dashboard.current_distance_m}m</strong></span>
-                )}
+              <p className="mt-1 text-sm font-medium text-textsec">
+                {dashboard.age ? `${dashboard.age} años` : 'Alumno'}
+                {dashboard.current_distance_m ? `  ·  Distancia: ${dashboard.current_distance_m}m` : ''}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <StatusBadge status={dashboard.student_is_active ? 'active' : 'expired'} label={dashboard.student_is_active ? 'Activo' : 'Inactivo'} />
+                <StatusBadge status={membershipStatus} label={dashboard.membership_name || 'Sin membresía'} />
               </div>
-
-              {/* Badges y status */}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-3">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase ${dashboard.student_is_active ? 'bg-success/10 text-success border border-success/20' : 'bg-danger/10 text-danger border border-danger/20'
-                  }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${dashboard.student_is_active ? 'bg-success animate-pulse' : 'bg-danger'}`}></span>
-                  {dashboard.student_is_active ? 'Activo' : 'Inactivo'}
-                </span>
-
-                <span className="px-3 py-1 rounded-full text-xs font-medium bg-accent/10 border border-accent/20 text-accent">
-                  {dashboard.membership_name || 'Sin membresía'}
-                </span>
-
-                {dashboard.category && (
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-background border border-line text-textsec">
-                    {dashboard.category} {dashboard.level ? `· ${dashboard.level}` : ''}
+              {(dashboard.category || dashboard.level) && (
+                <div className="mt-2 inline-flex max-w-full rounded-full border border-line bg-white/80 px-3 py-1 text-xs font-semibold text-textsec">
+                  <span className="truncate">
+                    {dashboard.category || 'Categoría pendiente'}
+                    {dashboard.level ? ` · ${dashboard.level}` : ''}
                   </span>
-                )}
-              </div>
-
-              {/* Mini-Resumen de Membresia Interactivo */}
-              {dashboard.membership_status === 'active' && (
-                <div className="mt-5 pt-4 border-t border-line/50">
-                  <div className="grid grid-cols-2 gap-3 mx-auto max-w-sm">
-                    <div className={`flex flex-col items-center justify-center p-2.5 rounded-xl border ${(dashboard.classes_remaining ?? 0) === 0 ? 'bg-danger/10 border-danger/20 text-danger' :
-                        (dashboard.classes_remaining ?? 0) <= 2 ? 'bg-warning/10 border-warning/20 text-warning' :
-                          'bg-success/10 border-success/20 text-success'
-                      }`}>
-                      <span className="text-2xl font-bold leading-none mb-1">{dashboard.classes_remaining ?? 0}</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider opacity-80">Clases Libres</span>
-                    </div>
-                    <div className={`flex flex-col items-center justify-center p-2.5 rounded-xl border ${isExpired ? 'bg-danger/10 border-danger/20 text-danger' :
-                        isExpiringSoon ? 'bg-warning/10 border-warning/20 text-warning' :
-                          'bg-background border-line text-textpri'
-                      }`}>
-                      <span className="text-sm font-bold leading-none mb-1">
-                        {dashboard.membership_end ? dayjs(dashboard.membership_end).format('D MMM') : 'N/A'}
-                      </span>
-                      <span className="text-[10px] text-textsec font-semibold uppercase tracking-wider">Vence</span>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
           </div>
+        </StudentCard>
 
-          {/* Acciones Rapidas (Quick Actions Grid) */}
-          <div className="grid grid-cols-3 gap-3 w-full px-1 sm:px-0">
-            <Link href="/reservar" className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm hover:scale-95 hover:bg-accent/5 transition-all text-center group">
-              <div className="w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center group-hover:bg-accent group-hover:text-white transition-colors">
-                <CalendarPlus size={22} />
-              </div>
-              <span className="text-xs font-medium text-textpri">Agendar</span>
-            </Link>
+        <div className="grid grid-cols-2 gap-3">
+          <QuickMetric
+            icon={<CalendarPlus className="h-5 w-5" />}
+            label="Clases disponibles"
+            value={`${dashboard.classes_remaining ?? 0}`}
+            detail={`de ${dashboard.classes_total ?? 0}`}
+            tone="orange"
+          />
+          <QuickMetric
+            icon={<CalendarClock className="h-5 w-5" />}
+            label="Vence"
+            value={membershipEnd ? membershipEnd.format('D MMM') : '-'}
+            detail="Vencimiento"
+            tone="green"
+          />
+          <QuickMetric
+            icon={<Target className="h-5 w-5" />}
+            label="Próxima reserva"
+            value={nextReservationLabel}
+            detail={nextReservationDetail}
+            tone="blue"
+          />
+          <QuickMetric
+            icon={<Medal className="h-5 w-5" />}
+            label="Plan actual"
+            value={dashboard.membership_name || '-'}
+            detail="Plan vigente"
+            tone="orange"
+          />
+        </div>
 
-            <Link href="/membresias" className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm hover:scale-95 transition-all text-center group">
-              <div className="w-12 h-12 rounded-full bg-background border border-line text-textpri flex items-center justify-center group-hover:bg-line transition-colors">
-                <Ticket size={22} className="opacity-80" />
-              </div>
-              <span className="text-xs font-medium text-textpri">Mi Cuenta</span>
-            </Link>
+        <Link href="/reservar" className="btn min-h-[56px] w-full rounded-2xl text-lg font-extrabold shadow-[0_12px_24px_rgba(249,115,22,0.25)]">
+          <CalendarPlus className="h-7 w-7" />
+          Reservar clase
+        </Link>
 
-            <button disabled className="flex flex-col items-center justify-center gap-2 bg-card border border-line rounded-2xl p-4 shadow-sm opacity-50 cursor-not-allowed text-center">
-              <div className="w-12 h-12 rounded-full bg-background border border-line text-textsec flex items-center justify-center">
-                <MessagesSquare size={22} className="opacity-60" />
-              </div>
-              <span className="text-xs font-medium text-textsec">Soporte</span>
-            </button>
+        <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-3">
+          <QuickAction href="/mis-reservas" icon={<CalendarPlus className="h-7 w-7" />} title="Mis reservas" subtitle="Ver y gestionar" />
+          <QuickAction href="/membresias" icon={<Ticket className="h-7 w-7" />} title="Mi membresía" subtitle="Historial y plan" accent="violet" />
+          <button type="button" disabled className="rounded-2xl border border-line bg-white p-4 text-left opacity-70 shadow-card">
+            <Headphones className="mb-2 h-7 w-7 text-blue-600" />
+            <p className="font-bold">Soporte</p>
+            <p className="text-xs text-textsec">Ayuda y contacto</p>
+          </button>
+        </div>
+
+        <StudentNotice>
+          Puedes cancelar desde la app hasta el inicio de la clase.
+        </StudentNotice>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black tracking-[-0.03em]">Próxima reserva</h2>
+            <Link href="/mis-reservas" className="text-sm font-bold text-accent">Ver todas</Link>
           </div>
+          <NextBookingWidget studentId={activeStudentId} />
+        </section>
 
-          <div className="w-full space-y-3 px-1 sm:px-0">
-            <h2 className="text-sm font-semibold text-textsec uppercase tracking-wider pl-1">Agenda</h2>
-            <div className="shadow-sm rounded-2xl overflow-hidden border border-line">
-              <NextBookingWidget studentId={activeStudentId} />
-            </div>
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-black tracking-[-0.03em]">Actividad reciente</h2>
+            <Link href="/membresias" className="text-sm font-bold text-accent">Ver historial</Link>
           </div>
+          <StudentCard className="divide-y divide-line overflow-hidden">
+            {recentHistory.length === 0 && !historyLoading && (
+              <div className="p-5 text-sm text-textsec">Aún no hay actividad reciente.</div>
+            )}
+            {recentHistory.map((booking) => (
+              <Link
+                key={booking.booking_id}
+                href={`/reserva/${booking.booking_id}`}
+                className="flex items-center gap-3 p-4 transition hover:bg-slate-50"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600">
+                  <CalendarClock className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold">{dayjs(booking.start_at).format('ddd, D MMM, YYYY')}</p>
+                  <p className="truncate text-xs font-medium text-textsec">
+                    {dayjs(booking.start_at).format('HH:mm')}
+                    {booking.distance_m ? ` · ${booking.distance_m}m` : ''}
+                  </p>
+                </div>
+                <StatusBadge status={booking.status} />
+                <ChevronRight className="h-5 w-5 shrink-0 text-textsec" />
+              </Link>
+            ))}
+          </StudentCard>
+        </section>
       </div>
     </div>
+  )
+}
+
+function QuickMetric({
+  icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+  detail: string
+  tone: 'orange' | 'green' | 'blue'
+}) {
+  const toneClasses = {
+    orange: 'bg-orange-50 text-accent',
+    green: 'bg-green-50 text-success',
+    blue: 'bg-blue-50 text-blue-600',
+  }
+
+  return (
+    <StudentCard className="min-h-[132px] p-4">
+      <div className={`mb-4 grid h-10 w-10 place-items-center rounded-full ${toneClasses[tone]}`}>{icon}</div>
+      <p className="text-sm font-bold leading-tight">{label}</p>
+      <p className="mt-3 text-[1.45rem] font-black leading-tight tracking-[-0.04em] text-slate-950">{value}</p>
+      <p className="mt-1 text-sm font-medium leading-tight text-textsec">{detail}</p>
+    </StudentCard>
+  )
+}
+
+function QuickAction({
+  href,
+  icon,
+  title,
+  subtitle,
+  accent = 'orange',
+}: {
+  href: string
+  icon: ReactNode
+  title: string
+  subtitle: string
+  accent?: 'orange' | 'violet'
+}) {
+  return (
+    <Link href={href} className="rounded-2xl border border-line bg-white p-4 shadow-card transition active:scale-[0.98]">
+      <div className={accent === 'orange' ? 'mb-2 text-accent' : 'mb-2 text-violet-600'}>{icon}</div>
+      <p className="font-bold leading-tight">{title}</p>
+      <p className="text-xs text-textsec">{subtitle}</p>
+    </Link>
   )
 }
 

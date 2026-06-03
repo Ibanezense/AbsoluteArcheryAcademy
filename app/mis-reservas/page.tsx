@@ -1,13 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
-import AppContainer from '@/components/AppContainer'
-import { useToast } from '@/components/ui/ToastProvider'
+import dayjs from 'dayjs'
+import { CalendarClock, CheckCircle2, ChevronRight, XCircle } from 'lucide-react'
+import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
+import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
-import { hasBookingDayCutoffPassed } from '@/lib/utils/bookingCutoff'
 import { canStudentCancelBooking } from '@/lib/utils/bookingCancellation'
 
 type Row = {
@@ -29,35 +34,13 @@ function labelBowUsage(row: Row) {
   return 'Arco academia'
 }
 
-const statusStyle: Record<Row['status'], { label: string; card: string; badge: string }> = {
-  reserved: {
-    label: 'Reservada',
-    card: 'border-l-4 border-accent bg-gray-900/50',
-    badge: 'bg-accent/15 text-black border border-accent/30',
-  },
-  cancelled: {
-    label: 'Cancelada',
-    card: 'border-l-4 border-danger bg-danger/5',
-    badge: 'bg-danger/15 text-danger border border-danger/30',
-  },
-  attended: {
-    label: 'Asistio',
-    card: 'border-l-4 border-success bg-success/5',
-    badge: 'bg-success/15 text-success border border-success/30',
-  },
-  no_show: {
-    label: 'No-show',
-    card: 'border-l-4 border-warning bg-warning/5',
-    badge: 'bg-warning/15 text-warning border border-warning/30',
-  },
-}
-
 export default function MisReservasPage() {
   const toast = useToast()
   const confirm = useConfirm()
   const { account, activeStudent, activeStudentId, loading: contextLoading } = useStudentContext()
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming')
 
   useEffect(() => {
     const loadRows = async () => {
@@ -73,10 +56,7 @@ export default function MisReservasPage() {
           p_student_id: activeStudentId,
         })
 
-        if (error) {
-          throw error
-        }
-
+        if (error) throw error
         setRows((data || []) as Row[])
       } catch (loadError: any) {
         toast.push({ message: loadError?.message || 'No se pudo cargar las reservas.', type: 'error' })
@@ -88,8 +68,16 @@ export default function MisReservasPage() {
     loadRows()
   }, [activeStudentId, toast])
 
+  const { upcoming, history, attendedCount } = useMemo(() => {
+    const now = Date.now()
+    const upcomingRows = rows.filter((row) => row.status === 'reserved' && new Date(row.start_at).getTime() > now)
+    const historyRows = rows.filter((row) => row.status !== 'reserved' || new Date(row.start_at).getTime() <= now)
+    const attended = rows.filter((row) => row.status === 'attended').length
+    return { upcoming: upcomingRows, history: historyRows, attendedCount: attended }
+  }, [rows])
+
   const cancelar = async (id: string) => {
-    if (!(await confirm('¿Cancelar esta reserva?'))) return
+    if (!(await confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.'))) return
 
     const { error } = await supabase.rpc('cancel_booking', { p_booking: id })
     if (error) {
@@ -97,88 +85,145 @@ export default function MisReservasPage() {
       return
     }
 
-    setRows(prev => prev.map(row => row.booking_id === id ? { ...row, status: 'cancelled' } : row))
+    setRows((prev) => prev.map((row) => row.booking_id === id ? { ...row, status: 'cancelled' } : row))
     toast.push({ message: 'Reserva cancelada.', type: 'success' })
   }
 
   if (contextLoading || loading) {
-    return <div className="p-5">Cargando...</div>
+    return <StudentPageSkeleton variant="reservations" />
   }
 
+  const visibleRows = activeTab === 'upcoming' ? upcoming : history
+
   return (
-    <AppContainer title="Mis reservas">
-      <div className="p-5 space-y-4">
+    <div className="min-h-screen bg-[#F7F8FA] text-textpri">
+      <MobileStudentHeader title="Mis reservas" subtitle="Gestiona tus próximas clases e historial" showBack />
+
+      <div className="space-y-4 px-4 py-5">
         {account?.role === 'guardian' && activeStudent && (
-          <div className="card p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-textsec">Viendo reservas de</p>
-              <p className="font-medium">{activeStudent.full_name}</p>
+          <StudentCard className="flex items-center justify-between gap-4 p-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textsec">Viendo reservas de</p>
+              <p className="truncate font-semibold">{activeStudent.full_name}</p>
             </div>
-            <Link href="/hub" className="btn-outline">
+            <Link href="/hub" className="btn-outline btn-sm shrink-0">
               Cambiar
             </Link>
-          </div>
+          </StudentCard>
         )}
 
-        <h1 className="text-lg font-semibold">Mis reservas</h1>
+        <div className="grid grid-cols-3 gap-3">
+          <MiniStat icon={<CalendarClock className="h-5 w-5" />} label="Próximas" value={upcoming.length} />
+          <MiniStat icon={<XCircle className="h-5 w-5" />} label="Historial" value={history.length} tone="slate" />
+          <MiniStat icon={<CheckCircle2 className="h-5 w-5" />} label="Asistidas" value={attendedCount} tone="green" />
+        </div>
+
+        <StudentNotice>Puedes cancelar tu reserva hasta el inicio de la clase.</StudentNotice>
+
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-white p-1 shadow-card">
+          <button
+            type="button"
+            className={`min-h-[44px] rounded-xl text-sm font-bold ${activeTab === 'upcoming' ? 'bg-accent text-white shadow-card' : 'text-textsec'}`}
+            onClick={() => setActiveTab('upcoming')}
+          >
+            Próximas
+          </button>
+          <button
+            type="button"
+            className={`min-h-[44px] rounded-xl text-sm font-bold ${activeTab === 'history' ? 'bg-accent text-white shadow-card' : 'text-textsec'}`}
+            onClick={() => setActiveTab('history')}
+          >
+            Historial
+          </button>
+        </div>
 
         {!activeStudentId && (
-          <p className="text-textsec text-sm">Selecciona un alumno antes de continuar.</p>
+          <StudentCard className="p-5 text-sm text-textsec">Selecciona un alumno antes de continuar.</StudentCard>
         )}
 
-        {activeStudentId && rows.length === 0 && (
-          <p className="text-textsec text-sm">Aun no tienes reservas.</p>
+        {activeStudentId && visibleRows.length === 0 && (
+          <StudentCard className="p-6 text-center">
+            <p className="font-bold">{activeTab === 'upcoming' ? 'Aún no tienes reservas próximas.' : 'Aún no hay historial.'}</p>
+            {activeTab === 'upcoming' && (
+              <Link href="/reservar" className="btn mt-4 w-full">
+                Reservar clase
+              </Link>
+            )}
+          </StudentCard>
         )}
 
         <div className="grid gap-3">
-          {rows.map(row => {
-            const style = statusStyle[row.status]
-            const start = new Date(row.start_at)
-            const end = new Date(row.end_at)
-            const cancelable = canStudentCancelBooking(row)
-            const editable =
-              row.status === 'reserved' &&
-              start.getTime() > Date.now() &&
-              !hasBookingDayCutoffPassed(row.booking_day_cutoff_at)
-
-            return (
-              <div key={row.booking_id} className={`card p-4 ${style.card}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">
-                      {start.toLocaleDateString()} · {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {' - '}
-                      {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className="text-sm text-textsec">
-                      {labelBowUsage(row)}{row.distance_m ? ` · ${row.distance_m} m` : ''}
-                    </p>
-                  </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${style.badge}`}>
-                    {style.label}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex gap-2">
-                  <Link className="btn-outline" href={`/reserva/${row.booking_id}`}>
-                    Ver
-                  </Link>
-                  {editable && (
-                    <Link className="btn-outline" href={`/reserva/${row.booking_id}/editar`}>
-                      Editar
-                    </Link>
-                  )}
-                  {cancelable && (
-                    <button className="btn-outline" onClick={() => cancelar(row.booking_id)}>
-                      Cancelar
-                    </button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+          {visibleRows.map((row) => (
+            <ReservationCard key={row.booking_id} row={row} onCancel={cancelar} />
+          ))}
         </div>
       </div>
-    </AppContainer>
+    </div>
+  )
+}
+
+function ReservationCard({ row, onCancel }: { row: Row; onCancel: (id: string) => void }) {
+  const start = dayjs(row.start_at)
+  const end = dayjs(row.end_at)
+  const cancelable = canStudentCancelBooking(row)
+
+  return (
+    <StudentCard className="p-4">
+      <div className="flex items-start gap-3">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-orange-50 text-accent">
+          <CalendarClock className="h-7 w-7" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-lg font-black tracking-[-0.03em]">{start.format('ddd, D MMM YYYY')}</p>
+              <p className="mt-1 truncate text-sm font-medium text-textsec">
+                {start.format('HH:mm')} - {end.format('HH:mm')} · {labelBowUsage(row)}
+                {row.distance_m ? ` · ${row.distance_m}m` : ''}
+              </p>
+            </div>
+            <StatusBadge status={row.status} />
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link className="btn-outline btn-sm min-h-[44px]" href={`/reserva/${row.booking_id}`}>
+              Ver detalle
+            </Link>
+            {cancelable && (
+              <button className="btn-outline btn-sm min-h-[44px]" onClick={() => onCancel(row.booking_id)}>
+                Cancelar reserva
+              </button>
+            )}
+          </div>
+        </div>
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-textsec" />
+      </div>
+    </StudentCard>
+  )
+}
+
+function MiniStat({
+  icon,
+  label,
+  value,
+  tone = 'orange',
+}: {
+  icon: ReactNode
+  label: string
+  value: number
+  tone?: 'orange' | 'green' | 'slate'
+}) {
+  const toneClass = {
+    orange: 'bg-orange-50 text-accent',
+    green: 'bg-green-50 text-success',
+    slate: 'bg-slate-100 text-slate-600',
+  }[tone]
+
+  return (
+    <StudentCard className="p-3 text-center">
+      <div className={`mx-auto mb-2 grid h-9 w-9 place-items-center rounded-full ${toneClass}`}>{icon}</div>
+      <p className="text-2xl font-black leading-none">{value}</p>
+      <p className="mt-1 text-xs font-medium text-textsec">{label}</p>
+    </StudentCard>
   )
 }

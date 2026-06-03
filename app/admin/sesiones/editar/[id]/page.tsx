@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import AdminGuard from '@/components/AdminGuard'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
+import { saveAdminSessionWithAllocations } from '@/lib/services/adminSessionsService'
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '@/lib/utils/dateUtils'
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
@@ -123,41 +123,24 @@ export default function EditarSesionPage() {
         is_manual_override: true,
       }
 
-      const sessionMutation = isNew
-        ? await supabase.from('sessions').insert(sessionPayload).select().single()
-        : await supabase.from('sessions').update(sessionPayload).eq('id', id).select().single()
-
-      if (sessionMutation.error) {
-        throw sessionMutation.error
-      }
-
-      const sessionId = sessionMutation.data.id as string
-
-      const { error: deleteError } = await supabase
-        .from('session_distance_allocations')
-        .delete()
-        .eq('session_id', sessionId)
-
-      if (deleteError) {
-        throw deleteError
-      }
-
-      const rows = DISTANCES
+      const allocations = DISTANCES
         .filter((distance) => distanceCaps[distance] > 0)
         .map((distance) => ({
-          session_id: sessionId,
-          distance_m: Number(distance),
-          slot_capacity: Number(distanceCaps[distance]) * 4, // 4 cupos por paca
+          distanceM: Number(distance),
           targets: Number(distanceCaps[distance]),
+          slotCapacity: Number(distanceCaps[distance]) * 4,
         }))
 
-      const { error: insertError } = await supabase
-        .from('session_distance_allocations')
-        .insert(rows)
-
-      if (insertError) {
-        throw insertError
-      }
+      await saveAdminSessionWithAllocations({
+        sessionId: isNew ? null : id,
+        startAt: sessionPayload.start_at,
+        endAt: sessionPayload.end_at,
+        status: sessionPayload.status,
+        notes: sessionPayload.notes,
+        weeklyTemplateId: sessionPayload.weekly_template_id,
+        isManualOverride: sessionPayload.is_manual_override,
+        allocations,
+      })
 
       toast.push({ message: 'Turno guardado.', type: 'success' })
       router.push('/admin/sesiones')
@@ -192,15 +175,12 @@ export default function EditarSesionPage() {
 
   if (loading) {
     return (
-      <AdminGuard>
-        <div className="p-5">Cargando...</div>
-      </AdminGuard>
+      <div className="p-5">Cargando...</div>
     )
   }
 
   return (
-    <AdminGuard>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -347,7 +327,6 @@ export default function EditarSesionPage() {
             </div>
           </div>
         </div>
-      </div>
-    </AdminGuard>
+    </div>
   )
 }

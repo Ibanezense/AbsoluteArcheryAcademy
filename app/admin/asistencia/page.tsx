@@ -1,11 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import dayjs from 'dayjs'
-import AdminGuard from '@/components/AdminGuard'
-import Avatar from '@/components/ui/Avatar'
+import {
+  AttendanceBackToSessionsLink,
+  AttendanceSessionTabs,
+  AttendanceStudentRow,
+  AttendanceSummaryCard,
+  EmptyOperationalState,
+} from '@/components/admin/AdminOperationalComponents'
+import { AdminPageHeader } from '@/components/admin/AdminVisualSystem'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { Spinner } from '@/components/ui/Spinner'
+import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 
 interface DailyRosterBooking {
@@ -38,13 +46,31 @@ function bowUsageLabel(booking: DailyRosterBooking) {
   return 'Equipo sin definir'
 }
 
-export default function AsistenciaPage() {
+function formatDateLabel(date: string) {
+  return dayjs(date).format('dddd, D [de] MMMM [de] YYYY')
+}
+
+function AsistenciaContent() {
   const router = useRouter()
-  const [selectedDate, setSelectedDate] = useState(dayjs().format('YYYY-MM-DD'))
+  const searchParams = useSearchParams()
+  const confirm = useConfirm()
+  const toast = useToast()
+
+  const requestedDate = searchParams.get('date')
+  const requestedSessionId = searchParams.get('sessionId')
+  const [selectedDate, setSelectedDate] = useState(() => requestedDate || dayjs().format('YYYY-MM-DD'))
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(requestedSessionId)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSearchingNext, setIsSearchingNext] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<DailyRosterBooking[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (requestedDate && requestedDate !== selectedDate) {
+      setSelectedDate(requestedDate)
+    }
+  }, [requestedDate, selectedDate])
 
   const loadRoster = async (date: string) => {
     setIsLoading(true)
@@ -56,18 +82,99 @@ export default function AsistenciaPage() {
       })
 
       if (rpcError) throw rpcError
-      setBookings(((data || []) as DailyRosterBooking[]))
+      const rows = (data || []) as DailyRosterBooking[]
+      setBookings(rows)
+      return rows
     } catch (err: any) {
       console.error('Error loading roster:', err)
       setError(err.message || 'Error al cargar el roster')
+      return []
     } finally {
       setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    loadRoster(selectedDate)
+    void loadRoster(selectedDate)
   }, [selectedDate])
+
+  const groupedSessions: GroupedSession[] = useMemo(() => {
+    const grouped = bookings.reduce((acc, booking) => {
+      const existing = acc.find((group) => group.session_id === booking.session_id)
+      if (existing) {
+        existing.bookings.push(booking)
+      } else {
+        acc.push({
+          session_id: booking.session_id,
+          session_start_at: booking.session_start_at,
+          bookings: [booking],
+        })
+      }
+      return acc
+    }, [] as GroupedSession[])
+
+    grouped.sort((left, right) => dayjs(left.session_start_at).valueOf() - dayjs(right.session_start_at).valueOf())
+    return grouped
+  }, [bookings])
+
+  useEffect(() => {
+    if (!groupedSessions.length) {
+      setActiveSessionId(null)
+      return
+    }
+
+    setActiveSessionId((current) => {
+      const requestedExists = requestedSessionId && groupedSessions.some((session) => session.session_id === requestedSessionId)
+      if (requestedExists) return requestedSessionId
+      const currentExists = current && groupedSessions.some((session) => session.session_id === current)
+      if (currentExists) return current
+      return groupedSessions[0].session_id
+    })
+  }, [groupedSessions, requestedSessionId])
+
+  const activeSession = useMemo(() => {
+    return groupedSessions.find((session) => session.session_id === activeSessionId) || groupedSessions[0] || null
+  }, [activeSessionId, groupedSessions])
+
+  const activeStats = useMemo(() => {
+    const rows = activeSession?.bookings || []
+    return {
+      total: rows.length,
+      attended: rows.filter((booking) => booking.booking_status === 'attended').length,
+      noShow: rows.filter((booking) => booking.booking_status === 'no_show').length,
+      cancelled: rows.filter((booking) => booking.booking_status === 'cancelled').length,
+    }
+  }, [activeSession])
+
+  const setQuickDate = (date: dayjs.Dayjs) => {
+    setSelectedDate(date.format('YYYY-MM-DD'))
+  }
+
+  const findNextRosterDate = async () => {
+    setIsSearchingNext(true)
+    setError(null)
+
+    try {
+      for (let offset = 1; offset <= 30; offset += 1) {
+        const candidate = dayjs().add(offset, 'day').format('YYYY-MM-DD')
+        const { data, error: rpcError } = await supabase.rpc('get_daily_roster', {
+          p_date: candidate,
+        })
+
+        if (rpcError) throw rpcError
+        if (((data || []) as DailyRosterBooking[]).length > 0) {
+          setSelectedDate(candidate)
+          return
+        }
+      }
+
+      toast.push({ message: 'No se encontraron reservas en los proximos 30 dias.', type: 'info' })
+    } catch (err: any) {
+      setError(err.message || 'No se pudieron buscar los proximos turnos.')
+    } finally {
+      setIsSearchingNext(false)
+    }
+  }
 
   const handleMarkAttendance = async (bookingId: string, attended: boolean) => {
     setActionLoading(bookingId)
@@ -83,19 +190,27 @@ export default function AsistenciaPage() {
         throw new Error(data?.error || 'Error al marcar asistencia')
       }
 
+      toast.push({ message: attended ? 'Asistencia registrada.' : 'No-show registrado.', type: 'success' })
       await loadRoster(selectedDate)
     } catch (err: any) {
       console.error('Error marking attendance:', err)
-      alert(err.message || 'Error al marcar asistencia')
+      toast.push({ message: err.message || 'Error al marcar asistencia', type: 'error' })
     } finally {
       setActionLoading(null)
     }
   }
 
   const handleCancelBooking = async (bookingId: string) => {
-    if (!confirm('Se cancelara esta reserva pendiente. Como reservar ya no consume clases, no se ajustara el saldo. Continuar?')) {
-      return
-    }
+    const ok = await confirm(
+      'Se cancelara esta reserva. Si la asistencia ya consumio credito, se restaurara una sola vez. Continuar?',
+      {
+        title: 'Cancelar reserva',
+        description: 'Esta accion usa la RPC admin actual y requiere confirmacion porque cambia el estado de la reserva.',
+        confirmLabel: 'Cancelar reserva',
+        tone: 'danger',
+      },
+    )
+    if (!ok) return
 
     setActionLoading(bookingId)
 
@@ -110,54 +225,54 @@ export default function AsistenciaPage() {
         throw new Error(data?.error || 'Error al cancelar reserva')
       }
 
+      toast.push({ message: 'Reserva cancelada.', type: 'success' })
       await loadRoster(selectedDate)
     } catch (err: any) {
       console.error('Error canceling booking:', err)
-      alert(err.message || 'Error al cancelar reserva')
+      toast.push({ message: err.message || 'Error al cancelar reserva', type: 'error' })
     } finally {
       setActionLoading(null)
     }
   }
 
-  const groupedSessions: GroupedSession[] = useMemo(() => {
-    return bookings.reduce((acc, booking) => {
-      const existing = acc.find((group) => group.session_id === booking.session_id)
-      if (existing) {
-        existing.bookings.push(booking)
-      } else {
-        acc.push({
-          session_id: booking.session_id,
-          session_start_at: booking.session_start_at,
-          bookings: [booking],
-        })
-      }
-      return acc
-    }, [] as GroupedSession[])
-  }, [bookings])
-
-  const formatSessionTime = (timestamp: string) => dayjs(timestamp).format('HH:mm')
-  const formatDateLabel = (date: string) => dayjs(date).format('dddd, D [de] MMMM [de] YYYY')
-
   return (
-    <AdminGuard>
-      <div className="space-y-6">
-        <section className="sticky top-0 z-10 border-b border-white/10 bg-bg/95 px-4 py-3 backdrop-blur lg:px-8 lg:-mx-8 -mx-4">
-          <div className="flex items-center gap-3">
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Asistencia"
+        description="Marca asistencia o no-show con foco en el turno activo del dia."
+        actions={
+          <>
+            <AttendanceBackToSessionsLink href={`/admin/sesiones?date=${selectedDate}`} />
             <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>
               Volver
             </button>
-            <div>
-              <h1 className="text-lg font-semibold text-textpri">Gestion de asistencia</h1>
-              <p className="text-sm text-textsec">Marca asistencia y resuelve cancelaciones del dia.</p>
-            </div>
-          </div>
-        </section>
+          </>
+        }
+      />
 
-        <section className="card p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-textpri">Seleccionar dia</h2>
-              <p className="mt-1 text-sm capitalize text-textsec">{formatDateLabel(selectedDate)}</p>
+      <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.055)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h2 className="font-heading text-2xl font-black tracking-[-0.045em] text-slate-950">Seleccionar dia</h2>
+            <p className="mt-1 text-sm capitalize text-slate-500">{formatDateLabel(selectedDate)}</p>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-accent" onClick={() => setQuickDate(dayjs())}>
+                Hoy
+              </button>
+              <button type="button" className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700" onClick={() => setQuickDate(dayjs().add(1, 'day'))}>
+                Manana
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                disabled={isSearchingNext}
+                onClick={findNextRosterDate}
+              >
+                {isSearchingNext ? 'Buscando' : 'Proximos turnos'}
+              </button>
             </div>
             <input
               type="date"
@@ -166,127 +281,86 @@ export default function AsistenciaPage() {
               className="input w-full sm:w-auto"
             />
           </div>
-        </section>
+        </div>
+      </section>
 
-        {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Spinner />
-          </div>
-        )}
+      {isLoading && (
+        <div className="flex items-center justify-center rounded-[1.6rem] border border-slate-200 bg-white py-12">
+          <Spinner />
+        </div>
+      )}
 
-        {error && !isLoading && (
-          <div className="card border-danger/30 bg-danger/5 p-6">
-            <p className="text-center text-danger">{error}</p>
-          </div>
-        )}
+      {error && !isLoading && (
+        <div className="rounded-[1.6rem] border border-rose-200 bg-rose-50 p-6">
+          <p className="text-center font-bold text-rose-700">{error}</p>
+        </div>
+      )}
 
-        {!isLoading && !error && bookings.length === 0 && (
-          <div className="card p-12 text-center">
-            <p className="text-lg text-textsec">No hay reservas para este dia.</p>
-          </div>
-        )}
+      {!isLoading && !error && bookings.length === 0 && (
+        <EmptyOperationalState
+          title="No hay reservas para este dia."
+          description="Puedes revisar manana o saltar al proximo dia con turnos reservados."
+          action={
+            <button
+              type="button"
+              className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white disabled:opacity-50"
+              disabled={isSearchingNext}
+              onClick={findNextRosterDate}
+            >
+              Ver Proximos turnos
+            </button>
+          }
+        />
+      )}
 
-        {!isLoading && !error && groupedSessions.length > 0 && (
-          <div className="space-y-6">
-            {groupedSessions.map((session) => (
-              <section key={session.session_id} className="card p-6">
-                <div className="mb-4 flex items-center gap-3 border-b border-white/10 pb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10">
-                    <span className="text-lg font-bold text-accent">
-                      {formatSessionTime(session.session_start_at)}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-textpri">
-                      Turno de {formatSessionTime(session.session_start_at)}
-                    </h3>
-                    <p className="text-sm text-textsec">
-                      {session.bookings.length} alumno{session.bookings.length !== 1 ? 's' : ''}
-                    </p>
-                  </div>
-                </div>
+      {!isLoading && !error && activeSession && (
+        <div className="space-y-5">
+          <AttendanceSessionTabs
+            sessions={groupedSessions}
+            activeSessionId={activeSession.session_id}
+            onSelect={setActiveSessionId}
+          />
 
-                <div className="space-y-3">
-                  {session.bookings.map((booking) => {
-                    const isProcessing = actionLoading === booking.booking_id
-                    const isAttended = booking.booking_status === 'attended'
-                    const isNoShow = booking.booking_status === 'no_show'
-                    const isReserved = booking.booking_status === 'reserved'
+          <AttendanceSummaryCard
+            startAt={activeSession.session_start_at}
+            total={activeStats.total}
+            attended={activeStats.attended}
+            noShow={activeStats.noShow}
+            cancelled={activeStats.cancelled}
+          />
 
-                    return (
-                      <div
-                        key={booking.booking_id}
-                        className="flex flex-col gap-4 rounded-2xl bg-white/5 p-4 transition hover:bg-white/10 sm:flex-row sm:items-center"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <Avatar
-                            url={booking.student_avatar_url}
-                            name={booking.student_name}
-                            size="md"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-textpri">{booking.student_name}</p>
-                            <p className="text-xs text-textsec">
-                              {booking.distance_m ? `${booking.distance_m} m` : 'Sin distancia'} · {bowUsageLabel(booking)}
-                            </p>
-                            {booking.admin_notes && (
-                              <p className="text-xs italic text-warning">Nota: {booking.admin_notes}</p>
-                            )}
-                            <p className={`text-xs ${isAttended ? 'text-success font-semibold' :
-                              isNoShow ? 'text-danger' :
-                                'text-textsec'
-                              }`}>
-                              {isAttended && 'Asistio'}
-                              {isNoShow && 'No asistio'}
-                              {isReserved && 'Reservado'}
-                            </p>
-                          </div>
-                        </div>
+          <section className="space-y-3">
+            {activeSession.bookings.map((booking) => {
+              const isProcessing = actionLoading === booking.booking_id
 
-                        <div className="flex w-full items-center gap-2 sm:w-auto">
-                          <button
-                            onClick={() => handleMarkAttendance(booking.booking_id, true)}
-                            disabled={isProcessing || isAttended || isNoShow}
-                            className="btn-outline flex-1 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-                          >
-                            {isProcessing ? '...' : 'Asistio'}
-                          </button>
+              return (
+                <AttendanceStudentRow
+                  key={booking.booking_id}
+                  name={booking.student_name}
+                  avatarUrl={booking.student_avatar_url}
+                  distanceM={booking.distance_m}
+                  equipmentLabel={bowUsageLabel(booking)}
+                  status={booking.booking_status}
+                  notes={booking.admin_notes}
+                  isProcessing={isProcessing}
+                  onAttended={() => handleMarkAttendance(booking.booking_id, true)}
+                  onNoShow={() => handleMarkAttendance(booking.booking_id, false)}
+                  onEdit={() => router.push(`/reserva/${booking.booking_id}/editar`)}
+                  onCancel={() => handleCancelBooking(booking.booking_id)}
+                />
+              )
+            })}
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
 
-                          <button
-                            onClick={() => handleMarkAttendance(booking.booking_id, false)}
-                            disabled={isProcessing || isAttended || isNoShow}
-                            className="btn-outline flex-1 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-                          >
-                            {isProcessing ? '...' : 'No asistio'}
-                          </button>
-
-                          <button
-                            onClick={() => router.push(`/reserva/${booking.booking_id}/editar`)}
-                            disabled={isProcessing || !isReserved}
-                            className="btn-ghost px-3 py-2 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
-                            title={!isReserved ? 'Solo se pueden editar reservas pendientes' : 'Cambiar turno'}
-                          >
-                            {isProcessing ? '...' : 'Editar'}
-                          </button>
-
-                          <button
-                            onClick={() => handleCancelBooking(booking.booking_id)}
-                            disabled={isProcessing || !isReserved}
-                            className="btn-ghost px-3 py-2 text-sm text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50"
-                            title={!isReserved ? 'Solo se pueden cancelar reservas pendientes' : 'Cancelar reserva'}
-                          >
-                            {isProcessing ? '...' : 'Cancelar'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </div>
-    </AdminGuard>
+export default function AsistenciaPage() {
+  return (
+    <Suspense fallback={<div className="p-6"><Spinner /></div>}>
+      <AsistenciaContent />
+    </Suspense>
   )
 }

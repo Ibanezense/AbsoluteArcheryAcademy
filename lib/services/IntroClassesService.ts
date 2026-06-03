@@ -1,11 +1,21 @@
 import { supabase } from '@/lib/supabaseClient';
 
+export type IntroClassType = 'paid' | 'free' | 'courtesy';
+export type IntroPaymentStatus = 'pending' | 'paid' | 'not_applicable';
+
 export type IntroClientRecord = {
     booking_id: string;
     intro_client_id: string;
     full_name: string;
     age: number;
     phone?: string;
+    booking_status: string;
+    intro_class_type: IntroClassType;
+    payment_status: IntroPaymentStatus;
+    amount_paid: number | null;
+    payment_method: string | null;
+    paid_at: string | null;
+    courtesy_reason: string | null;
     session_id: string;
     session_start: string;
     session_end: string;
@@ -25,8 +35,21 @@ export type IntroSessionGroup = {
     start_at: string;
     end_at: string;
     capacity: number;
-    booked_total: number; // bookings totales (regulares + intro) para calcular cupo real
-    clients: { booking_id: string; full_name: string; age: number; phone?: string }[];
+    booked_total: number;
+    clients: {
+        booking_id: string;
+        intro_client_id: string;
+        full_name: string;
+        age: number;
+        phone?: string;
+        booking_status: string;
+        intro_class_type: IntroClassType;
+        payment_status: IntroPaymentStatus;
+        amount_paid: number | null;
+        payment_method: string | null;
+        paid_at: string | null;
+        courtesy_reason: string | null;
+    }[];
 };
 
 export type IntroDayData = {
@@ -40,22 +63,16 @@ export type IntroWeekendData = {
 };
 
 export class IntroClassesService {
-
-    /**
-     * Obtiene las sesiones del próximo fin de semana (o el actual)
-     * agrupadas por sábado y domingo, con clientes intro y cupo real.
-     */
     static async getIntrosByWeekend(): Promise<IntroWeekendData> {
         const now = new Date();
-        const dayOfWeek = now.getDay(); // 0=Dom, 6=Sáb
+        const dayOfWeek = now.getDay();
 
-        // Calcular el próximo sábado (o hoy si ya es sáb/dom)
         let satDate: Date;
         if (dayOfWeek === 6) {
             satDate = new Date(now);
         } else if (dayOfWeek === 0) {
             satDate = new Date(now);
-            satDate.setDate(satDate.getDate() - 1); // retroceder al sábado
+            satDate.setDate(satDate.getDate() - 1);
         } else {
             const daysUntilSat = 6 - dayOfWeek;
             satDate = new Date(now);
@@ -70,7 +87,6 @@ export class IntroClassesService {
         const sunStart = new Date(sunDate.setHours(0, 0, 0, 0)).toISOString();
         const sunEnd = new Date(new Date(sunDate).setHours(23, 59, 59, 999)).toISOString();
 
-        // Traer todas las sesiones del sáb y dom con su capacidad de 10m
         const { data: sessionsData, error: sessionsError } = await supabase
             .from('sessions')
             .select(`
@@ -85,7 +101,6 @@ export class IntroClassesService {
 
         const sessionIds = (sessionsData || []).map(s => s.id);
 
-        // Traer TODOS los bookings de esas sesiones (para contar cupo real ocupado)
         let allBookings: any[] = [];
         if (sessionIds.length > 0) {
             const { data: bkData, error: bkErr } = await supabase
@@ -98,7 +113,6 @@ export class IntroClassesService {
             allBookings = bkData || [];
         }
 
-        // Traer info de los clientes intro que están en esos bookings
         const introBookingIds = allBookings
             .filter(b => b.intro_client_id)
             .map(b => b.intro_client_id);
@@ -114,7 +128,22 @@ export class IntroClassesService {
             (icData || []).forEach(c => { introClientsMap[c.id] = c; });
         }
 
-        // Construir los grupos por sesión
+        let introPaymentsMap: Record<string, any> = {};
+        if (introBookingIds.length > 0) {
+            const { data: paymentData, error: paymentError } = await supabase
+                .from('intro_payments')
+                .select('intro_client_id, amount, payment_method, paid_at, intro_class_type, payment_status, courtesy_reason')
+                .in('intro_client_id', introBookingIds)
+                .order('paid_at', { ascending: false });
+
+            if (paymentError) throw paymentError;
+            (paymentData || []).forEach(payment => {
+                if (!introPaymentsMap[payment.intro_client_id]) {
+                    introPaymentsMap[payment.intro_client_id] = payment;
+                }
+            });
+        }
+
         const buildGroup = (session: any): IntroSessionGroup => {
             const alloc = Array.isArray(session.session_distance_allocations)
                 ? session.session_distance_allocations.find((a: any) => a.distance_m === 10)
@@ -132,11 +161,20 @@ export class IntroClassesService {
                 .filter(b => b.intro_client_id)
                 .map(b => {
                     const client = introClientsMap[b.intro_client_id];
+                    const payment = introPaymentsMap[b.intro_client_id];
                     return client ? {
                         booking_id: b.id,
+                        intro_client_id: b.intro_client_id,
                         full_name: client.full_name,
                         age: client.age,
                         phone: client.phone,
+                        booking_status: b.status,
+                        intro_class_type: payment?.intro_class_type || (Number(payment?.amount || 0) > 0 ? 'paid' : 'free'),
+                        payment_status: payment?.payment_status || (Number(payment?.amount || 0) > 0 ? 'paid' : 'not_applicable'),
+                        amount_paid: payment ? Number(payment.amount || 0) : null,
+                        payment_method: payment?.payment_method || null,
+                        paid_at: payment?.paid_at || null,
+                        courtesy_reason: payment?.courtesy_reason || null,
                     } : null;
                 })
                 .filter(Boolean) as IntroSessionGroup['clients'];
@@ -165,13 +203,13 @@ export class IntroClassesService {
         };
     }
 
-    // 1. Obtener los alumnos que vienen de prueba
     static async getUpcomingIntros(): Promise<IntroClientRecord[]> {
         const { data, error } = await supabase
             .from('bookings')
             .select(`
         id,
         session_id,
+        status,
         sessions!inner ( start_at, end_at ),
         intro_clients!inner ( id, full_name, age, phone )
       `)
@@ -184,25 +222,51 @@ export class IntroClassesService {
             throw error;
         }
 
-        return (data || []).map((row: any) => ({
+        const introClientIds = (data || []).map((row: any) => row.intro_clients.id);
+        let introPaymentsMap: Record<string, any> = {};
+
+        if (introClientIds.length > 0) {
+            const { data: paymentData, error: paymentError } = await supabase
+                .from('intro_payments')
+                .select('intro_client_id, amount, payment_method, paid_at, intro_class_type, payment_status, courtesy_reason')
+                .in('intro_client_id', introClientIds)
+                .order('paid_at', { ascending: false });
+
+            if (paymentError) throw paymentError;
+            (paymentData || []).forEach(payment => {
+                if (!introPaymentsMap[payment.intro_client_id]) {
+                    introPaymentsMap[payment.intro_client_id] = payment;
+                }
+            });
+        }
+
+        return (data || []).map((row: any) => {
+            const payment = introPaymentsMap[row.intro_clients.id];
+            return {
             booking_id: row.id,
             intro_client_id: row.intro_clients.id,
             full_name: row.intro_clients.full_name,
             age: row.intro_clients.age,
             phone: row.intro_clients.phone,
+            booking_status: row.status,
+            intro_class_type: payment?.intro_class_type || (Number(payment?.amount || 0) > 0 ? 'paid' : 'free'),
+            payment_status: payment?.payment_status || (Number(payment?.amount || 0) > 0 ? 'paid' : 'not_applicable'),
+            amount_paid: payment ? Number(payment.amount || 0) : null,
+            payment_method: payment?.payment_method || null,
+            paid_at: payment?.paid_at || null,
+            courtesy_reason: payment?.courtesy_reason || null,
             session_id: row.session_id,
             session_start: row.sessions.start_at,
             session_end: row.sessions.end_at,
-        }));
+            };
+        });
     }
 
-    // 2. Obtener turnos con cupo disponible para los próximos 7 días
     static async getAvailableSessions(daysAhead: number = 7): Promise<AvailableIntroSession[]> {
         const now = new Date();
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);
 
-        // Obtener todas las sesiones en ese rango que tengan configurada la distancia de 10m
         const { data: sessionsData, error: sessionsError } = await supabase
             .from('sessions')
             .select(`
@@ -223,8 +287,6 @@ export class IntroClassesService {
 
         if (sessionsError) throw sessionsError;
 
-        // Obtener los count de bookings agrupados no es trivial sin un RPC en la API Rest de Supabase (sin usar joins complejos).
-        // Como son 7 dias y el volumen es manejable, traeremos las reservas y las agruparemos.
         const sessionIds = sessionsData.map(s => s.id);
 
         if (sessionIds.length === 0) return [];
@@ -246,28 +308,24 @@ export class IntroClassesService {
         return sessionsData
             .map((s: any) => {
                 const booked = bookingCounts[s.id] || 0;
-
-                // Extraer la capacidad desde V3 engine array o objeto unico
                 const alloc = Array.isArray(s.session_distance_allocations)
                     ? s.session_distance_allocations[0]
                     : s.session_distance_allocations;
-
                 const slotCapacity = alloc?.slot_capacity || (alloc?.targets ? alloc.targets * 4 : 0);
-                const realCapacity = slotCapacity === 0 ? 12 : slotCapacity; // Fallback preventivo
+                const realCapacity = slotCapacity === 0 ? 12 : slotCapacity;
 
                 return {
                     session_id: s.id,
                     start_at: s.start_at,
                     end_at: s.end_at,
                     capacity: realCapacity,
-                    booked: booked,
+                    booked,
                     available: realCapacity - booked,
                 };
             })
-            .filter(s => s.available > 0); // Solo devolver los que tienen cupo
+            .filter(s => s.available > 0);
     }
 
-    // 3. Registrar "Todo En Uno" (Cliente -> Pago -> Booking)
     static async registerIntroClass(payload: {
         fullName: string;
         age: number;
@@ -275,53 +333,24 @@ export class IntroClassesService {
         sessionId: string;
         amountPaid: number;
         paymentMethod: string;
+        introClassType?: IntroClassType;
+        paymentStatus?: IntroPaymentStatus;
+        courtesyReason?: string;
     }): Promise<boolean> {
-
-        // Esta operación requiere de 3 inserts distribuidos (idealmente debería ser un RPC en BD para transaccionalidad, 
-        // pero como el schema RLS de admin confía en nosotros, intentaremos insert encadenado validando el último).
-
         try {
-            // a. Insert Client
-            const { data: clientData, error: clientErr } = await supabase
-                .from('intro_clients')
-                .insert({
-                    full_name: payload.fullName,
-                    age: payload.age,
-                    phone: payload.phone
-                })
-                .select('id')
-                .single();
+            const { error } = await supabase.rpc('admin_register_intro_class', {
+                p_full_name: payload.fullName,
+                p_age: payload.age,
+                p_phone: payload.phone,
+                p_session_id: payload.sessionId,
+                p_amount_paid: payload.amountPaid,
+                p_payment_method: payload.paymentMethod,
+                p_intro_class_type: payload.introClassType || 'paid',
+                p_payment_status: payload.paymentStatus || 'paid',
+                p_courtesy_reason: payload.courtesyReason || null
+            });
 
-            if (clientErr) throw clientErr;
-            const newClientId = clientData.id;
-
-            // b. Insert Booking (para que capture el cupo)
-            const { error: bookingErr } = await supabase
-                .from('bookings')
-                .insert({
-                    session_id: payload.sessionId,
-                    intro_client_id: newClientId,
-                    status: 'reserved',
-                    distance_m: 10,
-                    bow_usage_type: 'shared_inventory'
-                    // no le mandamos user_id, queda NULO validando la constraint
-                });
-
-            if (bookingErr) throw bookingErr;
-
-            // c. Insert Payment
-            const { error: paymentErr } = await supabase
-                .from('intro_payments')
-                .insert({
-                    intro_client_id: newClientId,
-                    amount: payload.amountPaid,
-                    payment_method: payload.paymentMethod
-                });
-
-            if (paymentErr) {
-                console.error('El cupo se reservó pero falló el registro financiero', paymentErr);
-            }
-
+            if (error) throw new Error(error.message);
             return true;
         } catch (e) {
             console.error('Failed Intro Registration Sequence:', e);

@@ -21,7 +21,7 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
   // Vista estudiante: contenedor móvil centrado
   return (
     <>
-      <main className="mx-auto w-full max-w-[430px] px-4 pb-[96px] pt-5 sm:max-w-2xl lg:max-w-4xl">
+      <main className="mx-auto min-h-screen w-full max-w-[430px] overflow-x-hidden bg-bg pb-[96px] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
         {children}
       </main>
       {showStudentNav && <MembershipRenewalPrompt />}

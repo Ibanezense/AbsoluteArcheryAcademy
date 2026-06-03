@@ -5,12 +5,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/components/ui/ToastProvider'
 import type { Profile } from '@/lib/types'
-
-function getRoleRedirect(role?: Profile['role']) {
-  if (role === 'admin') return '/admin'
-  if (role === 'guardian') return '/hub'
-  return '/'
-}
+import { getAdminAccessDecision } from '@/lib/security/adminAccess'
 
 export function useAuth() {
   const router = useRouter()
@@ -127,12 +122,17 @@ export function useRequireAdmin() {
           return
         }
 
-        if (data.role !== 'admin') {
+        const decision = getAdminAccessDecision({
+          authenticated: true,
+          role: data.role as Profile['role'],
+        })
+
+        if (!decision.allowed) {
           if (!cancelled) {
             setIsAdmin(false)
             setChecking(false)
           }
-          router.replace(getRoleRedirect(data.role as Profile['role']))
+          router.replace(decision.redirectTo || '/')
           return
         }
 

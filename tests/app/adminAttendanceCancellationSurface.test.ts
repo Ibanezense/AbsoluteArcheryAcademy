@@ -1,0 +1,21 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+describe('admin attendance cancellation surface', () => {
+  it('allows admin cancellation outside the reserved-only state', () => {
+    const page = readFileSync(
+      join(process.cwd(), 'app', 'admin', 'asistencia', 'page.tsx'),
+      'utf8',
+    )
+    const components = readFileSync(
+      join(process.cwd(), 'components', 'admin', 'AdminOperationalComponents.tsx'),
+      'utf8',
+    )
+    const surface = `${page}\n${components}`
+
+    expect(surface).toContain("supabase.rpc('admin_cancel_booking'")
+    expect(surface).toContain("disabled={isProcessing || status === 'cancelled'}")
+    expect(surface).not.toContain("title={!isReserved ? 'Solo se pueden cancelar reservas pendientes' : 'Cancelar reserva'}")
+  })
+})

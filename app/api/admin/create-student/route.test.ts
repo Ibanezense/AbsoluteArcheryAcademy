@@ -128,7 +128,7 @@ describe('POST /api/admin/create-student', () => {
       })
     )
 
-    expect(response.status).toBe(200)
+    expect(response?.status).toBe(200)
     expect(adminStudentInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         is_country_club_tiabaya_member: true,
@@ -253,7 +253,7 @@ describe('POST /api/admin/create-student', () => {
       })
     )
 
-    expect(response.status).toBe(200)
+    expect(response?.status).toBe(200)
     expect(listUsers).toHaveBeenNthCalledWith(1, { page: 1, perPage: 1000 })
     expect(listUsers).toHaveBeenNthCalledWith(2, { page: 2, perPage: 1000 })
     expect(adminStudentInsert).toHaveBeenCalledWith(
@@ -371,7 +371,7 @@ describe('POST /api/admin/create-student', () => {
       })
     )
 
-    expect(response.status).toBe(500)
+    expect(response?.status).toBe(500)
     expect(deleteUser).not.toHaveBeenCalled()
   })
 })
@@ -501,7 +501,7 @@ describe('PUT /api/admin/create-student', () => {
       })
     )
 
-    expect(response.status).toBe(200)
+    expect(response?.status).toBe(200)
     expect(studentUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         is_country_club_tiabaya_member: true,

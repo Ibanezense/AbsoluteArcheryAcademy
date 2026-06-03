@@ -85,6 +85,9 @@ export type StudentDetailData = {
   assigned_bow: boolean
   bow_poundage: number | null
   is_active: boolean
+  operational_status: string | null
+  operational_status_reason: string | null
+  operational_status_updated_at: string | null
   is_country_club_tiabaya_member: boolean
   created_at: string
   updated_at: string
@@ -147,6 +150,9 @@ export function useStudentDetail(studentId: string) {
               assigned_bow,
               bow_poundage,
               is_active,
+              operational_status,
+              operational_status_reason,
+              operational_status_updated_at,
               is_country_club_tiabaya_member,
               created_at,
               updated_at,
@@ -255,6 +261,9 @@ export function useStudentDetail(studentId: string) {
         assigned_bow: !!typedStudent.assigned_bow,
         bow_poundage: typedStudent.bow_poundage,
         is_active: !!typedStudent.is_active,
+        operational_status: typedStudent.operational_status || null,
+        operational_status_reason: typedStudent.operational_status_reason || null,
+        operational_status_updated_at: typedStudent.operational_status_updated_at || null,
         is_country_club_tiabaya_member: !!typedStudent.is_country_club_tiabaya_member,
         created_at: typedStudent.created_at,
         updated_at: typedStudent.updated_at,

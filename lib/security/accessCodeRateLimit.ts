@@ -20,6 +20,8 @@ export type AccessCodeRateLimitResult = {
   retryAfterSeconds: number
 }
 
+const inMemoryFailures = new Map<string, number[]>()
+
 export function getClientIp(request: Request) {
   const forwardedFor = request.headers.get('x-forwarded-for')
   if (forwardedFor) {
@@ -50,12 +52,55 @@ function getRateLimitHashes(input: AccessCodeRateLimitInput) {
   }
 }
 
+function getFallbackKey(ipHash: string, accessCodeHash: string) {
+  return `${ipHash}:${accessCodeHash}`
+}
+
+function pruneFallbackFailures(key: string, now: Date) {
+  const threshold = now.getTime() - ACCESS_CODE_LOGIN_WINDOW_MS
+  const attempts = (inMemoryFailures.get(key) || []).filter((timestamp) => timestamp >= threshold)
+
+  if (attempts.length > 0) {
+    inMemoryFailures.set(key, attempts)
+  } else {
+    inMemoryFailures.delete(key)
+  }
+
+  return attempts
+}
+
+function getFallbackResult(key: string, now: Date): AccessCodeRateLimitResult {
+  const failureCount = pruneFallbackFailures(key, now).length
+
+  return {
+    blocked: failureCount >= ACCESS_CODE_LOGIN_MAX_FAILURES,
+    failureCount,
+    retryAfterSeconds: Math.ceil(ACCESS_CODE_LOGIN_WINDOW_MS / 1000),
+  }
+}
+
+function recordFallbackAttempt(key: string, now: Date, success: boolean) {
+  if (success) {
+    inMemoryFailures.delete(key)
+    return
+  }
+
+  const attempts = pruneFallbackFailures(key, now)
+  attempts.push(now.getTime())
+  inMemoryFailures.set(key, attempts)
+}
+
+export function resetInMemoryAccessCodeRateLimitForTests() {
+  inMemoryFailures.clear()
+}
+
 export async function checkAccessCodeLoginRateLimit(
   client: RateLimitClient,
   input: AccessCodeRateLimitInput,
 ): Promise<AccessCodeRateLimitResult> {
   const now = input.now || new Date()
   const { ipHash, accessCodeHash } = getRateLimitHashes(input)
+  const fallbackKey = getFallbackKey(ipHash, accessCodeHash)
 
   let result: { count: number | null; error: { message?: string } | null }
   try {
@@ -67,11 +112,11 @@ export async function checkAccessCodeLoginRateLimit(
       .eq('success', false)
       .gte('attempted_at', getWindowStart(now))
   } catch {
-    return { blocked: false, failureCount: 0, retryAfterSeconds: 0 }
+    return getFallbackResult(fallbackKey, now)
   }
 
   if (result.error) {
-    return { blocked: false, failureCount: 0, retryAfterSeconds: 0 }
+    return getFallbackResult(fallbackKey, now)
   }
 
   const failureCount = result.count || 0
@@ -86,16 +131,25 @@ export async function recordAccessCodeLoginAttempt(
   client: RateLimitClient,
   input: AccessCodeRateLimitInput & { success: boolean },
 ) {
+  const now = input.now || new Date()
   const { ipHash, accessCodeHash } = getRateLimitHashes(input)
+  const fallbackKey = getFallbackKey(ipHash, accessCodeHash)
+
   try {
-    await client
+    const result = await client
       .from('access_code_login_attempts')
       .insert({
         ip_hash: ipHash,
         access_code_hash: accessCodeHash,
         success: input.success,
       })
+
+    if (result?.error) {
+      recordFallbackAttempt(fallbackKey, now, input.success)
+    } else if (input.success) {
+      inMemoryFailures.delete(fallbackKey)
+    }
   } catch {
-    // Do not block login because audit/rate-limit persistence is temporarily unavailable.
+    recordFallbackAttempt(fallbackKey, now, input.success)
   }
 }

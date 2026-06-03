@@ -1,204 +1,740 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Plus, UsersRound, Clock, Phone, AlertCircle } from 'lucide-react';
-import dayjs from 'dayjs';
-import 'dayjs/locale/es';
-import clsx from 'clsx';
-import { IntroClassesService, IntroWeekendData, IntroSessionGroup } from '@/lib/services/IntroClassesService';
-import RegisterIntroModal from './components/RegisterIntroModal';
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import dayjs from 'dayjs'
+import 'dayjs/locale/es'
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Filter,
+  MessageCircle,
+  Plus,
+  Search,
+  Target,
+  UsersRound,
+  X,
+} from 'lucide-react'
+import { AdminContentPanel } from '@/components/admin/AdminVisualSystem'
+import {
+  IntroClassesService,
+  type IntroClassType,
+  type IntroPaymentStatus,
+  type IntroSessionGroup,
+  type IntroWeekendData,
+} from '@/lib/services/IntroClassesService'
+import RegisterIntroModal from './components/RegisterIntroModal'
 
-dayjs.locale('es');
+dayjs.locale('es')
 
-function SessionCard({ session }: { session: IntroSessionGroup }) {
-    const available = session.capacity - session.booked_total;
-    const isFull = available <= 0;
-    const isAlmostFull = available > 0 && available <= 2;
-
-    return (
-        <div className={clsx(
-            "rounded-xl border p-4 transition-all",
-            isFull
-                ? "border-red-500/30 bg-red-500/5"
-                : isAlmostFull
-                    ? "border-amber-500/30 bg-amber-500/5"
-                    : "border-line bg-card"
-        )}>
-            {/* Header del turno */}
-            <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <Clock size={16} className="text-textsec" />
-                    <span className="font-semibold text-textpri">
-                        {dayjs(session.start_at).format('HH:mm')} - {dayjs(session.end_at).format('HH:mm')}
-                    </span>
-                </div>
-                <span className={clsx(
-                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold",
-                    isFull
-                        ? "bg-red-500/15 text-red-400"
-                        : isAlmostFull
-                            ? "bg-amber-500/15 text-amber-400"
-                            : "bg-emerald-500/15 text-emerald-400"
-                )}>
-                    {isFull && <AlertCircle size={12} />}
-                    {session.booked_total}/{session.capacity}
-                    {isFull ? ' LLENO' : ''}
-                </span>
-            </div>
-
-            {/* Lista de clientes intro */}
-            {session.clients.length > 0 ? (
-                <div className="space-y-2">
-                    {session.clients.map(client => (
-                        <div
-                            key={client.booking_id}
-                            className="flex items-center gap-3 rounded-lg bg-background/60 px-3 py-2.5"
-                        >
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
-                                <UsersRound size={12} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-textpri truncate">{client.full_name}</p>
-                                <div className="flex items-center gap-3 text-xs text-textsec">
-                                    <span>{client.age} años</span>
-                                    {client.phone && (
-                                        <span className="flex items-center gap-1">
-                                            <Phone size={10} /> {client.phone}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <p className="text-xs text-textsec italic text-center py-2">
-                    Sin clases de prueba en este turno
-                </p>
-            )}
-        </div>
-    );
+type IntroClientRow = IntroSessionGroup['clients'][number] & {
+  session_id: string
+  session_start: string
+  session_end: string
+  capacity: number
+  booked_total: number
 }
 
-function DayColumn({ label, date, sessions }: { label: string; date: string; sessions: IntroSessionGroup[] }) {
-    const introCount = sessions.reduce((sum, s) => sum + s.clients.length, 0);
+type IntroDateScope = 'today' | 'tomorrow' | 'week' | 'upcoming' | 'all'
+type IntroClassFilter = 'all' | IntroClassType
+type IntroPaymentFilter = 'all' | IntroPaymentStatus
+type IntroOperationalFilter = 'all' | 'reserved' | 'attended' | 'no_show'
 
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-bold text-textpri capitalize">
-                        {label} {dayjs(date).format('DD MMM')}
-                    </h2>
-                    <p className="text-xs text-textsec mt-0.5">
-                        {sessions.length} turnos · {introCount} prueba{introCount !== 1 ? 's' : ''}
-                    </p>
-                </div>
+type IntroFiltersState = {
+  dateScope: IntroDateScope
+  classType: IntroClassFilter
+  paymentStatus: IntroPaymentFilter
+  operationalStatus: IntroOperationalFilter
+  search: string
+}
+
+type IntroKpi = {
+  label: string
+  value: string | number
+  helper: string
+  tone: 'orange' | 'green' | 'blue' | 'red' | 'amber' | 'slate'
+  icon: ReactNode
+}
+
+const initialFilters: IntroFiltersState = {
+  dateScope: 'upcoming',
+  classType: 'all',
+  paymentStatus: 'all',
+  operationalStatus: 'all',
+  search: '',
+}
+
+function money(value: number | null | undefined) {
+  return `S/ ${Number(value || 0).toFixed(2)}`
+}
+
+function maskPhone(phone?: string | null) {
+  if (!phone) return 'Sin telefono'
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length <= 4) return '••••'
+  return `${digits.slice(0, 3)} ••• ${digits.slice(-3)}`
+}
+
+function SensitivePhone({ phone }: { phone?: string | null }) {
+  return <span className="font-mono text-xs text-slate-500">{maskPhone(phone)}</span>
+}
+
+function whatsappHref(client: IntroClientRow) {
+  const digits = client.phone?.replace(/\D/g, '') || ''
+  if (digits.length < 8) return null
+  const text = encodeURIComponent(
+    `Hola, ${client.full_name}. Te escribimos de Absolute Archery para confirmar tu clase de introducción de tiro con arco.`,
+  )
+  return `https://wa.me/${digits}?text=${text}`
+}
+
+function introClassType(client: IntroClientRow): IntroClassType {
+  return client.intro_class_type || (Number(client.amount_paid || 0) > 0 ? 'paid' : 'free')
+}
+
+function introClassLabel(client: IntroClientRow) {
+  const type = introClassType(client)
+  if (type === 'free') return 'Gratuita'
+  if (type === 'courtesy') return 'Cortesia'
+  return 'Pagada'
+}
+
+function introClassClasses(client: IntroClientRow) {
+  const type = introClassType(client)
+  if (type === 'free') return 'border-blue-200 bg-blue-50 text-blue-700'
+  if (type === 'courtesy') return 'border-violet-200 bg-violet-50 text-violet-700'
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+}
+
+function paymentStatus(client: IntroClientRow): IntroPaymentStatus {
+  return client.payment_status || (Number(client.amount_paid || 0) > 0 && Boolean(client.paid_at) ? 'paid' : 'not_applicable')
+}
+
+function paymentStatusLabel(client: IntroClientRow) {
+  const status = paymentStatus(client)
+  if (status === 'not_applicable') return 'No aplica'
+  if (status === 'paid') return 'Pagado'
+  return 'Pendiente'
+}
+
+function paymentStatusClasses(client: IntroClientRow) {
+  const status = paymentStatus(client)
+  if (status === 'paid') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (status === 'not_applicable') return 'border-slate-200 bg-slate-50 text-slate-600'
+  return 'border-amber-200 bg-amber-50 text-amber-700'
+}
+
+function operationalLabel(status: string) {
+  if (status === 'attended') return 'Asistio'
+  if (status === 'no_show') return 'No asistio'
+  if (status === 'cancelled') return 'Cancelada'
+  return 'Confirmada'
+}
+
+function operationalClasses(status: string) {
+  if (status === 'attended') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (status === 'no_show') return 'border-rose-200 bg-rose-50 text-rose-700'
+  if (status === 'cancelled') return 'border-slate-200 bg-slate-50 text-slate-600'
+  return 'border-blue-200 bg-blue-50 text-blue-700'
+}
+
+function Badge({ children, className }: { children: ReactNode; className: string }) {
+  return (
+    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-black ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+function flattenWeekendData(data: IntroWeekendData | null): IntroClientRow[] {
+  if (!data) return []
+
+  return [data.saturday, data.sunday]
+    .flatMap((day) => day.sessions)
+    .flatMap((session) =>
+      session.clients.map((client) => ({
+        ...client,
+        session_id: session.session_id,
+        session_start: session.start_at,
+        session_end: session.end_at,
+        capacity: session.capacity,
+        booked_total: session.booked_total,
+      })),
+    )
+    .sort((a, b) => dayjs(a.session_start).valueOf() - dayjs(b.session_start).valueOf())
+}
+
+function IntroKpiCard({ kpi }: { kpi: IntroKpi }) {
+  const toneClass =
+    kpi.tone === 'green'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : kpi.tone === 'blue'
+        ? 'border-blue-200 bg-blue-50 text-blue-700'
+        : kpi.tone === 'red'
+          ? 'border-rose-200 bg-rose-50 text-rose-700'
+          : kpi.tone === 'amber'
+            ? 'border-amber-200 bg-amber-50 text-amber-700'
+            : kpi.tone === 'slate'
+              ? 'border-slate-200 bg-slate-50 text-slate-600'
+              : 'border-orange-200 bg-orange-50 text-accent'
+
+  return (
+    <article className="rounded-[1.35rem] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.055)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className={`grid h-11 w-11 place-items-center rounded-2xl border ${toneClass}`}>{kpi.icon}</div>
+        <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] font-black text-slate-500">Actual</span>
+      </div>
+      <p className="mt-4 text-sm font-bold text-slate-600">{kpi.label}</p>
+      <p className="mt-2 font-heading text-3xl font-black leading-none tracking-[-0.055em] text-slate-950">{kpi.value}</p>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{kpi.helper}</p>
+    </article>
+  )
+}
+
+function IntroFilters({
+  filters,
+  onChange,
+  onClear,
+}: {
+  filters: IntroFiltersState
+  onChange: (next: IntroFiltersState) => void
+  onClear: () => void
+}) {
+  const patch = (partial: Partial<IntroFiltersState>) => onChange({ ...filters, ...partial })
+
+  return (
+    <AdminContentPanel className="p-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-black text-slate-950">
+              <Filter className="h-4 w-4 text-accent" />
+              Filtros operativos
             </div>
-
-            {sessions.length > 0 ? (
-                <div className="space-y-3">
-                    {sessions.map(session => (
-                        <SessionCard key={session.session_id} session={session} />
-                    ))}
-                </div>
-            ) : (
-                <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-textsec">
-                    No hay turnos configurados para este día.
-                </div>
-            )}
+            <p className="mt-1 text-xs text-slate-500">Solo se activan filtros respaldados por datos persistentes.</p>
+          </div>
+          <button type="button" onClick={onClear} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
+            Limpiar filtros
+          </button>
         </div>
-    );
+
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(13rem,0.75fr)_minmax(13rem,0.75fr)_minmax(16rem,0.95fr)]">
+          <div className="min-w-0 rounded-2xl bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Fecha</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                ['today', 'Hoy'],
+                ['tomorrow', 'Mañana'],
+                ['week', 'Esta semana'],
+                ['upcoming', 'Próximas'],
+                ['all', 'Todas'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => patch({ dateScope: value as IntroDateScope })}
+                  className={`min-h-10 flex-1 basis-[6.4rem] rounded-xl px-3 text-[13px] font-black leading-tight transition sm:flex-none sm:basis-auto ${
+                    filters.dateScope === value ? 'bg-accent text-white shadow-[0_14px_32px_rgba(249,115,22,0.22)]' : 'bg-white text-slate-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="rounded-2xl bg-slate-50 p-3">
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Tipo</span>
+            <select value={filters.classType} onChange={(event) => patch({ classType: event.target.value as IntroClassFilter })} className="input mt-2">
+              <option value="all">Todos</option>
+              <option value="paid">Pagadas</option>
+              <option value="free">Gratuitas</option>
+              <option value="courtesy">Cortesias</option>
+            </select>
+          </label>
+
+          <label className="rounded-2xl bg-slate-50 p-3">
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pago</span>
+            <select value={filters.paymentStatus} onChange={(event) => patch({ paymentStatus: event.target.value as IntroPaymentFilter })} className="input mt-2">
+              <option value="all">Todos</option>
+              <option value="paid">Pagado</option>
+              <option value="pending">Pendiente</option>
+              <option value="not_applicable">No aplica</option>
+            </select>
+          </label>
+
+          <div className="grid gap-3 rounded-2xl bg-slate-50 p-3">
+            <label>
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Operacion</span>
+              <select value={filters.operationalStatus} onChange={(event) => patch({ operationalStatus: event.target.value as IntroOperationalFilter })} className="input mt-2">
+                <option value="all">Todos</option>
+                <option value="reserved">Confirmada</option>
+                <option value="attended">Asistio</option>
+                <option value="no_show">No asistio</option>
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Busqueda</span>
+              <div className="relative mt-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={filters.search}
+                  onChange={(event) => patch({ search: event.target.value })}
+                  placeholder="Nombre o telefono"
+                  className="input py-3 pl-10 text-sm"
+                />
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </AdminContentPanel>
+  )
+}
+
+function IntroDailyAgenda({
+  sessions,
+  onShowUpcoming,
+  onSelect,
+}: {
+  sessions: IntroSessionGroup[]
+  onShowUpcoming: () => void
+  onSelect: (client: IntroClientRow) => void
+}) {
+  const todaySessions = sessions.filter((session) => dayjs(session.start_at).isSame(dayjs(), 'day'))
+
+  return (
+    <AdminContentPanel className="p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-950">Agenda del dia</p>
+          <p className="mt-1 text-xs text-slate-500">Horario, cupos y prospectos confirmados para hoy.</p>
+        </div>
+        <button type="button" onClick={onShowUpcoming} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
+          Ver próximas pruebas
+        </button>
+      </div>
+
+      {todaySessions.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+          <p className="font-black text-slate-950">No hay clases intro programadas para hoy.</p>
+          <p className="mt-1 text-sm text-slate-500">Revisa las próximas pruebas para anticipar seguimiento.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {todaySessions.map((session) => {
+            const available = Math.max(session.capacity - session.booked_total, 0)
+            return (
+              <article key={session.session_id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-heading text-2xl font-black tracking-[-0.055em] text-slate-950">{dayjs(session.start_at).format('HH:mm')}</p>
+                    <p className="text-xs font-bold text-slate-500">{session.clients.length} pruebas · {available} cupos libres</p>
+                  </div>
+                  <Badge className={available <= 0 ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}>
+                    {session.booked_total}/{session.capacity}
+                  </Badge>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {session.clients.length === 0 ? (
+                    <p className="rounded-xl bg-white p-3 text-sm text-slate-500">Sin prospectos en este turno.</p>
+                  ) : (
+                    session.clients.map((client) => (
+                      <button
+                        key={client.booking_id}
+                        type="button"
+                        onClick={() => onSelect({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total })}
+                        className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 text-left transition hover:bg-orange-50/50"
+                      >
+                        <span className="truncate text-sm font-black text-slate-800">{client.full_name}</span>
+                        <span className="text-xs font-bold text-slate-500">{paymentStatusLabel({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total })}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
+    </AdminContentPanel>
+  )
+}
+
+function IntroClientTable({
+  clients,
+  onSelect,
+}: {
+  clients: IntroClientRow[]
+  onSelect: (client: IntroClientRow) => void
+}) {
+  return (
+    <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] lg:block">
+      <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+        <p className="text-sm font-black text-slate-950">Clases intro</p>
+        <p className="mt-1 text-xs text-slate-500">Vista desktop para agenda, pago y seguimiento operativo.</p>
+      </div>
+      <div className="max-h-[44rem] overflow-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+            <tr>
+              <th className="px-5 py-4">Fecha</th>
+              <th className="px-5 py-4">Prospecto</th>
+              <th className="px-5 py-4">Contacto</th>
+              <th className="px-5 py-4">Tipo</th>
+              <th className="px-5 py-4">Pago</th>
+              <th className="px-5 py-4">Operacion</th>
+              <th className="px-5 py-4 text-right">Monto</th>
+              <th className="px-5 py-4 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((client) => (
+              <tr key={client.booking_id} className="border-t border-slate-100 bg-white transition hover:bg-orange-50/30">
+                <td className="px-5 py-4">
+                  <p className="font-bold text-slate-950">{dayjs(client.session_start).format('DD MMM YYYY')}</p>
+                  <p className="text-xs text-slate-400">{dayjs(client.session_start).format('HH:mm')} - {dayjs(client.session_end).format('HH:mm')}</p>
+                </td>
+                <td className="max-w-[14rem] px-5 py-4">
+                  <p className="truncate font-black text-slate-950">{client.full_name}</p>
+                  <p className="text-xs text-slate-500">{client.age} años</p>
+                </td>
+                <td className="px-5 py-4"><SensitivePhone phone={client.phone} /></td>
+                <td className="px-5 py-4"><Badge className={introClassClasses(client)}>{introClassLabel(client)}</Badge></td>
+                <td className="px-5 py-4"><Badge className={paymentStatusClasses(client)}>{paymentStatusLabel(client)}</Badge></td>
+                <td className="px-5 py-4"><Badge className={operationalClasses(client.booking_status)}>{operationalLabel(client.booking_status)}</Badge></td>
+                <td className="px-5 py-4 text-right font-heading text-lg font-black tracking-[-0.04em] text-slate-950">{money(client.amount_paid)}</td>
+                <td className="px-5 py-4 text-right">
+                  <div className="inline-flex gap-2">
+                    {whatsappHref(client) ? (
+                      <a href={whatsappHref(client) || '#'} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-emerald-200 px-4 text-sm font-black text-emerald-700">
+                        <MessageCircle className="h-4 w-4" />
+                        WhatsApp
+                      </a>
+                    ) : (
+                      <button type="button" disabled className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-400">
+                        <MessageCircle className="h-4 w-4" />
+                        Sin telefono
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onSelect(client)} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
+                      <Eye className="h-4 w-4" />
+                      Ver detalle
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function IntroClientCard({
+  client,
+  onSelect,
+}: {
+  client: IntroClientRow
+  onSelect: (client: IntroClientRow) => void
+}) {
+  const whatsapp = whatsappHref(client)
+
+  return (
+    <article className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.055)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-black text-slate-950">{client.full_name}</p>
+          <p className="mt-1 text-xs text-slate-500">{client.age} años · {dayjs(client.session_start).format('DD MMM, HH:mm')}</p>
+        </div>
+        <Badge className={operationalClasses(client.booking_status)}>{operationalLabel(client.booking_status)}</Badge>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Tipo</p>
+          <p className="mt-1 text-sm font-bold text-slate-700">{introClassLabel(client)}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Pago</p>
+          <p className="mt-1 text-sm font-bold text-slate-700">{paymentStatusLabel(client)}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">Contacto</p>
+          <p className="mt-1"><SensitivePhone phone={client.phone} /></p>
+        </div>
+        <p className="font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(client.amount_paid)}</p>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <button type="button" onClick={() => onSelect(client)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
+          <Eye className="h-4 w-4" />
+          Ver detalle
+        </button>
+        {whatsapp ? (
+          <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 text-sm font-black text-emerald-700">
+            <MessageCircle className="h-4 w-4" />
+            Abrir WhatsApp
+          </a>
+        ) : (
+          <button type="button" disabled className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-400">
+            <MessageCircle className="h-4 w-4" />
+            Sin telefono
+          </button>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function IntroDetailDrawer({
+  client,
+  onClose,
+}: {
+  client: IntroClientRow | null
+  onClose: () => void
+}) {
+  if (!client) return null
+
+  const whatsapp = whatsappHref(client)
+  const rows = [
+    ['Nombre', client.full_name],
+    ['Edad', `${client.age} años`],
+    ['Telefono', client.phone || 'No disponible'],
+    ['Fecha', dayjs(client.session_start).format('DD/MM/YYYY')],
+    ['Hora', `${dayjs(client.session_start).format('HH:mm')} - ${dayjs(client.session_end).format('HH:mm')}`],
+    ['Turno', client.session_id],
+    ['Tipo de clase', introClassLabel(client)],
+    ['Estado de pago', paymentStatusLabel(client)],
+    ['Monto', money(client.amount_paid)],
+    ['Metodo de pago', client.payment_method || 'No disponible'],
+    ['Estado operativo', operationalLabel(client.booking_status)],
+    ['Cupos del turno', `${client.booked_total}/${client.capacity}`],
+    ['Motivo de cortesia', client.courtesy_reason || 'No aplica'],
+  ]
+
+  return (
+    <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/40 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+      <aside className="flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[1.6rem] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+          <div>
+            <p className="text-sm font-bold text-slate-500">Detalle de clase intro</p>
+            <h2 className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{client.full_name}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 text-slate-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="mb-4 grid gap-2 sm:grid-cols-2">
+            {whatsapp ? (
+              <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white">
+                <MessageCircle className="h-4 w-4" />
+                Abrir WhatsApp
+              </a>
+            ) : (
+              <button type="button" disabled className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-100 px-4 text-sm font-black text-slate-400">
+                <MessageCircle className="h-4 w-4" />
+                Sin telefono
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
+              Cerrar
+            </button>
+          </div>
+          <div className="space-y-3">
+            {rows.map(([label, value]) => (
+              <div key={label} className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
+                <p className="mt-1 break-words font-bold text-slate-800">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function IntroSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        {[0, 1, 2, 3, 4, 5].map((item) => (
+          <div key={item} className="h-36 animate-pulse rounded-[1.35rem] bg-slate-100" />
+        ))}
+      </div>
+      <div className="h-96 animate-pulse rounded-[1.45rem] bg-slate-100" />
+    </div>
+  )
+}
+
+function IntroEmptyState({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="flex min-h-[20rem] flex-col items-center justify-center rounded-[1.4rem] border border-dashed border-slate-200 bg-white p-8 text-center">
+      <div className="grid h-14 w-14 place-items-center rounded-2xl bg-orange-50 text-accent">
+        <Search className="h-6 w-6" />
+      </div>
+      <p className="mt-4 text-lg font-black text-slate-950">No hay clases intro para los filtros seleccionados.</p>
+      <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">Ajusta fecha, pago, estado o busqueda para revisar otros prospectos.</p>
+      <button type="button" onClick={onClear} className="mt-5 min-h-11 rounded-2xl bg-accent px-5 text-sm font-black text-white">
+        Limpiar filtros
+      </button>
+    </div>
+  )
+}
+
+function IntroErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="rounded-[1.4rem] border border-rose-200 bg-rose-50 p-6 text-center">
+      <p className="text-base font-black text-rose-700">No pudimos cargar las clases intro.</p>
+      <p className="mt-2 text-sm text-rose-600">Revisa la conexion o intenta nuevamente.</p>
+      <button type="button" onClick={onRetry} className="mt-5 min-h-11 rounded-2xl bg-rose-600 px-5 text-sm font-black text-white">
+        Reintentar
+      </button>
+    </div>
+  )
 }
 
 export default function IntroClient() {
-    const [weekendData, setWeekendData] = useState<IntroWeekendData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+  const [weekendData, setWeekendData] = useState<IntroWeekendData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<IntroClientRow | null>(null)
+  const [filters, setFilters] = useState<IntroFiltersState>(initialFilters)
 
-    const fetchData = async () => {
-        setIsLoading(true);
-        try {
-            const result = await IntroClassesService.getIntrosByWeekend();
-            setWeekendData(result);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  const sessions = useMemo(() => {
+    if (!weekendData) return []
+    return [weekendData.saturday.sessions, weekendData.sunday.sessions].flat()
+  }, [weekendData])
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+  const clients = useMemo(() => flattenWeekendData(weekendData), [weekendData])
 
-    const handleCreated = () => {
-        setIsModalOpen(false);
-        fetchData();
-    };
+  const fetchData = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const result = await IntroClassesService.getIntrosByWeekend()
+      setWeekendData(result)
+    } catch (err: any) {
+      console.error(err)
+      setError(err?.message || 'No pudimos cargar las clases intro.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-    const totalIntros = weekendData
-        ? [...weekendData.saturday.sessions, ...weekendData.sunday.sessions].reduce(
-            (sum, s) => sum + s.clients.length, 0
-        )
-        : 0;
+  useEffect(() => {
+    void fetchData()
+  }, [])
 
-    return (
-        <div className="space-y-6">
+  const filteredClients = useMemo(() => {
+    const search = filters.search.trim().toLowerCase()
+    const now = dayjs()
 
-            {/* Top Actions & KPIs */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4 w-full sm:w-auto">
-                    <div className="rounded-2xl border border-line bg-card p-4 shadow-soft">
-                        <div className="flex items-center gap-2 text-textsec mb-1">
-                            <UsersRound size={16} />
-                            <span className="text-xs font-medium uppercase tracking-wider">Pruebas</span>
-                        </div>
-                        <p className="text-2xl font-bold text-textpri">{totalIntros}</p>
-                    </div>
-                </div>
+    return clients.filter((client) => {
+      const start = dayjs(client.session_start)
+      const matchesDate =
+        filters.dateScope === 'all'
+        || (filters.dateScope === 'today' && start.isSame(now, 'day'))
+        || (filters.dateScope === 'tomorrow' && start.isSame(now.add(1, 'day'), 'day'))
+        || (filters.dateScope === 'week' && start.isAfter(now.startOf('day')) && start.isBefore(now.add(7, 'day').endOf('day')))
+        || (filters.dateScope === 'upcoming' && start.isAfter(now.startOf('day')))
+      const matchesClassType = filters.classType === 'all' || introClassType(client) === filters.classType
+      const matchesPayment = filters.paymentStatus === 'all' || paymentStatus(client) === filters.paymentStatus
+      const matchesOperational = filters.operationalStatus === 'all' || client.booking_status === filters.operationalStatus
+      const matchesSearch = !search
+        || client.full_name.toLowerCase().includes(search)
+        || client.phone?.toLowerCase().includes(search)
 
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-soft transition-transform active:scale-95"
-                >
-                    <Plus size={18} />
-                    Nueva Clase
-                </button>
-            </div>
+      return matchesDate && matchesClassType && matchesPayment && matchesOperational && matchesSearch
+    })
+  }, [clients, filters])
 
-            {/* Weekend Grid */}
-            {isLoading ? (
-                <div className="flex items-center justify-center py-16">
-                    <div className="flex items-center gap-2 text-textsec">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-r-transparent" />
-                        Cargando turnos del fin de semana...
-                    </div>
-                </div>
-            ) : weekendData ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <DayColumn
-                        label="Sábado"
-                        date={weekendData.saturday.date}
-                        sessions={weekendData.saturday.sessions}
-                    />
-                    <DayColumn
-                        label="Domingo"
-                        date={weekendData.sunday.date}
-                        sessions={weekendData.sunday.sessions}
-                    />
-                </div>
-            ) : (
-                <div className="rounded-xl border border-line p-12 text-center text-textsec">
-                    No se pudo cargar la información del fin de semana.
-                </div>
-            )}
+  const kpis: IntroKpi[] = useMemo(() => {
+    const now = dayjs()
+    const todayCount = clients.filter((client) => dayjs(client.session_start).isSame(now, 'day')).length
+    const tomorrowCount = clients.filter((client) => dayjs(client.session_start).isSame(now.add(1, 'day'), 'day')).length
+    const upcomingCount = clients.filter((client) => dayjs(client.session_start).isAfter(now.startOf('day'))).length
+    const pendingCount = clients.filter((client) => paymentStatus(client) === 'pending').length
+    const paidCount = clients.filter((client) => paymentStatus(client) === 'paid').length
+    const freeCount = clients.filter((client) => introClassType(client) === 'free').length
+    const courtesyCount = clients.filter((client) => introClassType(client) === 'courtesy').length
+    const attendedCount = clients.filter((client) => client.booking_status === 'attended').length
+    const noShowCount = clients.filter((client) => client.booking_status === 'no_show').length
 
-            <RegisterIntroModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSuccess={handleCreated}
-            />
-        </div>
-    );
+    return [
+      { label: 'Pruebas de hoy', value: todayCount, helper: 'Intro agendadas para el dia actual.', tone: 'orange', icon: <CalendarDays className="h-5 w-5" /> },
+      { label: 'Pruebas de mañana', value: tomorrowCount, helper: 'Reservas intro del siguiente dia.', tone: 'blue', icon: <Clock3 className="h-5 w-5" /> },
+      { label: 'Proximas pruebas', value: upcomingCount, helper: 'Desde hoy hacia adelante.', tone: 'slate', icon: <Target className="h-5 w-5" /> },
+      { label: 'Pendientes de pago', value: pendingCount, helper: 'Derivado de monto/pago disponible.', tone: 'amber', icon: <AlertTriangle className="h-5 w-5" /> },
+      { label: 'Pagadas', value: paidCount, helper: 'Monto mayor que cero con pago registrado.', tone: 'green', icon: <CheckCircle2 className="h-5 w-5" /> },
+      { label: 'Gratuitas / cortesias', value: `${freeCount}/${courtesyCount}`, helper: 'Tipo persistente: gratuitas y cortesias.', tone: 'blue', icon: <UsersRound className="h-5 w-5" /> },
+      { label: 'No-show', value: noShowCount, helper: `${attendedCount} asistieron segun bookings.status.`, tone: 'red', icon: <UsersRound className="h-5 w-5" /> },
+    ]
+  }, [clients])
+
+  const handleCreated = () => {
+    setIsModalOpen(false)
+    void fetchData()
+  }
+
+  const clearFilters = () => setFilters(initialFilters)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white shadow-[0_16px_35px_rgba(249,115,22,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98]"
+        >
+          <Plus className="h-5 w-5" />
+          Nueva clase intro
+        </button>
+      </div>
+
+      <IntroFilters filters={filters} onChange={setFilters} onClear={clearFilters} />
+
+      {isLoading ? (
+        <IntroSkeleton />
+      ) : error ? (
+        <IntroErrorState onRetry={fetchData} />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            {kpis.map((kpi) => <IntroKpiCard key={kpi.label} kpi={kpi} />)}
+          </div>
+
+          <IntroDailyAgenda sessions={sessions} onShowUpcoming={() => setFilters({ ...filters, dateScope: 'upcoming' })} onSelect={setSelectedClient} />
+
+          {filteredClients.length === 0 ? (
+            <IntroEmptyState onClear={clearFilters} />
+          ) : (
+            <>
+              <IntroClientTable clients={filteredClients} onSelect={setSelectedClient} />
+              <div className="space-y-3 lg:hidden">
+                {filteredClients.map((client) => (
+                  <IntroClientCard key={client.booking_id} client={client} onSelect={setSelectedClient} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      <RegisterIntroModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleCreated}
+      />
+      <IntroDetailDrawer client={selectedClient} onClose={() => setSelectedClient(null)} />
+    </div>
+  )
 }

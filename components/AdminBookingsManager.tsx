@@ -34,7 +34,7 @@ export default function AdminBookingsManager() {
 
   const handleCancelBooking = async (bookingId: string) => {
     const confirmed = await confirm(
-      '¿Estás seguro de que quieres cancelar esta reserva? Se devolverá el crédito al estudiante automáticamente.',
+      '¿Estás seguro de que quieres cancelar esta reserva? Si ya consumió crédito, se restaurará una sola vez.',
       { title: 'Cancelar Reserva' }
     )
 
@@ -42,7 +42,7 @@ export default function AdminBookingsManager() {
 
     try {
       await cancelBookingMutation.mutateAsync(bookingId)
-      toast.push({ message: 'Reserva cancelada. Se devolvió el crédito al alumno.', type: 'success' })
+      toast.push({ message: 'Reserva cancelada.', type: 'success' })
     } catch (error: any) {
       toast.push({ message: error?.message || 'No se pudo cancelar la reserva.', type: 'error' })
     }
