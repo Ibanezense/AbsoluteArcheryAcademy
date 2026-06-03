@@ -56,7 +56,7 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
   const loadSessions = async () => {
     setIsLoading(true)
     try {
-      const available = await IntroClassesService.getAvailableSessions(7)
+      const available = await IntroClassesService.getAvailableSessions(31)
       setSessions(available)
       if (available.length > 0) {
         setFormData((prev) => ({ ...prev, sessionId: available[0].session_id }))
@@ -224,7 +224,7 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
                       {isLoading ? (
                         <option value="">Cargando turnos...</option>
                       ) : sessions.length === 0 ? (
-                        <option value="">No hay turnos con cupo los proximos 7 dias</option>
+                        <option value="">No hay turnos con cupo durante el proximo mes</option>
                       ) : (
                         sessions.map((session) => (
                           <option key={session.session_id} value={session.session_id}>
@@ -235,7 +235,7 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
                     </select>
                   </div>
                   <p className="mt-1.5 text-xs text-textsec">
-                    Las clases intro ocupan cupo real de 10 m.
+                    Las clases intro ocupan cupo real de 10 m y pueden agendarse durante el proximo mes.
                   </p>
                 </div>
               </div>

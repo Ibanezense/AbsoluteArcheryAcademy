@@ -262,7 +262,7 @@ export class IntroClassesService {
         });
     }
 
-    static async getAvailableSessions(daysAhead: number = 7): Promise<AvailableIntroSession[]> {
+    static async getAvailableSessions(daysAhead: number = 31): Promise<AvailableIntroSession[]> {
         const now = new Date();
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);

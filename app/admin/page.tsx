@@ -28,7 +28,6 @@ import {
 import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalRequests'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { AdminDonutChart, AdminMiniBarChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
-import { Modal } from '@/components/ui/Modal'
 import {
   useAdminDashboardData,
   useAdminStudentSearch,
@@ -825,9 +824,7 @@ export default function AdminDashboard() {
           </div>
         </AdminSurface>
 
-        <Modal title="Reserva rapida" isOpen={isQuickBookingOpen} onClose={() => setIsQuickBookingOpen(false)}>
-          <AdminQuickBooking />
-        </Modal>
+        <AdminQuickBooking isOpen={isQuickBookingOpen} onClose={() => setIsQuickBookingOpen(false)} />
     </div>
   )
 }

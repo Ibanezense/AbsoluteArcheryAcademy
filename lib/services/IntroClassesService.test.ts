@@ -123,3 +123,53 @@ describe('IntroClassesService.registerIntroClass', () => {
     expect(supabase.from).not.toHaveBeenCalled()
   })
 })
+
+describe('IntroClassesService.getAvailableSessions', () => {
+  it('looks ahead roughly one month by default so admin can book intro classes beyond the next week', async () => {
+    const order = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'session-1',
+          start_at: '2026-06-14T16:00:00.000Z',
+          end_at: '2026-06-14T17:30:00.000Z',
+          session_distance_allocations: [{ distance_m: 10, slot_capacity: 12, targets: 3 }],
+        },
+      ],
+      error: null,
+    })
+    const lte = vi.fn(() => ({ order }))
+    const gte = vi.fn(() => ({ lte }))
+    const eqDistance = vi.fn(() => ({ gte }))
+    const eqStatus = vi.fn(() => ({ eq: eqDistance }))
+    const selectSessions = vi.fn(() => ({ eq: eqStatus }))
+    const bookingsIn = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        in: vi.fn().mockResolvedValue({ data: [], error: null }),
+      })),
+    }))
+    const selectBookings = vi.fn(() => ({ in: bookingsIn }))
+
+    vi.mocked(supabase.from).mockImplementation((table: string) => {
+      if (table === 'sessions') {
+        return { select: selectSessions } as never
+      }
+
+      if (table === 'bookings') {
+        return { select: selectBookings } as never
+      }
+
+      throw new Error(`Unexpected table: ${table}`)
+    })
+
+    await IntroClassesService.getAvailableSessions()
+
+    expect(lte).toHaveBeenCalledTimes(1)
+    const firstCall = lte.mock.calls.at(0) as [string, string] | undefined
+    const upperBound = firstCall?.[1]
+    const diffMs = new Date(String(upperBound)).getTime() - Date.now()
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+
+    expect(diffDays).toBeGreaterThan(29)
+    expect(diffDays).toBeLessThan(32)
+  })
+})

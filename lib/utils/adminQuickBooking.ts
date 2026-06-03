@@ -12,8 +12,9 @@ function toLocalDateInputValue(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-export function getAdminQuickBookingDateRange(selectedMonth: string, now = new Date()) {
-  const [year, month] = selectedMonth.split('-').map(Number)
+export function getAdminQuickBookingDateRange(selectedDateOrMonth: string, now = new Date()) {
+  const monthKey = selectedDateOrMonth.slice(0, 7)
+  const [year, month] = monthKey.split('-').map(Number)
   const monthStart = new Date(year, month - 1, 1)
   const monthEnd = new Date(year, month, 0)
   const minDateValue = new Date(now)
@@ -21,15 +22,10 @@ export function getAdminQuickBookingDateRange(selectedMonth: string, now = new D
   minDateValue.setDate(minDateValue.getDate() - 7)
 
   const from = monthStart < minDateValue ? minDateValue : monthStart
-  const todayEnd = new Date(now)
-  todayEnd.setHours(0, 0, 0, 0)
-  const to = selectedMonth === toLocalDateInputValue(now).slice(0, 7) && monthEnd > todayEnd
-    ? todayEnd
-    : monthEnd
 
   return {
     fromDate: toLocalDateInputValue(from),
-    toDate: toLocalDateInputValue(to),
+    toDate: toLocalDateInputValue(monthEnd),
     minDate: toLocalDateInputValue(minDateValue),
   }
 }

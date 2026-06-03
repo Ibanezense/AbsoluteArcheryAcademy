@@ -59,6 +59,16 @@ describe('admin quick booking helpers', () => {
     })
   })
 
+  it('keeps future days in the current month visible for upcoming quick bookings', () => {
+    const now = new Date('2026-04-10T15:00:00-05:00')
+
+    expect(getAdminQuickBookingDateRange('2026-04-10', now)).toEqual({
+      fromDate: '2026-04-03',
+      toDate: '2026-04-30',
+      minDate: '2026-04-03',
+    })
+  })
+
   it('keeps every active student visible even when current membership status would block self-service booking', () => {
     expect(getQuickBookingStudentOptions(students).map((student) => student.id)).toEqual(['1', '2', '3', '4'])
   })
