@@ -14,6 +14,12 @@ const reconciliationPath = join(
   'reconciliation',
   '20260603_student_operational_status_reconciliation.sql',
 )
+const readSurfaceSyncPath = join(
+  process.cwd(),
+  'supabase',
+  'migrations',
+  '20260604_170000_sync_student_status_before_read_surfaces.sql',
+)
 
 describe('student operational status automation migration', () => {
   it('adds persisted operational status fields with protected manual states', () => {
@@ -120,5 +126,19 @@ describe('student operational status automation migration', () => {
     expect(sql).toContain('-- UPDATE public.student_memberships')
     expect(executableLines.some((line) => /^UPDATE\s+public\./i.test(line))).toBe(false)
     expect(executableLines.some((line) => /^SELECT\s+public\.sync_student_membership_operational_status/i.test(line))).toBe(false)
+  })
+
+  it('self-heals stale student active flags before guardian and student read surfaces respond', () => {
+    expect(existsSync(readSurfaceSyncPath)).toBe(true)
+
+    const sql = readFileSync(readSurfaceSyncPath, 'utf8')
+
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.get_student_dashboard')
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.get_my_children')
+    expect(sql).toContain('PERFORM public.sync_student_membership_operational_status(v_student_id)')
+    expect(sql).toContain('FOR v_accessible_student_id IN')
+    expect(sql).toContain('PERFORM public.sync_student_membership_operational_status(v_accessible_student_id)')
+    expect(sql).toMatch(/COALESCE\(s\.is_active, true\)[\s\S]*AND COALESCE\(s\.operational_status, 'active'\) = 'active'[\s\S]*AND EXISTS/s)
+    expect(sql).toMatch(/COALESCE\(base\.raw_is_active, true\)[\s\S]*AND COALESCE\(base\.operational_status, 'active'\) = 'active'[\s\S]*AND sm\.status = 'active'/s)
   })
 })

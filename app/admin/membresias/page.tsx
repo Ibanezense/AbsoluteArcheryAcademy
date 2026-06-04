@@ -32,6 +32,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys, useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
+import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershipStudents'
 import {
   membershipPlanKeys,
   useAdminStudentMemberships,
@@ -1136,7 +1137,7 @@ export default function AdminMembershipsPage() {
   const [planSaving, setPlanSaving] = useState(false)
   const [planDeletingId, setPlanDeletingId] = useState<string | null>(null)
 
-  const activeStudents = useMemo(() => students.filter((student) => student.is_active), [students])
+  const activeStudents = useMemo(() => students.filter(isStudentSelectableForMembershipSale), [students])
   const activePlans = useMemo(() => plans.filter((plan) => plan.is_active), [plans])
 
   const selectedStudent = useMemo(
