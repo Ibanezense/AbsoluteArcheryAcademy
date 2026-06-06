@@ -287,7 +287,7 @@ export function AttendanceSessionTabs({
             }`}
           >
             <span className="block text-sm font-black">{dayjs(session.session_start_at).format('HH:mm')}</span>
-            <span className={`mt-1 block text-xs ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{total} alumnos - {label}</span>
+            <span className={`mt-1 block text-xs ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{total} reservas - {label}</span>
           </button>
         )
       })}
@@ -296,31 +296,40 @@ export function AttendanceSessionTabs({
 }
 
 export function AttendanceStudentRow({
+  entryType,
   name,
   avatarUrl,
   distanceM,
   equipmentLabel,
+  participantLabel,
   status,
   notes,
   isProcessing,
+  canEdit = true,
+  editDisabledReason,
   onAttended,
   onNoShow,
   onEdit,
   onCancel,
 }: {
+  entryType?: 'student' | 'intro'
   name: string
   avatarUrl: string | null
   distanceM: number | null
   equipmentLabel: string
+  participantLabel?: string | null
   status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
   notes?: string | null
   isProcessing: boolean
+  canEdit?: boolean
+  editDisabledReason?: string | null
   onAttended: () => void
   onNoShow: () => void
   onEdit: () => void
   onCancel: () => void
 }) {
   const isReserved = status === 'reserved'
+  const editDisabled = isProcessing || !isReserved || !canEdit
   const statusLabel =
     status === 'attended'
       ? 'Asistio'
@@ -345,6 +354,9 @@ export function AttendanceStudentRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate font-black text-slate-950">{name}</p>
+            {participantLabel && (
+              <OperationalStatusBadge label={participantLabel} tone={entryType === 'intro' ? 'info' : 'neutral'} />
+            )}
             <OperationalStatusBadge label={statusLabel} tone={statusTone} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
@@ -374,7 +386,8 @@ export function AttendanceStudentRow({
         <button
           type="button"
           onClick={onEdit}
-          disabled={isProcessing || !isReserved}
+          disabled={editDisabled}
+          title={editDisabledReason || undefined}
           className="min-h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Editar

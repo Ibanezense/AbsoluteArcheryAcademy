@@ -20,7 +20,9 @@ interface DailyRosterBooking {
   booking_id: string
   session_id: string
   session_start_at: string
-  student_id: string
+  entry_type: 'student' | 'intro'
+  student_id: string | null
+  intro_client_id: string | null
   student_name: string
   student_avatar_url: string | null
   booking_status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
@@ -37,6 +39,7 @@ interface GroupedSession {
 }
 
 function bowUsageLabel(booking: DailyRosterBooking) {
+  if (booking.entry_type === 'intro') return 'Clase de prueba'
   if (booking.bow_usage_type === 'own') return 'Arco propio'
   if (booking.bow_usage_type === 'assigned') return 'Arco asignado'
   if (booking.bow_usage_type === 'shared_inventory' && booking.bow_poundage) {
@@ -336,16 +339,27 @@ function AsistenciaContent() {
               return (
                 <AttendanceStudentRow
                   key={booking.booking_id}
+                  entryType={booking.entry_type}
                   name={booking.student_name}
                   avatarUrl={booking.student_avatar_url}
                   distanceM={booking.distance_m}
                   equipmentLabel={bowUsageLabel(booking)}
+                  participantLabel={booking.entry_type === 'intro' ? 'Clase de prueba' : null}
                   status={booking.booking_status}
                   notes={booking.admin_notes}
                   isProcessing={isProcessing}
+                  canEdit={booking.entry_type === 'student'}
+                  editDisabledReason={
+                    booking.entry_type === 'intro'
+                      ? 'Las clases de prueba no se editan desde este flujo.'
+                      : null
+                  }
                   onAttended={() => handleMarkAttendance(booking.booking_id, true)}
                   onNoShow={() => handleMarkAttendance(booking.booking_id, false)}
-                  onEdit={() => router.push(`/reserva/${booking.booking_id}/editar`)}
+                  onEdit={() => {
+                    if (booking.entry_type !== 'student') return
+                    router.push(`/reserva/${booking.booking_id}/editar`)
+                  }}
                   onCancel={() => handleCancelBooking(booking.booking_id)}
                 />
               )
