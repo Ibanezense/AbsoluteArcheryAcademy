@@ -34,4 +34,14 @@ describe('admin attendance cancellation surface', () => {
     expect(surface).toContain('Clase de prueba')
     expect(surface).toContain('entryType={booking.entry_type}')
   })
+
+  it('routes intro booking edits from attendance to the admin intro editor', () => {
+    const page = readFileSync(
+      join(process.cwd(), 'app', 'admin', 'asistencia', 'page.tsx'),
+      'utf8',
+    )
+
+    expect(page).toContain('/admin/intro?editBookingId=')
+    expect(page).not.toContain('Las clases de prueba no se editan desde este flujo.')
+  })
 })

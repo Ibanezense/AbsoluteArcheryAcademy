@@ -377,4 +377,40 @@ export class IntroClassesService {
             throw e;
         }
     }
+
+    static async updateIntroClass(payload: {
+        bookingId: string;
+        introClientId: string;
+        fullName: string;
+        age: number;
+        phone?: string | null;
+        sessionId: string;
+        amountPaid: number;
+        paymentMethod: string;
+        introClassType: IntroClassType;
+        paymentStatus: IntroPaymentStatus;
+        courtesyReason?: string | null;
+    }): Promise<boolean> {
+        try {
+            const { error } = await supabase.rpc('admin_update_intro_class', {
+                p_booking_id: payload.bookingId,
+                p_intro_client_id: payload.introClientId,
+                p_full_name: payload.fullName,
+                p_age: payload.age,
+                p_phone: payload.phone || null,
+                p_session_id: payload.sessionId,
+                p_amount_paid: payload.amountPaid,
+                p_payment_method: payload.paymentMethod,
+                p_intro_class_type: payload.introClassType,
+                p_payment_status: payload.paymentStatus,
+                p_courtesy_reason: payload.courtesyReason || null,
+            });
+
+            if (error) throw new Error(error.message);
+            return true;
+        } catch (e) {
+            console.error('Failed Intro Update Sequence:', e);
+            throw e;
+        }
+    }
 }

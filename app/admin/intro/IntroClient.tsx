@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import {
@@ -8,18 +8,25 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Calendar,
+  DollarSign,
+  Edit3,
   Eye,
   Filter,
+  Loader2,
   MessageCircle,
+  Phone,
   Plus,
   Search,
   Target,
+  User,
   UsersRound,
   X,
 } from 'lucide-react'
 import { AdminContentPanel } from '@/components/admin/AdminVisualSystem'
 import {
   IntroClassesService,
+  type AvailableIntroSession,
   type IntroClassType,
   type IntroPaymentStatus,
   type IntroSessionGroup,
@@ -362,9 +369,11 @@ function IntroDailyAgenda({
 function IntroClientTable({
   clients,
   onSelect,
+  onEdit,
 }: {
   clients: IntroClientRow[]
   onSelect: (client: IntroClientRow) => void
+  onEdit: (client: IntroClientRow) => void
 }) {
   return (
     <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] lg:block">
@@ -419,6 +428,10 @@ function IntroClientTable({
                       <Eye className="h-4 w-4" />
                       Ver detalle
                     </button>
+                    <button type="button" onClick={() => onEdit(client)} className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
+                      <Edit3 className="h-4 w-4" />
+                      Editar
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -433,9 +446,11 @@ function IntroClientTable({
 function IntroClientCard({
   client,
   onSelect,
+  onEdit,
 }: {
   client: IntroClientRow
   onSelect: (client: IntroClientRow) => void
+  onEdit: (client: IntroClientRow) => void
 }) {
   const whatsapp = whatsappHref(client)
 
@@ -468,10 +483,14 @@ function IntroClientCard({
         <p className="font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(client.amount_paid)}</p>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <button type="button" onClick={() => onSelect(client)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
           <Eye className="h-4 w-4" />
           Ver detalle
+        </button>
+        <button type="button" onClick={() => onEdit(client)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
+          <Edit3 className="h-4 w-4" />
+          Editar
         </button>
         {whatsapp ? (
           <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 text-sm font-black text-emerald-700">
@@ -492,9 +511,11 @@ function IntroClientCard({
 function IntroDetailDrawer({
   client,
   onClose,
+  onEdit,
 }: {
   client: IntroClientRow | null
   onClose: () => void
+  onEdit: (client: IntroClientRow) => void
 }) {
   if (!client) return null
 
@@ -528,7 +549,7 @@ function IntroDetailDrawer({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-5">
-          <div className="mb-4 grid gap-2 sm:grid-cols-2">
+          <div className="mb-4 grid gap-2 sm:grid-cols-3">
             {whatsapp ? (
               <a href={whatsapp} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white">
                 <MessageCircle className="h-4 w-4" />
@@ -540,6 +561,10 @@ function IntroDetailDrawer({
                 Sin telefono
               </button>
             )}
+            <button type="button" onClick={() => onEdit(client)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
+              <Edit3 className="h-4 w-4" />
+              Editar
+            </button>
             <button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
               Cerrar
             </button>
@@ -554,6 +579,279 @@ function IntroDetailDrawer({
           </div>
         </div>
       </aside>
+    </div>
+  )
+}
+
+function EditIntroModal({
+  client,
+  onClose,
+  onSuccess,
+}: {
+  client: IntroClientRow | null
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [sessions, setSessions] = useState<AvailableIntroSession[]>([])
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [formData, setFormData] = useState({
+    fullName: '',
+    age: '',
+    phone: '',
+    sessionId: '',
+    introClassType: 'paid' as IntroClassType,
+    paymentStatus: 'paid' as IntroPaymentStatus,
+    amountPaid: '45.00',
+    paymentMethod: 'transferencia',
+    courtesyReason: '',
+  })
+
+  useEffect(() => {
+    if (!client) return
+
+    setFormData({
+      fullName: client.full_name,
+      age: String(client.age || ''),
+      phone: client.phone || '',
+      sessionId: client.session_id,
+      introClassType: introClassType(client),
+      paymentStatus: paymentStatus(client),
+      amountPaid: Number(client.amount_paid || 0).toFixed(2),
+      paymentMethod: client.payment_method || (introClassType(client) === 'paid' ? 'transferencia' : 'not_applicable'),
+      courtesyReason: client.courtesy_reason || '',
+    })
+    setError(null)
+    void loadSessions(client)
+  }, [client])
+
+  const loadSessions = async (currentClient: IntroClientRow) => {
+    setIsLoadingSessions(true)
+    try {
+      const available = await IntroClassesService.getAvailableSessions(31)
+      const currentSession: AvailableIntroSession = {
+        session_id: currentClient.session_id,
+        start_at: currentClient.session_start,
+        end_at: currentClient.session_end,
+        capacity: currentClient.capacity,
+        booked: currentClient.booked_total,
+        available: Math.max(currentClient.capacity - currentClient.booked_total, 0),
+      }
+      const merged = available.some((session) => session.session_id === currentSession.session_id)
+        ? available
+        : [currentSession, ...available]
+
+      setSessions(merged)
+    } catch (err) {
+      setError('Error al cargar turnos disponibles.')
+    } finally {
+      setIsLoadingSessions(false)
+    }
+  }
+
+  const updateIntroClassType = (nextType: IntroClassType) => {
+    setFormData((prev) => ({
+      ...prev,
+      introClassType: nextType,
+      amountPaid: nextType === 'paid' ? (Number(prev.amountPaid) > 0 ? prev.amountPaid : '45.00') : '0.00',
+      paymentStatus: nextType === 'paid' ? (prev.paymentStatus === 'paid' ? 'paid' : 'pending') : 'not_applicable',
+      paymentMethod: nextType === 'paid' ? (prev.paymentMethod === 'not_applicable' ? 'transferencia' : prev.paymentMethod) : 'not_applicable',
+      courtesyReason: nextType === 'courtesy' ? prev.courtesyReason : '',
+    }))
+  }
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!client) return
+
+    if (!formData.fullName.trim() || !formData.age || !formData.sessionId || formData.amountPaid === '') {
+      setError('Completa nombre, edad, horario y pago.')
+      return
+    }
+
+    if (formData.introClassType === 'paid' && Number(formData.amountPaid) <= 0) {
+      setError('Una clase pagada requiere un monto mayor a cero.')
+      return
+    }
+
+    if (formData.introClassType !== 'paid' && Number(formData.amountPaid) !== 0) {
+      setError('Las clases gratuitas o de cortesia deben tener monto cero.')
+      return
+    }
+
+    if (formData.introClassType === 'courtesy' && !formData.courtesyReason.trim()) {
+      setError('Indica el motivo de la cortesia.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      await IntroClassesService.updateIntroClass({
+        bookingId: client.booking_id,
+        introClientId: client.intro_client_id,
+        fullName: formData.fullName,
+        age: parseInt(formData.age, 10),
+        phone: formData.phone,
+        sessionId: formData.sessionId,
+        amountPaid: parseFloat(formData.amountPaid),
+        paymentMethod: formData.paymentMethod,
+        introClassType: formData.introClassType,
+        paymentStatus: formData.paymentStatus,
+        courtesyReason: formData.courtesyReason || null,
+      })
+      onSuccess()
+    } catch (err: any) {
+      setError(err.message || 'No se pudo actualizar la clase intro.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (!client) return null
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/40 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[1.6rem] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+          <div>
+            <p className="text-sm font-bold text-slate-500">Editar clase intro</p>
+            <h2 className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{client.full_name}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 text-slate-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-5">
+          {error && <div className="mb-4 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</div>}
+
+          <form id="edit-intro-form" onSubmit={handleSubmit} className="space-y-5">
+            <section className="space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Prospecto</h3>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-bold text-slate-700">Nombre completo</span>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input value={formData.fullName} onChange={(event) => setFormData((prev) => ({ ...prev, fullName: event.target.value }))} className="input pl-10" />
+                </div>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Edad</span>
+                  <input type="number" min="5" max="99" value={formData.age} onChange={(event) => setFormData((prev) => ({ ...prev, age: event.target.value }))} className="input" />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Telefono</span>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input value={formData.phone} onChange={(event) => setFormData((prev) => ({ ...prev, phone: event.target.value }))} className="input pl-10" />
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Horario</h3>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-bold text-slate-700">Turno asignado</span>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <select value={formData.sessionId} onChange={(event) => setFormData((prev) => ({ ...prev, sessionId: event.target.value }))} disabled={isLoadingSessions} className="input pl-10">
+                    {sessions.map((session) => (
+                      <option key={session.session_id} value={session.session_id}>
+                        {dayjs(session.start_at).format('ddd DD MMM - HH:mm')} ({session.available} cupos libres)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </label>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Tipo y pago</h3>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {[
+                  ['paid', 'Pagada', 'Tarifa regular'],
+                  ['free', 'Gratuita', 'Promocion'],
+                  ['courtesy', 'Cortesia', 'Excepcion'],
+                ].map(([value, label, helper]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => updateIntroClassType(value as IntroClassType)}
+                    className={`min-h-16 rounded-xl border px-3 py-2 text-left transition ${
+                      formData.introClassType === value
+                        ? 'border-accent bg-accent/10 text-slate-950'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <span className="block text-sm font-black">{label}</span>
+                    <span className="mt-0.5 block text-xs">{helper}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Monto</span>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input type="number" step="0.01" value={formData.amountPaid} onChange={(event) => setFormData((prev) => ({ ...prev, amountPaid: event.target.value }))} disabled={formData.introClassType !== 'paid'} className="input pl-10" />
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Estado</span>
+                  <select value={formData.paymentStatus} onChange={(event) => setFormData((prev) => ({ ...prev, paymentStatus: event.target.value as IntroPaymentStatus }))} disabled={formData.introClassType !== 'paid'} className="input">
+                    {formData.introClassType === 'paid' ? (
+                      <>
+                        <option value="paid">Pagado</option>
+                        <option value="pending">Pendiente</option>
+                      </>
+                    ) : (
+                      <option value="not_applicable">No aplica</option>
+                    )}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Metodo</span>
+                  <select value={formData.paymentMethod} onChange={(event) => setFormData((prev) => ({ ...prev, paymentMethod: event.target.value }))} disabled={formData.introClassType !== 'paid'} className="input">
+                    {formData.introClassType === 'paid' ? (
+                      <>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="yape">Yape</option>
+                        <option value="plin">Plin</option>
+                        <option value="efectivo">Efectivo</option>
+                      </>
+                    ) : (
+                      <option value="not_applicable">No aplica</option>
+                    )}
+                  </select>
+                </label>
+              </div>
+
+              {formData.introClassType === 'courtesy' && (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-slate-700">Motivo de cortesia</span>
+                  <textarea value={formData.courtesyReason} onChange={(event) => setFormData((prev) => ({ ...prev, courtesyReason: event.target.value }))} className="input min-h-24 py-3" />
+                </label>
+              )}
+            </section>
+          </form>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
+          <button type="button" onClick={onClose} disabled={isSubmitting} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700 disabled:opacity-50">
+            Cancelar
+          </button>
+          <button type="submit" form="edit-intro-form" disabled={isSubmitting || isLoadingSessions} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white disabled:opacity-50">
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Guardar cambios
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -604,6 +902,7 @@ export default function IntroClient() {
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<IntroClientRow | null>(null)
+  const [selectedEditClient, setSelectedEditClient] = useState<IntroClientRow | null>(null)
   const [filters, setFilters] = useState<IntroFiltersState>(initialFilters)
 
   const clients = useMemo(() => flattenIntroSessions(sessions), [sessions])
@@ -625,6 +924,16 @@ export default function IntroClient() {
   useEffect(() => {
     void fetchData()
   }, [])
+
+  useEffect(() => {
+    const editBookingId = new URLSearchParams(window.location.search).get('editBookingId')
+    if (!editBookingId || selectedEditClient) return
+
+    const editableClient = clients.find((client) => client.booking_id === editBookingId)
+    if (editableClient) {
+      setSelectedEditClient(editableClient)
+    }
+  }, [clients, selectedEditClient])
 
   const filteredClients = useMemo(() => {
     const search = filters.search.trim().toLowerCase()
@@ -677,6 +986,12 @@ export default function IntroClient() {
     void fetchData()
   }
 
+  const handleUpdated = () => {
+    setSelectedEditClient(null)
+    setSelectedClient(null)
+    void fetchData()
+  }
+
   const clearFilters = () => setFilters(initialFilters)
 
   return (
@@ -709,10 +1024,10 @@ export default function IntroClient() {
             <IntroEmptyState onClear={clearFilters} />
           ) : (
             <>
-              <IntroClientTable clients={filteredClients} onSelect={setSelectedClient} />
+              <IntroClientTable clients={filteredClients} onSelect={setSelectedClient} onEdit={setSelectedEditClient} />
               <div className="space-y-3 lg:hidden">
                 {filteredClients.map((client) => (
-                  <IntroClientCard key={client.booking_id} client={client} onSelect={setSelectedClient} />
+                  <IntroClientCard key={client.booking_id} client={client} onSelect={setSelectedClient} onEdit={setSelectedEditClient} />
                 ))}
               </div>
             </>
@@ -725,7 +1040,16 @@ export default function IntroClient() {
         onClose={() => setIsModalOpen(false)}
         onSuccess={handleCreated}
       />
-      <IntroDetailDrawer client={selectedClient} onClose={() => setSelectedClient(null)} />
+      <EditIntroModal
+        client={selectedEditClient}
+        onClose={() => setSelectedEditClient(null)}
+        onSuccess={handleUpdated}
+      />
+      <IntroDetailDrawer
+        client={selectedClient}
+        onClose={() => setSelectedClient(null)}
+        onEdit={setSelectedEditClient}
+      />
     </div>
   )
 }

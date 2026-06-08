@@ -82,4 +82,19 @@ describe('admin intro productivity phase 3B', () => {
     expect(client).not.toMatch(/from\('intro_clients'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
     expect(client).not.toMatch(/from\('intro_payments'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
   })
+
+  it('allows admins to edit a full intro class through an atomic RPC-backed modal', () => {
+    const client = source('app/admin/intro/IntroClient.tsx')
+    const service = source('lib/services/IntroClassesService.ts')
+
+    expect(client).toContain('EditIntroModal')
+    expect(client).toContain('Editar clase intro')
+    expect(client).toContain('selectedEditClient')
+    expect(client).toContain('editBookingId')
+    expect(client).toContain('onEdit={setSelectedEditClient}')
+    expect(service).toContain('updateIntroClass')
+    expect(service).toContain("supabase.rpc('admin_update_intro_class'")
+    expect(client).not.toMatch(/from\('intro_clients'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
+    expect(client).not.toMatch(/from\('intro_payments'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
+  })
 })

@@ -348,16 +348,14 @@ function AsistenciaContent() {
                   status={booking.booking_status}
                   notes={booking.admin_notes}
                   isProcessing={isProcessing}
-                  canEdit={booking.entry_type === 'student'}
-                  editDisabledReason={
-                    booking.entry_type === 'intro'
-                      ? 'Las clases de prueba no se editan desde este flujo.'
-                      : null
-                  }
+                  canEdit
                   onAttended={() => handleMarkAttendance(booking.booking_id, true)}
                   onNoShow={() => handleMarkAttendance(booking.booking_id, false)}
                   onEdit={() => {
-                    if (booking.entry_type !== 'student') return
+                    if (booking.entry_type === 'intro') {
+                      router.push(`/admin/intro?editBookingId=${booking.booking_id}`)
+                      return
+                    }
                     router.push(`/reserva/${booking.booking_id}/editar`)
                   }}
                   onCancel={() => handleCancelBooking(booking.booking_id)}

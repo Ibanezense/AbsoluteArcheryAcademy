@@ -124,6 +124,48 @@ describe('IntroClassesService.registerIntroClass', () => {
   })
 })
 
+describe('IntroClassesService.updateIntroClass', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  it('uses the atomic admin edit RPC for prospect, payment and schedule changes', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: { success: true }, error: null } as never)
+
+    await expect(
+      IntroClassesService.updateIntroClass({
+        bookingId: 'booking-1',
+        introClientId: 'intro-1',
+        fullName: 'Laura Torres Actualizada',
+        age: 26,
+        phone: '999111222',
+        sessionId: 'session-2',
+        amountPaid: 45,
+        paymentMethod: 'yape',
+        introClassType: 'paid',
+        paymentStatus: 'paid',
+        courtesyReason: null,
+      }),
+    ).resolves.toBe(true)
+
+    expect(supabase.rpc).toHaveBeenCalledWith('admin_update_intro_class', {
+      p_booking_id: 'booking-1',
+      p_intro_client_id: 'intro-1',
+      p_full_name: 'Laura Torres Actualizada',
+      p_age: 26,
+      p_phone: '999111222',
+      p_session_id: 'session-2',
+      p_amount_paid: 45,
+      p_payment_method: 'yape',
+      p_intro_class_type: 'paid',
+      p_payment_status: 'paid',
+      p_courtesy_reason: null,
+    })
+    expect(supabase.from).not.toHaveBeenCalled()
+  })
+})
+
 describe('IntroClassesService.getAvailableSessions', () => {
   it('looks ahead roughly one month by default so admin can book intro classes beyond the next week', async () => {
     const order = vi.fn().mockResolvedValue({
