@@ -31,6 +31,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
+import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
 
 type MembershipEditorState = {
   id: string
@@ -351,27 +352,31 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     }
   }
 
-  async function handleDeleteMembership(membershipId: string) {
+  async function handleDeleteMembership(membership: StudentMembershipSummary) {
     if (!data || membershipDeletingId) return
+    if (!canDeleteExpiredMembership(membership)) {
+      toast.push({ message: 'Solo se puede eliminar una membresia vencida, historica, cancelada o consumida.', type: 'error' })
+      return
+    }
 
     const accepted = await confirm(
-      'Se eliminara la membresia seleccionada. Si tiene reservas asociadas, el sistema bloqueara la eliminacion para proteger el historial.',
-      { title: 'Eliminar membresia' }
+      'Se eliminara la membresia vencida seleccionada sin afectar la membresia activa nueva del alumno.',
+      { title: 'Eliminar membresia vencida', confirmLabel: 'Eliminar vencida', tone: 'danger' }
     )
 
     if (!accepted) return
 
     try {
-      setMembershipDeletingId(membershipId)
+      setMembershipDeletingId(membership.id)
       const { data: result, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
-        p_membership_id: membershipId,
+        p_membership_id: membership.id,
       })
 
       if (deleteError) throw deleteError
       if (!result?.success) throw new Error(result?.error || 'No se pudo eliminar la membresia.')
 
       toast.push({ message: 'Membresia eliminada.', type: 'success' })
-      if (membershipEditor?.id === membershipId) setMembershipEditor(null)
+      if (membershipEditor?.id === membership.id) setMembershipEditor(null)
       await detailQuery.refetch()
     } catch (membershipError: any) {
       toast.push({ message: membershipError.message || 'No se pudo eliminar la membresia.', type: 'error' })
@@ -844,7 +849,7 @@ function MembershipTab({
   setMembershipEditor: (value: MembershipEditorState | null) => void
   setActiveTab: (tab: TabId) => void
   handleSaveMembership: () => void
-  handleDeleteMembership: (membershipId: string) => void
+  handleDeleteMembership: (membership: StudentMembershipSummary) => void
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -920,9 +925,11 @@ function MembershipTab({
                   <button type="button" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>
                     Editar
                   </button>
-                  <button type="button" className="rounded-2xl border border-rose-200 px-4 py-2 text-sm font-black text-rose-700" onClick={() => handleDeleteMembership(membership.id)} disabled={membershipDeletingId === membership.id}>
-                    {membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar'}
-                  </button>
+                  {canDeleteExpiredMembership(membership) && (
+                    <button type="button" className="rounded-2xl border border-rose-200 px-4 py-2 text-sm font-black text-rose-700 disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipDeletingId === membership.id}>
+                      {membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar vencida'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
