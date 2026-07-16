@@ -34,25 +34,26 @@ describe('admin visual system', () => {
     }
   })
 
-  it('matches the alumnos operational layout with student cards and a right sidebar', () => {
+  it('matches the alumnos operational layout with a compact responsive list', () => {
     const alumnos = source('app/admin/alumnos/page.tsx')
 
-    expect(alumnos).toContain('admin-students-grid')
-    expect(alumnos).toContain('Alertas operativas')
-    expect(alumnos).toContain('Proximas clases hoy')
-    expect(alumnos).toContain('Distribucion por nivel')
-    expect(alumnos).toContain('Acciones rapidas')
+    expect(alumnos).toContain('AdminContentPanel')
+    expect(alumnos).toContain('DesktopStudentTable')
+    expect(alumnos).toContain('MobileStudentList')
+    expect(alumnos).toContain('statusFilter')
+    expect(alumnos).not.toContain('Alertas operativas')
+    expect(alumnos).not.toContain('Acciones rapidas')
   })
 
-  it('uses contained bar charts and donut charts instead of overflowing line sparklines', () => {
+  it('keeps contained charts on the dashboard and out of the compact alumnos list', () => {
     const dashboard = source('app/admin/page.tsx')
     const alumnos = source('app/admin/alumnos/page.tsx')
 
     expect(dashboard).toContain('AdminMiniBarChart')
     expect(dashboard).toContain('StudentsLevelDistribution')
     expect(dashboard).toContain('AdminDonutChart')
-    expect(alumnos).toContain('AdminMiniBarChart')
-    expect(alumnos).toContain('AdminDonutChart')
+    expect(alumnos).not.toContain('AdminMiniBarChart')
+    expect(alumnos).not.toContain('AdminDonutChart')
     expect(dashboard).not.toContain('function StatSparkline')
   })
 })
