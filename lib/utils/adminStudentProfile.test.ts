@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildPaymentDocumentRows, filterAttendance, selectPendingBookings, summarizeAttendance } from '@/lib/utils/adminStudentProfile'
+import {
+  buildPaymentDocumentRows,
+  filterAttendance,
+  getBowFlags,
+  getMembershipDisplayFields,
+  getStudentBowUsage,
+  selectPendingBookings,
+  summarizeAttendance,
+} from '@/lib/utils/adminStudentProfile'
 
 const bookings = [
   { id: 'attended', status: 'attended', start_at: '2026-07-10T15:00:00-05:00' },
@@ -25,5 +33,36 @@ describe('student profile selectors', () => {
   it('derives internal payment records without inventing fiscal numbers', () => {
     const rows = buildPaymentDocumentRows([{ id: 'abcdef12-0000', paid_at: '2026-07-10T15:00:00-05:00', payment_status: 'paid' }] as any)
     expect(rows).toEqual([{ id: 'abcdef12-0000', reference: 'Pago ABCDEF12', date: '2026-07-10T15:00:00-05:00', status: 'paid' }])
+  })
+
+  it('treats an unassigned academy bow as academy equipment even when poundage exists', () => {
+    expect(getStudentBowUsage({ hasOwnBow: false, assignedBow: false, bowPoundage: 20 })).toEqual({
+      type: 'academy',
+      label: 'Arco de academia · 20 lb',
+    })
+  })
+
+  it('keeps own, assigned and academy bow flags mutually exclusive', () => {
+    expect(getBowFlags('own')).toEqual({ hasOwnBow: true, assignedBow: false })
+    expect(getBowFlags('assigned')).toEqual({ hasOwnBow: false, assignedBow: true })
+    expect(getBowFlags('academy')).toEqual({ hasOwnBow: false, assignedBow: false })
+  })
+
+  it('provides safe membership operation values for historical records', () => {
+    expect(getMembershipDisplayFields({
+      id: 'abcdef12-0000-0000-0000-000000000000',
+      document_number: null,
+      payment_type: null,
+      billing_date: null,
+      discount_type: null,
+      discount_value: null,
+      frozen_at: null,
+    })).toEqual({
+      documentNumber: 'MEM-ABCDEF12',
+      paymentType: 'Manual',
+      billingDate: null,
+      discountLabel: 'Sin descuento',
+      frozen: false,
+    })
   })
 })

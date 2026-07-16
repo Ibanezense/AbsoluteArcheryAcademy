@@ -39,8 +39,8 @@ describe('phase 1 UX and operational safeguards', () => {
     expect(alumnos).not.toContain('student.guardian_access_code')
     expect(profile).toContain('revealedAccessTarget')
     expect(profile).toContain('••••••')
-    expect(profile).toContain('Ver codigo')
-    expect(profile).toContain('Ocultar codigo')
+    expect(profile).toContain('Ver código')
+    expect(profile).toContain('Ocultar código')
   })
 
   it('requires an impact confirmation before cancelling an admin session', () => {

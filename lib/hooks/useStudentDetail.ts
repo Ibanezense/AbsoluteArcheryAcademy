@@ -29,6 +29,13 @@ export type StudentMembershipSummary = {
   notes: string | null
   created_at: string
   expired_at: string | null
+  document_number: string | null
+  payment_type: string | null
+  billing_date: string | null
+  discount_type: string | null
+  discount_value: number | null
+  frozen_at: string | null
+  frozen_until: string | null
 }
 
 export type StudentPaymentSummary = {
@@ -198,7 +205,14 @@ export function useStudentDetail(studentId: string) {
                 currency,
                 notes,
                 created_at,
-                expired_at
+                expired_at,
+                document_number,
+                payment_type,
+                billing_date,
+                discount_type,
+                discount_value,
+                frozen_at,
+                frozen_until
               )
             `)
             .eq('id', studentId)
