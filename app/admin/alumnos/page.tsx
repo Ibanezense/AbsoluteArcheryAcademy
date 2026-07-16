@@ -25,6 +25,7 @@ const statusOptions: Array<[AdminStudentFilter, string]> = [
   ['all', 'Todos'],
   ['active', 'Activos'],
   ['expiring', 'Por vencer'],
+  ['expired', 'Vencidos'],
   ['paused', 'En pausa'],
   ['inactive', 'Inactivos'],
 ]
@@ -39,6 +40,11 @@ const statusPresentation: Record<AdminStudentStatus, { label: string; className:
     label: 'Por vencer',
     className: 'border-amber-200 bg-amber-50 text-amber-700',
     dot: 'bg-amber-500',
+  },
+  expired: {
+    label: 'Vencido',
+    className: 'border-rose-200 bg-rose-50 text-rose-700',
+    dot: 'bg-rose-500',
   },
   paused: {
     label: 'En pausa',

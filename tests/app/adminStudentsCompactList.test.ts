@@ -20,15 +20,17 @@ describe('admin students compact list', () => {
     expect(page).toContain('Fecha de ingreso')
   })
 
-  it('uses one search field and the four approved visible status filters', () => {
+  it('uses one search field and the five approved visible status filters', () => {
     const page = source('app/admin/alumnos/page.tsx')
 
     expect(page.match(/Buscar por nombre, DNI o teléfono/g)).toHaveLength(1)
     expect(page).toContain("['all', 'Todos']")
     expect(page).toContain("['active', 'Activos']")
     expect(page).toContain("['expiring', 'Por vencer']")
+    expect(page).toContain("['expired', 'Vencidos']")
     expect(page).toContain("['paused', 'En pausa']")
     expect(page).toContain("['inactive', 'Inactivos']")
+    expect(page).toContain("label: 'Vencido'")
   })
 
   it('removes the dashboard cards, charts, alerts, and access-code controls', () => {
