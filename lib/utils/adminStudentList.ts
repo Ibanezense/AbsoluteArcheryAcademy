@@ -6,6 +6,13 @@ export type AdminStudentStatus = 'active' | 'expiring' | 'expired' | 'paused' | 
 export type AdminStudentFilter = 'all' | AdminStudentStatus
 
 const INACTIVE_STATUSES = new Set(['inactive', 'retired', 'withdrawn', 'blocked', 'suspended'])
+const STATUS_PRIORITY: Record<AdminStudentStatus, number> = {
+  active: 0,
+  expiring: 1,
+  expired: 2,
+  paused: 3,
+  inactive: 4,
+}
 
 function expirationDay(student: StudentListRow) {
   if (student.membership_expired_at) {
@@ -71,14 +78,24 @@ export function filterAdminStudents(
   students: StudentListRow[],
   query: string,
   filter: AdminStudentFilter,
+  now = new Date(),
 ) {
   const needle = norm(query)
 
-  return students.filter((student) => {
-    const matchesQuery = !needle || [student.full_name, student.dni || '', student.phone || '']
-      .map((value) => norm(value))
-      .some((value) => value.includes(needle))
+  return students
+    .filter((student) => {
+      const matchesQuery = !needle || [student.full_name, student.dni || '', student.phone || '']
+        .map((value) => norm(value))
+        .some((value) => value.includes(needle))
 
-    return matchesQuery && (filter === 'all' || getAdminStudentStatus(student) === filter)
-  })
+      return matchesQuery && (filter === 'all' || getAdminStudentStatus(student, now) === filter)
+    })
+    .sort((left, right) => {
+      const statusDifference =
+        STATUS_PRIORITY[getAdminStudentStatus(left, now)] -
+        STATUS_PRIORITY[getAdminStudentStatus(right, now)]
+
+      if (statusDifference !== 0) return statusDifference
+      return left.full_name.localeCompare(right.full_name, 'es', { sensitivity: 'base' })
+    })
 }
