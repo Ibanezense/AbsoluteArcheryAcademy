@@ -47,8 +47,15 @@ describe('getAdminStudentStatus', () => {
   })
 
   it('keeps a manually paused student paused when no expiration timestamp is available', () => {
-    const status = 'paused'
-    expect(getAdminStudentStatus({ ...baseStudent, effective_operational_status: status })).toBe('paused')
+    expect(getAdminStudentStatus({
+      ...baseStudent,
+      membership_name: null,
+      membership_end: null,
+      membership_status: null,
+      membership_raw_classes_remaining: 0,
+      classes_remaining: 0,
+      effective_operational_status: 'paused',
+    })).toBe('paused')
   })
 
   it('keeps a healthy active membership active', () => {
