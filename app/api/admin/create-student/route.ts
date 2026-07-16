@@ -18,6 +18,7 @@ type StudentPayload = {
   gender?: string | null
   category?: string | null
   level?: string | null
+  dominant_hand?: string | null
   has_own_bow?: boolean
   assigned_bow?: boolean
   bow_poundage?: number | null
@@ -481,6 +482,10 @@ function validateCreateBody(body: CreateBody) {
     return 'El genero del alumno es invalido.'
   }
 
+  if (student.dominant_hand && !['right', 'left', 'ambidextrous'].includes(student.dominant_hand)) {
+    return 'La mano dominante del alumno es invalida.'
+  }
+
   if (accountMode !== 'student_only') {
     if (!body.guardian || normalizeText(body.guardian.full_name) === '' || normalizeText(body.guardian.email) === '') {
       return 'El tutor necesita nombre y email.'
@@ -525,6 +530,7 @@ function studentRowFromPayload(student: StudentPayload, existingAffiliation?: bo
       fallbackCategory: normalizeNullableText(student.category),
     }),
     level: normalizeNullableText(student.level),
+    dominant_hand: normalizeNullableText(student.dominant_hand),
     has_own_bow: !!student.has_own_bow,
     assigned_bow: !!student.assigned_bow,
     bow_poundage: student.bow_poundage ?? null,

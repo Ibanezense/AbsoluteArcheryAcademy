@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Clock3,
   CreditCard,
+  Copy,
   Edit3,
   Eye,
   EyeOff,
@@ -32,6 +33,8 @@ import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
+import { buildPaymentDocumentRows, filterAttendance, selectPendingBookings, summarizeAttendance, type AttendanceFilter } from '@/lib/utils/adminStudentProfile'
+import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 
 type MembershipEditorState = {
   id: string
@@ -47,17 +50,16 @@ type MembershipEditorState = {
   notes: string
 }
 
-type TabId = 'summary' | 'membership' | 'bookings' | 'attendance' | 'payments' | 'sports' | 'notes'
+type TabId = 'profile' | 'sports' | 'attendance' | 'membership' | 'payments' | 'bookings'
 type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'summary', label: 'Resumen' },
+  { id: 'profile', label: 'Perfil' },
+  { id: 'sports', label: 'Datos deportivos' },
+  { id: 'attendance', label: 'Asistencias' },
   { id: 'membership', label: 'Membresia' },
-  { id: 'bookings', label: 'Reservas' },
-  { id: 'attendance', label: 'Asistencia' },
   { id: 'payments', label: 'Pagos' },
-  { id: 'sports', label: 'Perfil deportivo' },
-  { id: 'notes', label: 'Notas' },
+  { id: 'bookings', label: 'Reservas' },
 ]
 
 const PROTECTED_STUDENT_STATUSES = new Set(['retired', 'withdrawn', 'blocked', 'suspended'])
@@ -95,8 +97,10 @@ function bowLabel(hasOwnBow: boolean, assignedBow: boolean, bowPoundage: number 
 function statusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     active: 'Activa',
-    paused: 'Pausado',
+    expiring: 'Por vencer',
+    paused: 'En pausa',
     expired: 'Vencido',
+    inactive: 'Inactivo',
     consumed: 'Consumida',
     historical: 'Historica',
     cancelled: 'Cancelada',
@@ -119,8 +123,8 @@ function statusLabel(status: string | null | undefined) {
 
 function statusTone(status: string | null | undefined): BadgeTone {
   if (status === 'active' || status === 'attended' || status === 'paid') return 'success'
-  if (status === 'reserved' || status === 'pending' || status === 'draft') return 'warning'
-  if (status === 'no_show' || status === 'late' || status === 'expired' || status === 'consumed' || status === 'blocked' || status === 'suspended') return 'danger'
+  if (status === 'reserved' || status === 'pending' || status === 'draft' || status === 'expiring') return 'warning'
+  if (status === 'no_show' || status === 'late' || status === 'expired' || status === 'inactive' || status === 'consumed' || status === 'blocked' || status === 'suspended') return 'danger'
   if (status === 'waived') return 'info'
   return 'neutral'
 }
@@ -134,25 +138,16 @@ function getLatestMembership(memberships: StudentMembershipSummary[]) {
 }
 
 function getOperationalStatus(data: StudentDetailData) {
-  if (data.operational_status && PROTECTED_STUDENT_STATUSES.has(data.operational_status)) {
-    return data.operational_status
-  }
-
-  const activeMembership = data.active_membership
-  if (activeMembership?.status === 'active' && activeMembership.classes_remaining > 0) {
-    const endDelta = daysBetweenToday(activeMembership.end_date)
-    if (endDelta === null || endDelta >= 0) return 'active'
-    return endDelta < -14 ? 'paused' : 'expired'
-  }
-
-  const latestMembership = getLatestMembership(data.memberships)
-  const latestEndDelta = daysBetweenToday(latestMembership?.end_date)
-
-  if (!data.is_active && latestEndDelta !== null && latestEndDelta < -14) return 'paused'
-  if (!data.is_active && !latestMembership) return 'paused'
-  if (latestEndDelta !== null && latestEndDelta < -14) return 'paused'
-  if (latestMembership) return 'expired'
-  return data.is_active ? 'active' : 'paused'
+  const latestMembership = data.active_membership || getLatestMembership(data.memberships)
+  return getStudentOperationalStatus({
+    membershipStatus: latestMembership?.status || null,
+    classesRemaining: latestMembership?.classes_remaining || 0,
+    membershipEnd: latestMembership?.end_date || null,
+    membershipExpiredAt: latestMembership?.expired_at || null,
+    effectiveStatus: data.operational_status,
+    hasMembership: Boolean(latestMembership),
+    isActive: data.is_active,
+  })
 }
 
 function membershipEditorFromSummary(membership: StudentMembershipSummary): MembershipEditorState {
@@ -275,7 +270,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const detailQuery = useStudentDetail(params.id)
   const { data, isLoading, error } = detailQuery
 
-  const [activeTab, setActiveTab] = useState<TabId>('summary')
+  const [activeTab, setActiveTab] = useState<TabId>('profile')
   const [revealedAccessTarget, setRevealedAccessTarget] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [membershipEditor, setMembershipEditor] = useState<MembershipEditorState | null>(null)
@@ -593,11 +588,15 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       </section>
 
       <AdminContentPanel className="overflow-hidden">
-        <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-3">
+        <div role="tablist" aria-label="Secciones del perfil del alumno" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-3">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              id={`student-tab-${tab.id}`}
+              aria-selected={activeTab === tab.id}
+              aria-controls={`student-panel-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
               className={`min-h-12 whitespace-nowrap border-b-2 px-4 text-sm font-black transition ${
                 activeTab === tab.id
@@ -611,66 +610,23 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         </div>
       </AdminContentPanel>
 
-      {activeTab === 'summary' && (
-        <div className="grid gap-5 xl:grid-cols-2">
-          <SectionShell title="Proxima reserva">
-            {nextBooking ? (
-              <div className="rounded-[1.15rem] border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-lg font-black text-slate-950">{formatDate(nextBooking.start_at)}</h3>
-                  <OperationalStatusBadge label={statusLabel(nextBooking.status)} tone={statusTone(nextBooking.status)} />
-                </div>
-                <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-600 sm:grid-cols-3">
-                  <span>{dayjs(nextBooking.start_at).format('HH:mm')} - {dayjs(nextBooking.end_at).format('HH:mm')}</span>
-                  <span>{nextBooking.distance_m ? `${nextBooking.distance_m} metros` : 'Sin distancia'}</span>
-                  <span>{nextBooking.bow_usage_type || 'Equipo no definido'}</span>
-                </div>
-              </div>
-            ) : (
-              <EmptyOperationalState title="Sin proxima reserva" description="El alumno no tiene reservas futuras activas." />
-            )}
-          </SectionShell>
-
-          <SectionShell title="Membresia actual">
-            {activeMembership ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-black text-slate-950">{activeMembership.custom_name}</p>
-                    <p className="mt-1 text-sm text-slate-500">ID: {activeMembership.id.slice(0, 8).toUpperCase()}</p>
-                  </div>
-                  <OperationalStatusBadge label={statusLabel(activeMembership.status)} tone={statusTone(activeMembership.status)} />
-                </div>
-                <div className="rounded-2xl border border-slate-200">
-                  <InfoRow label="Inicio" value={formatDate(activeMembership.start_date)} />
-                  <InfoRow label="Vencimiento" value={formatDate(activeMembership.end_date)} danger={membershipEndDelta !== null && membershipEndDelta <= 7} />
-                  <InfoRow label="Clases totales" value={activeMembership.classes_total} />
-                  <InfoRow label="Usadas" value={activeMembership.classes_used} />
-                  <InfoRow label="Disponibles" value={activeMembership.classes_remaining} />
-                  <InfoRow label="Reservadas a futuro" value={reservedAgainstBalance} />
-                  <InfoRow label="Saldo libre estimado" value={committedFreeBalance} />
-                </div>
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold leading-6 text-amber-800">
-                  {renewalWarning}
-                </div>
-              </div>
-            ) : (
-              <EmptyOperationalState title="Sin membresia activa" description="No hay un ciclo activo disponible para reservar." />
-            )}
-          </SectionShell>
-
-          <RecentClassesList bookings={recentClasses} />
-          <ContactAndAccessSection data={data} revealedAccessTarget={revealedAccessTarget} setRevealedAccessTarget={setRevealedAccessTarget} />
-          <SportsProfileSection data={data} age={age} />
-          <PaymentsAndLedgerSection data={data} />
-        </div>
-      )}
+      <div role="tabpanel" id={`student-panel-${activeTab}`} aria-labelledby={`student-tab-${activeTab}`}>
+        {activeTab === 'profile' && (
+          <ProfileTab
+            data={data}
+            age={age}
+            operationalStatus={operationalStatus}
+            revealedAccessTarget={revealedAccessTarget}
+            setRevealedAccessTarget={setRevealedAccessTarget}
+          />
+        )}
 
       {activeTab === 'membership' && (
         <MembershipTab
           activeMembership={activeMembership}
           latestMembership={latestMembership}
           memberships={data.memberships}
+          payments={data.payments}
           renewalWarning={renewalWarning}
           membershipEditor={membershipEditor}
           membershipSaving={membershipSaving}
@@ -684,37 +640,9 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} />}
       {activeTab === 'attendance' && <AttendanceTab bookings={data.bookings} />}
-      {activeTab === 'payments' && <PaymentsTab payments={data.payments} ledger={data.ledger} />}
-      {activeTab === 'sports' && <SportsProfileSection data={data} age={age} expanded />}
-
-      {activeTab === 'notes' && (
-        <SectionShell
-          title="Notas internas"
-          description="Contexto operativo visible para administracion."
-          action={
-            <Link href={`/admin/alumnos/editar/${data.id}`} className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
-              Editar nota
-            </Link>
-          }
-        >
-          <div className="rounded-[1.15rem] border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-700">
-            {data.medical_notes || 'Sin notas internas registradas.'}
-          </div>
-          <div className="mt-5 rounded-[1.15rem] border border-rose-200 bg-rose-50 p-4">
-            <p className="text-sm font-black text-rose-800">Zona sensible</p>
-            <p className="mt-1 text-sm text-rose-700">Eliminar conserva las protecciones existentes del backend y requiere confirmacion.</p>
-            <button
-              type="button"
-              className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-2xl border border-rose-300 bg-white px-4 text-sm font-black text-rose-700"
-              onClick={handleDeleteStudent}
-              disabled={deleting}
-            >
-              <Trash2 className="h-4 w-4" />
-              {deleting ? 'Eliminando...' : 'Eliminar alumno'}
-            </button>
-          </div>
-        </SectionShell>
-      )}
+      {activeTab === 'payments' && <PaymentsTab payments={data.payments} />}
+        {activeTab === 'sports' && <SportsProfileSection data={data} age={age} expanded />}
+      </div>
     </div>
   )
 }
@@ -789,6 +717,80 @@ function ContactAndAccessSection({
   )
 }
 
+function ProfileTab({
+  data,
+  age,
+  operationalStatus,
+  revealedAccessTarget,
+  setRevealedAccessTarget,
+}: {
+  data: StudentDetailData
+  age: number | null
+  operationalStatus: string
+  revealedAccessTarget: string | null
+  setRevealedAccessTarget: (value: string | null) => void
+}) {
+  const account = data.self_account
+  const target = account ? `student-${account.id}` : 'student-no-account'
+  const revealed = revealedAccessTarget === target
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[minmax(18rem,0.72fr)_minmax(0,1.55fr)]">
+      <SectionShell title="Perfil del alumno">
+        <div className="flex flex-col items-center text-center">
+          <Avatar name={data.full_name} url={data.avatar_url} size="lg" className="h-32 w-32 border-4 border-white shadow-[0_18px_45px_rgba(15,23,42,0.16)]" />
+          <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950">{data.full_name}</h2>
+          <div className="mt-3">
+            <OperationalStatusBadge label={statusLabel(operationalStatus)} tone={statusTone(operationalStatus)} />
+          </div>
+        </div>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Codigo de acceso</p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="font-mono text-base font-black tracking-[0.25em] text-slate-950">
+              {revealed ? account?.access_code || 'Sin codigo' : '••••••'}
+            </span>
+            <div className="flex gap-2">
+              <button type="button" aria-label={revealed ? 'Ocultar codigo' : 'Mostrar codigo'} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600" onClick={() => setRevealedAccessTarget(revealed ? null : target)}>
+                {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+              <button type="button" aria-label="Copiar codigo" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-40" disabled={!account?.access_code} onClick={() => account?.access_code && navigator.clipboard.writeText(account.access_code)}>
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <Link href={`/admin/alumnos/editar/${data.id}`} className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
+          <Edit3 className="h-4 w-4" /> Editar perfil
+        </Link>
+      </SectionShell>
+
+      <SectionShell title="Informacion general" description="Datos personales y de contacto registrados en la academia.">
+        <div className="grid overflow-hidden rounded-2xl border border-slate-200 sm:grid-cols-2 xl:grid-cols-3">
+          <ProfileField label="Nombre completo" value={data.full_name} />
+          <ProfileField label="Genero" value={data.gender || 'No definido'} />
+          <ProfileField label="Correo electronico" value={data.email || data.self_account?.email || 'No definido'} />
+          <ProfileField label="Numero de telefono" value={data.phone || data.self_account?.phone || 'No definido'} />
+          <ProfileField label="DNI" value={data.dni || 'No definido'} />
+          <ProfileField label="Fecha de nacimiento" value={formatDate(data.date_of_birth)} />
+          <ProfileField label="Edad" value={age !== null ? `${age} anos` : 'No definida'} />
+          <ProfileField label="Fecha de ingreso" value={formatDate(data.created_at)} />
+          <ProfileField label="Tutor responsable" value={data.guardian?.full_name || 'Sin tutor vinculado'} />
+        </div>
+      </SectionShell>
+    </div>
+  )
+}
+
+function ProfileField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-h-24 border-b border-r border-slate-200 bg-white p-4">
+      <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
+      <p className="mt-2 break-words text-sm font-bold text-slate-950">{value}</p>
+    </div>
+  )
+}
+
 function SportsProfileSection({ data, age, expanded = false }: { data: StudentDetailData; age: number | null; expanded?: boolean }) {
   return (
     <SectionShell title="Perfil deportivo" description={expanded ? 'Datos tecnicos usados para asignar turnos, distancias y equipo.' : undefined}>
@@ -797,6 +799,7 @@ function SportsProfileSection({ data, age, expanded = false }: { data: StudentDe
         <InfoRow label="Disciplina" value={data.division || 'No definida'} />
         <InfoRow label="Categoria" value={data.category || 'No definida'} />
         <InfoRow label="Nivel" value={data.level || 'No definido'} />
+        <InfoRow label="Mano dominante" value={data.dominant_hand === 'right' ? 'Derecha' : data.dominant_hand === 'left' ? 'Izquierda' : data.dominant_hand === 'ambidextrous' ? 'Ambidiestro' : 'No definida'} />
         <InfoRow label="Distancia de entrenamiento" value={data.current_distance_m ? `${data.current_distance_m} metros` : 'No definida'} />
         <InfoRow label="Genero" value={data.gender || 'No definido'} />
         <InfoRow label="Arco propio" value={data.has_own_bow ? 'Si' : 'No'} />
@@ -830,6 +833,7 @@ function MembershipTab({
   activeMembership,
   latestMembership,
   memberships,
+  payments,
   renewalWarning,
   membershipEditor,
   membershipSaving,
@@ -842,6 +846,7 @@ function MembershipTab({
   activeMembership: StudentMembershipSummary | null
   latestMembership: StudentMembershipSummary | null
   memberships: StudentMembershipSummary[]
+  payments: StudentDetailData['payments']
   renewalWarning: string
   membershipEditor: MembershipEditorState | null
   membershipSaving: boolean
@@ -897,42 +902,24 @@ function MembershipTab({
         {memberships.length === 0 ? (
           <EmptyOperationalState title="Sin historial" description="No hay membresias registradas para este alumno." />
         ) : (
-          <div className="space-y-3">
-            {memberships.map((membership) => (
-              <div key={membership.id} className="rounded-[1.15rem] border border-slate-200 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-black text-slate-950">{membership.custom_name}</p>
-                    <p className="mt-1 text-sm text-slate-500">{formatDate(membership.start_date)} - {formatDate(membership.end_date)}</p>
-                  </div>
-                  <OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} />
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-xs font-bold text-slate-500">Total</p>
-                    <p className="mt-1 font-black text-slate-950">{membership.classes_total}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-xs font-bold text-slate-500">Usadas</p>
-                    <p className="mt-1 font-black text-slate-950">{membership.classes_used}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-xs font-bold text-slate-500">Restantes</p>
-                    <p className="mt-1 font-black text-slate-950">{membership.classes_remaining}</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button type="button" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>
-                    Editar
-                  </button>
-                  {canDeleteExpiredMembership(membership) && (
-                    <button type="button" className="rounded-2xl border border-rose-200 px-4 py-2 text-sm font-black text-rose-700 disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipDeletingId === membership.id}>
-                      {membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar vencida'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Membresia</th><th className="px-4 py-3">Inicio</th><th className="px-4 py-3">Finalizacion</th><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Tipo de pago</th><th className="px-4 py-3">Importe</th><th className="px-4 py-3">Acciones</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {memberships.map((membership) => (
+                  <tr key={membership.id} className="bg-white align-top">
+                    <td className="px-4 py-4"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases</p></td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.start_date)}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.end_date)}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-500">MEM-{membership.id.slice(0, 8).toUpperCase()}</td>
+                    <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} /></td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-600">{payments.find((payment) => payment.student_membership_id === membership.id)?.payment_method || 'Sin registro'}</td>
+                    <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatMoney(membership.total_amount, membership.currency)}</td>
+                    <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>Informacion y cambios</button>{canDeleteExpiredMembership(membership) && <button type="button" className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipDeletingId === membership.id}>{membershipDeletingId === membership.id ? 'Eliminando...' : 'Cancelar / eliminar'}</button>}</div></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </SectionShell>
@@ -1004,22 +991,28 @@ function EditorInput({ label, value, onChange, type = 'text' }: { label: string;
 }
 
 function BookingsTab({ bookings }: { bookings: StudentDetailData['bookings'] }) {
+  const pendingBookings = selectPendingBookings(bookings)
+
   return (
-    <SectionShell title="Reservas" description="Reservas recientes y futuras asociadas al alumno.">
-      {bookings.length === 0 ? (
-        <EmptyOperationalState title="Sin reservas" description="No hay reservas registradas para este alumno." />
+    <SectionShell title="Reservas" description="Reservas activas que aun no se convirtieron en asistencia, cancelacion o inasistencia.">
+      {pendingBookings.length === 0 ? (
+        <EmptyOperationalState title="Sin reservas pendientes" description="No hay reservas activas para este alumno." />
       ) : (
-        <div className="grid gap-3">
-          {bookings.map((booking) => (
-            <div key={booking.id} className="grid gap-4 rounded-[1.15rem] border border-slate-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <div className="min-w-0">
-                <p className="font-black text-slate-950">{formatDateTime(booking.start_at)}</p>
-                <p className="mt-1 text-sm text-slate-500">{booking.distance_m ? `${booking.distance_m} metros` : 'Sin distancia'} - {booking.bow_usage_type || 'Equipo no definido'}</p>
-                {booking.admin_notes && <p className="mt-2 text-sm font-semibold text-amber-700">{booking.admin_notes}</p>}
-              </div>
-              <OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} />
-            </div>
-          ))}
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Horario</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Arco</th><th className="px-4 py-3">Estado</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {pendingBookings.map((booking) => (
+                <tr key={booking.id} className="bg-white">
+                  <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td>
+                  <td className="whitespace-nowrap px-4 py-4 text-slate-600">{booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'} - {booking.end_at ? dayjs(booking.end_at).format('HH:mm') : '-'}</td>
+                  <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : 'No definida'}</td>
+                  <td className="px-4 py-4 text-slate-600">{booking.bow_usage_type || 'No definido'}</td>
+                  <td className="px-4 py-4"><OperationalStatusBadge label="Confirmada" tone="warning" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </SectionShell>
@@ -1027,70 +1020,61 @@ function BookingsTab({ bookings }: { bookings: StudentDetailData['bookings'] }) 
 }
 
 function AttendanceTab({ bookings }: { bookings: StudentDetailData['bookings'] }) {
-  const attendanceRows = bookings.filter((booking) => booking.status === 'attended' || booking.status === 'no_show' || booking.status === 'cancelled')
+  const [filter, setFilter] = useState<AttendanceFilter>('all')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const summary = summarizeAttendance(bookings)
+  const attendanceRows = filterAttendance(bookings, filter, from, to)
 
   return (
-    <SectionShell title="Asistencia" description="Historial operativo de asistencia, inasistencias y cancelaciones.">
+    <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <AttendanceKpi label="Asistencias" value={summary.attended} tone="bg-emerald-50 text-emerald-700" />
+        <AttendanceKpi label="Inasistencias" value={summary.noShow} tone="bg-rose-50 text-rose-700" />
+        <AttendanceKpi label="Cancelaciones" value={summary.cancelled} tone="bg-amber-50 text-amber-700" />
+      </div>
+      <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <select aria-label="Filtrar asistencias" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={filter} onChange={(event) => setFilter(event.target.value as AttendanceFilter)}>
+          <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias</option><option value="cancelled">Cancelaciones</option>
+        </select>
+        <input aria-label="Fecha inicial" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={from} onChange={(event) => setFrom(event.target.value)} />
+        <input aria-label="Fecha final" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={to} onChange={(event) => setTo(event.target.value)} />
+      </div>
       {attendanceRows.length === 0 ? (
-        <EmptyOperationalState title="Sin asistencia registrada" description="Aun no hay clases cerradas para este alumno." />
+        <EmptyOperationalState title="Sin resultados" description="No hay registros que coincidan con los filtros seleccionados." />
       ) : (
-        <div className="grid gap-3">
-          {attendanceRows.map((booking) => (
-            <div key={booking.id} className="grid gap-4 rounded-[1.15rem] border border-slate-200 bg-white p-4 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:items-center">
-              <span className="font-black text-slate-950">{booking.start_at ? dayjs(booking.start_at).format('DD MMM') : '-'}</span>
-              <span className="text-sm font-semibold text-slate-600">{booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'} - {booking.distance_m ? `${booking.distance_m} metros` : 'Sin distancia'}</span>
-              <OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} />
-            </div>
-          ))}
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Nota</th></tr></thead>
+            <tbody className="divide-y divide-slate-100">{attendanceRows.map((booking) => <tr key={booking.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td><td className="px-4 py-4 text-slate-600">{booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td><td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td><td className="max-w-xs px-4 py-4 text-slate-600">{booking.admin_notes || '-'}</td></tr>)}</tbody>
+          </table>
         </div>
       )}
     </SectionShell>
   )
 }
 
-function PaymentsTab({ payments, ledger }: { payments: StudentDetailData['payments']; ledger: StudentDetailData['ledger'] }) {
+function AttendanceKpi({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return <div className={`rounded-2xl p-4 ${tone}`}><p className="text-xs font-black uppercase tracking-wide">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></div>
+}
+
+function PaymentsTab({ payments }: { payments: StudentDetailData['payments'] }) {
+  const documents = buildPaymentDocumentRows(payments)
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <SectionShell title="Pagos">
-        {payments.length === 0 ? (
-          <EmptyOperationalState title="Sin pagos" description="No hay pagos registrados para este alumno." />
+    <div className="grid gap-5">
+      <SectionShell title="Registros de pago" description="Referencias internas de los pagos existentes. La numeracion de documentos se incorporara en el modulo de comprobantes.">
+        {documents.length === 0 ? (
+          <EmptyOperationalState title="Sin registros de pago" description="No hay documentos o pagos registrados para este alumno." />
         ) : (
-          <div className="space-y-3">
-            {payments.map((payment) => (
-              <div key={payment.id} className="rounded-[1.15rem] border border-slate-200 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-black text-slate-950">{formatMoney(payment.amount, payment.currency)}</p>
-                    <p className="mt-1 text-sm text-slate-500">{formatDate(payment.paid_at)} - {payment.payment_method || 'Metodo no definido'}</p>
-                  </div>
-                  <OperationalStatusBadge label={statusLabel(payment.payment_status)} tone={statusTone(payment.payment_status)} />
-                </div>
-                {payment.notes && <p className="mt-3 text-sm text-slate-600">{payment.notes}</p>}
-              </div>
-            ))}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Estado</th></tr></thead><tbody className="divide-y divide-slate-100">{documents.map((document) => <tr key={document.id} className="bg-white"><td className="px-4 py-4 font-black text-blue-600">{document.reference}</td><td className="px-4 py-4 text-slate-600">{formatDateTime(document.date)}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(document.status)} tone={statusTone(document.status)} /></td></tr>)}</tbody></table>
           </div>
         )}
       </SectionShell>
 
-      <SectionShell title="Movimientos de credito">
-        {ledger.length === 0 ? (
-          <EmptyOperationalState title="Sin movimientos" description="No hay consumo o devoluciones registradas." />
+      <SectionShell title="Transacciones">
+        {payments.length === 0 ? (
+          <EmptyOperationalState title="Sin transacciones" description="No hay transacciones registradas para este alumno." />
         ) : (
-          <div className="space-y-3">
-            {ledger.map((entry) => (
-              <div key={entry.id} className="rounded-[1.15rem] border border-slate-200 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-black text-slate-950">{entry.reason}</p>
-                    <p className="mt-1 text-sm text-slate-500">{formatDateTime(entry.created_at)} - saldo {entry.balance_after ?? '-'}</p>
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-black ${entry.delta >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                    {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Cantidad</th><th className="px-4 py-3">Metodo de pago</th><th className="px-4 py-3">Accion</th><th className="px-4 py-3">Documento</th></tr></thead><tbody className="divide-y divide-slate-100">{payments.map((payment) => <tr key={payment.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDateTime(payment.paid_at)}</td><td className="px-4 py-4 font-black text-slate-950">{formatMoney(payment.amount, payment.currency)}</td><td className="px-4 py-4 text-slate-600">{payment.payment_method || 'No definido'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(payment.payment_status)} tone={statusTone(payment.payment_status)} /></td><td className="px-4 py-4 font-bold text-blue-600">Pago {payment.id.slice(0, 8).toUpperCase()}</td></tr>)}</tbody></table></div>
         )}
       </SectionShell>
     </div>

@@ -1,11 +1,11 @@
 import dayjs from 'dayjs'
 import type { StudentListRow } from '@/lib/queries/studentQueries'
 import { norm } from '@/lib/utils/searchUtils'
+import { getStudentOperationalStatus, type StudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 
-export type AdminStudentStatus = 'active' | 'expiring' | 'expired' | 'paused' | 'inactive'
+export type AdminStudentStatus = StudentOperationalStatus
 export type AdminStudentFilter = 'all' | AdminStudentStatus
 
-const INACTIVE_STATUSES = new Set(['inactive', 'retired', 'withdrawn', 'blocked', 'suspended'])
 const STATUS_PRIORITY: Record<AdminStudentStatus, number> = {
   active: 0,
   expiring: 1,
@@ -32,30 +32,6 @@ export function getAdminStudentStatus(
   student: StudentListRow,
   now = new Date(),
 ): AdminStudentStatus {
-  if (INACTIVE_STATUSES.has(student.effective_operational_status)) return 'inactive'
-
-  const today = dayjs(now).startOf('day')
-  const daysLeft = student.membership_end
-    ? dayjs(student.membership_end).startOf('day').diff(today, 'day')
-    : null
-  const hasActiveMembership =
-    student.membership_status === 'active' &&
-    student.membership_raw_classes_remaining > 0 &&
-    (daysLeft == null || daysLeft >= 0)
-
-  if (hasActiveMembership) {
-    if (daysLeft != null && daysLeft <= 7) return 'expiring'
-    return 'active'
-  }
-
-  const expiredAt = expirationDay(student)
-  if (expiredAt) {
-    const daysSinceExpiration = Math.max(today.diff(expiredAt, 'day'), 0)
-    if (daysSinceExpiration >= 61) return 'inactive'
-    if (daysSinceExpiration >= 15) return 'paused'
-    return 'expired'
-  }
-
   const hasMembership = Boolean(
     student.membership_name ||
     student.membership_status ||
@@ -63,15 +39,14 @@ export function getAdminStudentStatus(
     student.membership_expired_at
   )
 
-  if (
-    student.membership_status === 'expired' ||
-    (hasMembership && student.membership_raw_classes_remaining <= 0) ||
-    student.effective_operational_status === 'expired'
-  ) return 'expired'
-
-  if (student.effective_operational_status === 'paused') return 'paused'
-
-  return 'active'
+  return getStudentOperationalStatus({
+    membershipStatus: student.membership_status,
+    classesRemaining: student.membership_raw_classes_remaining,
+    membershipEnd: student.membership_end,
+    membershipExpiredAt: expirationDay(student)?.toISOString() || null,
+    effectiveStatus: student.effective_operational_status,
+    hasMembership,
+  }, now)
 }
 
 export function filterAdminStudents(

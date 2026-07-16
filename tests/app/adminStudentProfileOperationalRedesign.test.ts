@@ -17,13 +17,18 @@ describe('admin student profile operational redesign', () => {
     expect(page).toContain('Reservas proximas')
     expect(page).toContain('Pagos pendientes')
     expect(page).toContain('No-shows recientes')
-    expect(page).toContain("'summary'")
+    expect(page).toContain("'profile'")
     expect(page).toContain("'membership'")
     expect(page).toContain("'bookings'")
     expect(page).toContain("'attendance'")
     expect(page).toContain("'payments'")
     expect(page).toContain("'sports'")
-    expect(page).toContain("'notes'")
+    expect(page).not.toContain("'notes'")
+    expect(page).toContain('Datos deportivos')
+    expect(page).toContain('role="tablist"')
+    expect(page).toContain('role="tabpanel"')
+    expect(page).toContain("expiring: 'Por vencer'")
+    expect(page).toContain("inactive: 'Inactivo'")
   })
 
   it('does not render repeated class cards in the admin student profile', () => {
@@ -35,16 +40,15 @@ describe('admin student profile operational redesign', () => {
     expect(page).toContain('Historial de membresias')
   })
 
-  it('keeps student and guardian access codes masked until a single account is revealed', () => {
+  it('keeps the student access code masked until it is revealed', () => {
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
     expect(page).toContain('revealedAccessTarget')
-    expect(page).toContain('AccessCodeCard')
+    expect(page).toContain('Codigo de acceso')
     expect(page).toContain('••••••')
-    expect(page).toContain('Ver codigo')
+    expect(page).toContain('Mostrar codigo')
     expect(page).toContain('Ocultar codigo')
-    expect(page).not.toContain("data.self_account?.access_code || 'Sin codigo'")
-    expect(page).not.toContain("data.guardian?.access_code || 'Sin codigo'")
+    expect(page).toContain('Copiar codigo')
   })
 
   it('shows the renewal replacement warning and preserves existing admin membership RPCs', () => {
@@ -62,5 +66,7 @@ describe('admin student profile operational redesign', () => {
     expect(hook).toContain('operational_status')
     expect(hook).toContain('operational_status_reason')
     expect(hook).toContain('operational_status_updated_at')
+    expect(hook).toContain('dominant_hand')
+    expect(hook).toContain('expired_at')
   })
 })
