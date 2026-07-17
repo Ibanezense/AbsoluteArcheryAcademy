@@ -18,6 +18,7 @@ type StudentPayload = {
   gender?: string | null
   category?: string | null
   level?: string | null
+  dominant_hand?: string | null
   has_own_bow?: boolean
   assigned_bow?: boolean
   bow_poundage?: number | null
@@ -463,7 +464,7 @@ function validateCreateBody(body: CreateBody) {
   }
 
   if (!['student_only', 'guardian_only', 'student_and_guardian'].includes(accountMode)) {
-    return 'Modo de cuenta invalido.'
+    return 'Modo de cuenta inválido.'
   }
 
   if (accountMode !== 'guardian_only' && normalizeText(student.email) === '') {
@@ -478,7 +479,11 @@ function validateCreateBody(body: CreateBody) {
   }
 
   if (student.gender && !STUDENT_GENDERS.includes(student.gender as any)) {
-    return 'El genero del alumno es invalido.'
+    return 'El género del alumno es inválido.'
+  }
+
+  if (student.dominant_hand && !['right', 'left', 'ambidextrous'].includes(student.dominant_hand)) {
+    return 'La mano dominante del alumno es invalida.'
   }
 
   if (accountMode !== 'student_only') {
@@ -494,7 +499,7 @@ function validateCreateBody(body: CreateBody) {
 }
 
 function validateUpdateBody(body: UpdateBody) {
-  if (!body.studentId) return 'Alumno invalido.'
+  if (!body.studentId) return 'Alumno inválido.'
   return validateCreateBody({
     accountMode: body.accountMode,
     student: body.student,
@@ -518,13 +523,14 @@ function studentRowFromPayload(student: StudentPayload, existingAffiliation?: bo
     current_distance_m: student.current_distance_m ?? null,
     division,
     gender,
-    category: buildStudentCategory({
+    category: normalizeNullableText(student.category) || buildStudentCategory({
       dateOfBirth,
       division,
       gender,
-      fallbackCategory: normalizeNullableText(student.category),
+      fallbackCategory: null,
     }),
     level: normalizeNullableText(student.level),
+    dominant_hand: normalizeNullableText(student.dominant_hand),
     has_own_bow: !!student.has_own_bow,
     assigned_bow: !!student.assigned_bow,
     bow_poundage: student.bow_poundage ?? null,
@@ -882,7 +888,7 @@ export async function DELETE(req: Request) {
     const studentId = normalizeText(url.searchParams.get('studentId'))
 
     if (!studentId) {
-      return NextResponse.json({ error: 'Alumno invalido.' }, { status: 400 })
+      return NextResponse.json({ error: 'Alumno inválido.' }, { status: 400 })
     }
 
     const { admin } = auth

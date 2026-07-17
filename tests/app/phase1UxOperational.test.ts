@@ -31,15 +31,16 @@ describe('phase 1 UX and operational safeguards', () => {
     }
   })
 
-  it('keeps student and guardian access codes masked until a single row is revealed', () => {
+  it('keeps access codes out of the compact list and masked on the student profile', () => {
     const alumnos = source('app/admin/alumnos/page.tsx')
+    const profile = source('app/admin/alumnos/[id]/page.tsx')
 
-    expect(alumnos).toContain('revealedAccessStudentId')
-    expect(alumnos).toContain('••••••')
-    expect(alumnos).toContain('Ver codigo')
-    expect(alumnos).toContain('Ocultar codigo')
-    expect(alumnos).not.toContain('Alumno ${student.access_code}')
-    expect(alumnos).not.toContain('Tutor ${student.guardian_access_code}')
+    expect(alumnos).not.toContain('student.access_code')
+    expect(alumnos).not.toContain('student.guardian_access_code')
+    expect(profile).toContain('revealedAccessTarget')
+    expect(profile).toContain('••••••')
+    expect(profile).toContain('Ver código')
+    expect(profile).toContain('Ocultar código')
   })
 
   it('requires an impact confirmation before cancelling an admin session', () => {

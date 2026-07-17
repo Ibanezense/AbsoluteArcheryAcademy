@@ -6,7 +6,7 @@ vi.mock('@/lib/supabaseClient', () => ({
   },
 }))
 
-import { mapStudentListRow } from '@/lib/queries/studentQueries'
+import { buildLastAttendanceByStudent, mapStudentListRow } from '@/lib/queries/studentQueries'
 
 describe('mapStudentListRow', () => {
   beforeEach(() => {
@@ -129,5 +129,62 @@ describe('mapStudentListRow', () => {
     expect(result.effective_operational_status).toBe('paused')
     expect(result.membership_raw_classes_remaining).toBe(2)
     expect(result.classes_remaining).toBe(0)
+  })
+
+  it('preserves enrollment and latest attendance dates on list rows', () => {
+    const result = mapStudentListRow({
+      id: 'student-dates',
+      full_name: 'Alumno con fechas',
+      avatar_url: null,
+      date_of_birth: null,
+      dni: null,
+      phone: null,
+      email: null,
+      current_distance_m: null,
+      division: null,
+      gender: null,
+      category: null,
+      level: null,
+      has_own_bow: false,
+      assigned_bow: false,
+      bow_poundage: null,
+      is_active: true,
+      operational_status: null,
+      is_country_club_tiabaya_member: false,
+      self_profile_id: null,
+      guardians: null,
+      memberships: [],
+      self_profile: null,
+      created_at: '2026-03-10T14:00:00.000Z',
+      last_attendance_at: '2026-07-12T21:00:00.000Z',
+    })
+
+    expect(result.created_at).toBe('2026-03-10T14:00:00.000Z')
+    expect(result.last_attendance_at).toBe('2026-07-12T21:00:00.000Z')
+  })
+
+  it('keeps the newest attended class date for each student', () => {
+    const result = buildLastAttendanceByStudent([
+      {
+        student_id: 'student-1',
+        attendance_marked_at: null,
+        sessions: { start_at: '2026-07-10T20:00:00Z' },
+      },
+      {
+        student_id: 'student-1',
+        attendance_marked_at: null,
+        sessions: { start_at: '2026-07-12T20:00:00Z' },
+      },
+      {
+        student_id: 'student-2',
+        attendance_marked_at: '2026-07-11T19:00:00Z',
+        sessions: null,
+      },
+    ])
+
+    expect(result).toEqual(new Map([
+      ['student-1', '2026-07-12T20:00:00Z'],
+      ['student-2', '2026-07-11T19:00:00Z'],
+    ]))
   })
 })

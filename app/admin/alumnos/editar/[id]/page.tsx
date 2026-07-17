@@ -26,6 +26,7 @@ type StudentFormState = {
   division: string
   gender: string
   level: string
+  dominant_hand: string
   has_own_bow: boolean
   assigned_bow: boolean
   bow_poundage: string
@@ -63,6 +64,7 @@ function emptyStudentForm(): StudentFormState {
     division: '',
     gender: '',
     level: '',
+    dominant_hand: '',
     has_own_bow: false,
     assigned_bow: false,
     bow_poundage: '',
@@ -121,6 +123,7 @@ export default function AdminAlumnoEditorPage() {
       division: data.division || '',
       gender: data.gender || '',
       level: data.level || '',
+      dominant_hand: data.dominant_hand || '',
       has_own_bow: data.has_own_bow,
       assigned_bow: data.assigned_bow,
       bow_poundage: data.bow_poundage ? String(data.bow_poundage) : '',
@@ -225,6 +228,7 @@ export default function AdminAlumnoEditorPage() {
           gender: studentForm.gender || null,
           category: computedCategory || null,
           level: studentForm.level || null,
+          dominant_hand: studentForm.dominant_hand || null,
           has_own_bow: studentForm.has_own_bow,
           assigned_bow: studentForm.assigned_bow,
           bow_poundage: studentForm.bow_poundage ? Number(studentForm.bow_poundage) : null,
@@ -498,6 +502,19 @@ export default function AdminAlumnoEditorPage() {
                         value={studentForm.level}
                         onChange={(event) => setStudentForm((current) => ({ ...current, level: event.target.value }))}
                       />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm text-textsec">Mano dominante</label>
+                      <select
+                        className="input"
+                        value={studentForm.dominant_hand}
+                        onChange={(event) => setStudentForm((current) => ({ ...current, dominant_hand: event.target.value }))}
+                      >
+                        <option value="">Sin definir</option>
+                        <option value="right">Derecha</option>
+                        <option value="left">Izquierda</option>
+                        <option value="ambidextrous">Ambidiestro</option>
+                      </select>
                     </div>
                     <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-bg/40 p-4 text-sm text-textpri">
                       <input

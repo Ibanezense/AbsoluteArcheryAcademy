@@ -28,6 +28,14 @@ export type StudentMembershipSummary = {
   currency: string
   notes: string | null
   created_at: string
+  expired_at: string | null
+  document_number: string | null
+  payment_type: string | null
+  billing_date: string | null
+  discount_type: string | null
+  discount_value: number | null
+  frozen_at: string | null
+  frozen_until: string | null
 }
 
 export type StudentPaymentSummary = {
@@ -81,6 +89,7 @@ export type StudentDetailData = {
   gender: string | null
   category: string | null
   level: string | null
+  dominant_hand: string | null
   has_own_bow: boolean
   assigned_bow: boolean
   bow_poundage: number | null
@@ -146,6 +155,7 @@ export function useStudentDetail(studentId: string) {
               gender,
               category,
               level,
+              dominant_hand,
               has_own_bow,
               assigned_bow,
               bow_poundage,
@@ -194,7 +204,15 @@ export function useStudentDetail(studentId: string) {
                 total_amount,
                 currency,
                 notes,
-                created_at
+                created_at,
+                expired_at,
+                document_number,
+                payment_type,
+                billing_date,
+                discount_type,
+                discount_value,
+                frozen_at,
+                frozen_until
               )
             `)
             .eq('id', studentId)
@@ -204,19 +222,19 @@ export function useStudentDetail(studentId: string) {
             .select('id,student_membership_id,due_date,paid_at,amount,currency,payment_method,payment_status,reward_credits,reward_reason,notes')
             .eq('student_id', studentId)
             .order('paid_at', { ascending: false })
-            .limit(10),
+            .limit(250),
           supabase
             .from('student_credit_ledger')
             .select('id,booking_id,student_membership_id,movement_type,delta,balance_after,reason,created_at')
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
-            .limit(12),
+            .limit(250),
           supabase
             .from('bookings')
             .select('id,session_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)')
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
-            .limit(12),
+            .limit(250),
         ])
 
       if (studentError) throw studentError
@@ -257,6 +275,7 @@ export function useStudentDetail(studentId: string) {
           fallbackCategory: typedStudent.category,
         }),
         level: typedStudent.level,
+        dominant_hand: typedStudent.dominant_hand,
         has_own_bow: !!typedStudent.has_own_bow,
         assigned_bow: !!typedStudent.assigned_bow,
         bow_poundage: typedStudent.bow_poundage,
