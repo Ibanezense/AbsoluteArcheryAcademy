@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   AlertTriangle,
@@ -36,6 +37,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
 import { useMembershipPlans, type MembershipPlan } from '@/lib/hooks/useMembershipPlans'
+import { studentKeys } from '@/lib/queries/studentQueries'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
@@ -377,6 +379,7 @@ function StudentDetailSkeleton() {
 }
 
 export default function AdminAlumnoDetailPage({ params }: { params: { id: string } }) {
+  const queryClient = useQueryClient()
   const router = useRouter()
   const confirm = useConfirm()
   const toast = useToast()
@@ -405,6 +408,10 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     setProfileForm(profileFormFromData(data))
     setSportsForm(sportsFormFromData(data))
   }, [data])
+
+  async function refreshStudentData() {
+    await queryClient.invalidateQueries({ queryKey: studentKeys.all })
+  }
 
   async function uploadAvatar(file?: File) {
     if (!file || !profileForm || uploadingAvatar) return
@@ -506,7 +513,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       if (!response.ok) throw new Error(payload.error || 'No se pudo actualizar el alumno.')
 
       toast.push({ message: 'Información del alumno actualizada.', type: 'success' })
-      await detailQuery.refetch()
+      await refreshStudentData()
     } catch (saveError: any) {
       toast.push({ message: saveError.message || 'No se pudo actualizar el alumno.', type: 'error' })
     } finally {
@@ -580,7 +587,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       toast.push({ message: 'Membresía actualizada.', type: 'success' })
       setMembershipEditor(null)
-      await detailQuery.refetch()
+      await refreshStudentData()
     } catch (membershipError: any) {
       toast.push({ message: membershipError.message || 'No se pudo actualizar la membresía.', type: 'error' })
     } finally {
@@ -605,7 +612,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       toast.push({ message: nextActive ? 'Alumno reactivado.' : 'Alumno bloqueado.', type: 'success' })
       setGeneralActionsOpen(false)
-      await detailQuery.refetch()
+      await refreshStudentData()
     } catch (blockError: any) {
       toast.push({ message: blockError.message || 'No se pudo cambiar el acceso del alumno.', type: 'error' })
     }
@@ -647,7 +654,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       toast.push({ message: 'Membresía asignada correctamente.', type: 'success' })
       setAssignmentOpen(false)
       setAssignmentForm(emptyMembershipAssignment())
-      await detailQuery.refetch()
+      await refreshStudentData()
     } catch (assignmentError: any) {
       toast.push({ message: assignmentError.message || 'No se pudo asignar la membresía.', type: 'error' })
     } finally {
@@ -680,7 +687,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       toast.push({ message: 'Membresia eliminada.', type: 'success' })
       if (membershipEditor?.id === membership.id) setMembershipEditor(null)
-      await detailQuery.refetch()
+      await refreshStudentData()
     } catch (membershipError: any) {
       toast.push({ message: membershipError.message || 'No se pudo eliminar la membresia.', type: 'error' })
     } finally {

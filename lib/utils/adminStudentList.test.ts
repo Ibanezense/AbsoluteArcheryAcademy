@@ -97,8 +97,8 @@ describe('filterAdminStudents', () => {
   })
 
   it('filters by the visible status', () => {
-    expect(filterAdminStudents([baseStudent], '', 'active')).toHaveLength(1)
-    expect(filterAdminStudents([baseStudent], '', 'inactive')).toHaveLength(0)
+    expect(filterAdminStudents([baseStudent], '', 'active', now)).toHaveLength(1)
+    expect(filterAdminStudents([baseStudent], '', 'inactive', now)).toHaveLength(0)
   })
 
   it('orders students by status priority and then by name', () => {
