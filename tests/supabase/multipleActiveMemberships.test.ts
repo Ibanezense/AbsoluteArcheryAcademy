@@ -19,6 +19,14 @@ function functionSql(functionName: string) {
 }
 
 function expectRestrictedRpc(functionName: string) {
+  const grantPattern = new RegExp(
+    `GRANT EXECUTE ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) TO ([^;]+);`,
+    'g',
+  )
+  const grantedRoles = [...sql.matchAll(grantPattern)].map((match) =>
+    match[1].trim(),
+  )
+
   expect(sql).toMatch(
     new RegExp(
       `REVOKE ALL ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) FROM PUBLIC;`,
@@ -34,6 +42,7 @@ function expectRestrictedRpc(functionName: string) {
       `GRANT EXECUTE ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) TO authenticated, service_role;`,
     ),
   )
+  expect(grantedRoles).toEqual(['authenticated, service_role'])
 }
 
 describe('multiple active student memberships migration', () => {
@@ -91,9 +100,5 @@ describe('multiple active student memberships migration', () => {
     expectRestrictedRpc('book_session')
     expectRestrictedRpc('admin_book_session')
     expectRestrictedRpc('admin_mark_weekly_no_show')
-
-    expect(sql).not.toMatch(
-      /GRANT EXECUTE ON FUNCTION public\.admin_create_student_membership_cycles\([\s\S]*?\) TO (?:PUBLIC|anon);/,
-    )
   })
 })
