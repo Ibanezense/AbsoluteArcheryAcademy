@@ -6,20 +6,20 @@ const migrationPath = join(
   process.cwd(),
   'supabase',
   'migrations',
-  '20260416_100000_restore_new_membership_cycles.sql'
+  '20260801_190000_multiple_active_student_memberships.sql'
 )
 
-describe('20260416 restore new membership cycles migration', () => {
-  it('moves previous active memberships to history and creates a clean active membership', () => {
+describe('20260801 multiple active membership cycles migration', () => {
+  it('creates a separate active membership without replacing active siblings', () => {
     expect(existsSync(migrationPath)).toBe(true)
 
-    const sql = readFileSync(migrationPath, 'utf8')
+    const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : ''
 
-    expect(sql).toMatch(/UPDATE public\.student_memberships[\s\S]*status = 'historical'[\s\S]*WHERE student_id = p_student_id[\s\S]*AND status = 'active'/s)
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.admin_assign_membership_plan')
     expect(sql).toMatch(/INSERT INTO public\.student_memberships[\s\S]*classes_total[\s\S]*classes_used[\s\S]*classes_remaining/s)
     expect(sql).toMatch(/VALUES \([\s\S]*v_plan\.classes_included,[\s\S]*0,[\s\S]*v_plan\.classes_included/s)
     expect(sql).toContain("'membership_activation'")
-    expect(sql).not.toContain('v_active_membership.classes_total + v_plan.classes_included')
-    expect(sql).not.toContain('v_active_membership.classes_remaining + v_plan.classes_included')
+    expect(sql).toContain("'paid'")
+    expect(sql).not.toMatch(/UPDATE public\.student_memberships[\s\S]*status = 'historical'[\s\S]*WHERE student_id = p_student_id/)
   })
 })

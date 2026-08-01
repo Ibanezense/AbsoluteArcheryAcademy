@@ -20,6 +20,12 @@ const readSurfaceSyncPath = join(
   'migrations',
   '20260604_170000_sync_student_status_before_read_surfaces.sql',
 )
+const multipleMembershipsPath = join(
+  process.cwd(),
+  'supabase',
+  'migrations',
+  '20260801_190000_multiple_active_student_memberships.sql',
+)
 
 describe('student operational status automation migration', () => {
   it('adds persisted operational status fields with protected manual states', () => {
@@ -140,5 +146,20 @@ describe('student operational status automation migration', () => {
     expect(sql).toContain('PERFORM public.sync_student_membership_operational_status(v_accessible_student_id)')
     expect(sql).toMatch(/COALESCE\(s\.is_active, true\)[\s\S]*AND COALESCE\(s\.operational_status, 'active'\) = 'active'[\s\S]*AND EXISTS/s)
     expect(sql).toMatch(/COALESCE\(base\.raw_is_active, true\)[\s\S]*AND COALESCE\(base\.operational_status, 'active'\) = 'active'[\s\S]*AND sm\.status = 'active'/s)
+  })
+
+  it('allows later migrations to keep active sibling memberships open', () => {
+    expect(existsSync(multipleMembershipsPath)).toBe(true)
+
+    const sql = existsSync(multipleMembershipsPath)
+      ? readFileSync(multipleMembershipsPath, 'utf8')
+      : ''
+
+    expect(sql).toContain(
+      'DROP INDEX IF EXISTS public.idx_student_memberships_one_active',
+    )
+    expect(sql).not.toMatch(
+      /UPDATE public\.student_memberships[\s\S]*status = 'historical'[\s\S]*WHERE student_id = p_student_id/,
+    )
   })
 })
