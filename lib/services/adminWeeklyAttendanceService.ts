@@ -3,7 +3,7 @@ type RpcError = {
 }
 
 export type RpcClient = {
-  rpc: (...args: any[]) => Promise<{ data: unknown; error: RpcError | null }>
+  rpc: (...args: any[]) => PromiseLike<{ data: unknown; error: RpcError | null }>
 }
 
 export type WeeklyAttendanceCandidate = {

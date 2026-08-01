@@ -73,6 +73,16 @@ export type StudentBookingSummary = {
   admin_notes: string | null
   start_at: string | null
   end_at: string | null
+  source?: 'booking' | 'weekly'
+}
+
+export type StudentWeeklyAttendanceSummary = {
+  id: string
+  week_start: string
+  week_end: string
+  status: 'no_show'
+  classes_consumed: number
+  marked_at: string
 }
 
 export type StudentDetailData = {
@@ -110,6 +120,7 @@ export type StudentDetailData = {
   payments: StudentPaymentSummary[]
   ledger: StudentLedgerSummary[]
   bookings: StudentBookingSummary[]
+  weekly_attendance: StudentWeeklyAttendanceSummary[]
 }
 
 function sortMemberships(memberships: StudentMembershipSummary[]) {
@@ -137,7 +148,7 @@ export function useStudentDetail(studentId: string) {
     queryKey: studentKeys.detail(studentId),
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -235,12 +246,19 @@ export function useStudentDetail(studentId: string) {
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
+          supabase
+            .from('student_weekly_attendance')
+            .select('id,week_start,week_end,status,classes_consumed,marked_at')
+            .eq('student_id', studentId)
+            .order('week_end', { ascending: false })
+            .limit(250),
         ])
 
       if (studentError) throw studentError
       if (paymentsError) throw paymentsError
       if (ledgerError) throw ledgerError
       if (bookingsError) throw bookingsError
+      if (weeklyAttendanceError) throw weeklyAttendanceError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
@@ -329,7 +347,9 @@ export function useStudentDetail(studentId: string) {
           admin_notes: booking.admin_notes,
           start_at: booking.sessions?.start_at || null,
           end_at: booking.sessions?.end_at || null,
+          source: 'booking',
         })),
+        weekly_attendance: (weeklyAttendance || []) as StudentWeeklyAttendanceSummary[],
       }
     },
   })

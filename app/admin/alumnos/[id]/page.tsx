@@ -53,6 +53,7 @@ import {
   type StudentBowUsageType,
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
+import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
   id: string
@@ -966,7 +967,9 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       )}
 
       {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} />}
-      {activeTab === 'attendance' && <AttendanceTab bookings={data.bookings} />}
+      {activeTab === 'attendance' && (
+        <AttendanceTab bookings={buildStudentAttendanceHistory(data.bookings, data.weekly_attendance)} />
+      )}
       {activeTab === 'payments' && <PaymentsTab payments={data.payments} />}
         {activeTab === 'sports' && (
           <SportsProfileSection
@@ -1623,7 +1626,7 @@ function AttendanceTab({ bookings }: { bookings: StudentDetailData['bookings'] }
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
           <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Nota</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">{attendanceRows.map((booking) => <tr key={booking.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td><td className="px-4 py-4 text-slate-600">{booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td><td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td><td className="max-w-xs px-4 py-4 text-slate-600">{booking.admin_notes || '-'}</td></tr>)}</tbody>
+            <tbody className="divide-y divide-slate-100">{attendanceRows.map((booking) => <tr key={booking.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td><td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td><td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td><td className="max-w-xs px-4 py-4 text-slate-600">{booking.source === 'weekly' ? 'Inasistencia semanal (jueves a domingo)' : booking.admin_notes || '-'}</td></tr>)}</tbody>
           </table>
         </div>
       )}
