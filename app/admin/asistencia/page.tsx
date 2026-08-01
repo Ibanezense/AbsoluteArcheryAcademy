@@ -310,6 +310,7 @@ function AsistenciaContent() {
     } catch (err: any) {
       console.error('Error marking weekly no-show:', err)
       toast.push({ message: err.message || 'No se pudo registrar la inasistencia semanal.', type: 'error' })
+      await loadWeeklyReview(selectedDate)
     } finally {
       setWeeklyActionLoading(null)
     }
