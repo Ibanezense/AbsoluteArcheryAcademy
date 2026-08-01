@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   AttendanceBackToSessionsLink,
@@ -11,10 +12,19 @@ import {
   EmptyOperationalState,
 } from '@/components/admin/AdminOperationalComponents'
 import { AdminPageHeader } from '@/components/admin/AdminVisualSystem'
+import WeeklyAttendanceReview from '@/components/admin/WeeklyAttendanceReview'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
+import { studentKeys } from '@/lib/queries/studentQueries'
+import {
+  getWeeklyAttendanceReview,
+  markWeeklyNoShow,
+  type WeeklyAttendanceCandidate,
+  type WeeklyAttendanceReview as WeeklyAttendanceReviewData,
+} from '@/lib/services/adminWeeklyAttendanceService'
+import { getWeeklyAttendanceWindow } from '@/lib/utils/weeklyAttendance'
 
 interface DailyRosterBooking {
   booking_id: string
@@ -58,6 +68,7 @@ function AsistenciaContent() {
   const searchParams = useSearchParams()
   const confirm = useConfirm()
   const toast = useToast()
+  const queryClient = useQueryClient()
 
   const requestedDate = searchParams.get('date')
   const requestedSessionId = searchParams.get('sessionId')
@@ -68,6 +79,11 @@ function AsistenciaContent() {
   const [error, setError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<DailyRosterBooking[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [weeklyReview, setWeeklyReview] = useState<WeeklyAttendanceReviewData | null>(null)
+  const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false)
+  const [weeklyReviewError, setWeeklyReviewError] = useState<string | null>(null)
+  const [weeklyActionLoading, setWeeklyActionLoading] = useState<string | null>(null)
+  const weeklyWindow = useMemo(() => getWeeklyAttendanceWindow(selectedDate), [selectedDate])
 
   useEffect(() => {
     if (requestedDate && requestedDate !== selectedDate) {
@@ -97,8 +113,31 @@ function AsistenciaContent() {
     }
   }
 
+  const loadWeeklyReview = async (date: string) => {
+    if (!getWeeklyAttendanceWindow(date).isSunday) {
+      setWeeklyReview(null)
+      setWeeklyReviewError(null)
+      setWeeklyReviewLoading(false)
+      return
+    }
+
+    setWeeklyReviewLoading(true)
+    setWeeklyReviewError(null)
+
+    try {
+      const review = await getWeeklyAttendanceReview(supabase, date)
+      setWeeklyReview(review)
+    } catch (err: any) {
+      console.error('Error loading weekly attendance review:', err)
+      setWeeklyReview(null)
+      setWeeklyReviewError(err.message || 'No se pudo cargar la revisión semanal.')
+    } finally {
+      setWeeklyReviewLoading(false)
+    }
+  }
+
   useEffect(() => {
-    void loadRoster(selectedDate)
+    void Promise.all([loadRoster(selectedDate), loadWeeklyReview(selectedDate)])
   }, [selectedDate])
 
   const groupedSessions: GroupedSession[] = useMemo(() => {
@@ -194,7 +233,7 @@ function AsistenciaContent() {
       }
 
       toast.push({ message: attended ? 'Asistencia registrada.' : 'No-show registrado.', type: 'success' })
-      await loadRoster(selectedDate)
+      await Promise.all([loadRoster(selectedDate), loadWeeklyReview(selectedDate)])
     } catch (err: any) {
       console.error('Error marking attendance:', err)
       toast.push({ message: err.message || 'Error al marcar asistencia', type: 'error' })
@@ -229,12 +268,50 @@ function AsistenciaContent() {
       }
 
       toast.push({ message: 'Reserva cancelada.', type: 'success' })
-      await loadRoster(selectedDate)
+      await Promise.all([loadRoster(selectedDate), loadWeeklyReview(selectedDate)])
     } catch (err: any) {
       console.error('Error canceling booking:', err)
       toast.push({ message: err.message || 'Error al cancelar reserva', type: 'error' })
     } finally {
       setActionLoading(null)
+    }
+  }
+
+  const handleMarkWeeklyNoShow = async (candidate: WeeklyAttendanceCandidate) => {
+    const ok = await confirm(
+      `Marcar a ${candidate.student_name} como no asistió esta semana descontará una clase y guardará el registro en su historial. ¿Continuar?`,
+      {
+        title: 'Confirmar inasistencia semanal',
+        description: 'Este registro se usa para controlar la participación en el campeonato nacional.',
+        confirmLabel: 'Marcar no asistió esta semana',
+        tone: 'danger',
+      },
+    )
+    if (!ok) return
+
+    setWeeklyActionLoading(candidate.student_id)
+
+    try {
+      const result = await markWeeklyNoShow(supabase, {
+        studentId: candidate.student_id,
+        sunday: selectedDate,
+      })
+
+      toast.push({
+        message: result.already_marked
+          ? 'La inasistencia semanal ya estaba registrada.'
+          : 'Inasistencia semanal registrada y clase descontada.',
+        type: 'success',
+      })
+      await Promise.all([
+        loadWeeklyReview(selectedDate),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+      ])
+    } catch (err: any) {
+      console.error('Error marking weekly no-show:', err)
+      toast.push({ message: err.message || 'No se pudo registrar la inasistencia semanal.', type: 'error' })
+    } finally {
+      setWeeklyActionLoading(null)
     }
   }
 
@@ -364,6 +441,16 @@ function AsistenciaContent() {
             })}
           </section>
         </div>
+      )}
+
+      {weeklyWindow.isSunday && (
+        <WeeklyAttendanceReview
+          review={weeklyReview}
+          isLoading={weeklyReviewLoading}
+          error={weeklyReviewError}
+          processingStudentId={weeklyActionLoading}
+          onMark={handleMarkWeeklyNoShow}
+        />
       )}
     </div>
   )
