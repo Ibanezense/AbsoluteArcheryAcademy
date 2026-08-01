@@ -154,12 +154,32 @@ describe('student operational status automation migration', () => {
     const sql = existsSync(multipleMembershipsPath)
       ? readFileSync(multipleMembershipsPath, 'utf8')
       : ''
+    const functionMarker =
+      'CREATE OR REPLACE FUNCTION public.admin_assign_membership_plan'
+    const functionStart = sql.indexOf(functionMarker)
+    const remainingSql =
+      functionStart === -1
+        ? ''
+        : sql.slice(functionStart + functionMarker.length)
+    const nextFunctionOffset = remainingSql.search(
+      /\n\s*CREATE OR REPLACE FUNCTION public\./,
+    )
+    const assignmentSql =
+      functionStart === -1
+        ? ''
+        : nextFunctionOffset === -1
+          ? sql.slice(functionStart)
+          : sql.slice(
+              functionStart,
+              functionStart + functionMarker.length + nextFunctionOffset,
+            )
 
     expect(sql).toContain(
       'DROP INDEX IF EXISTS public.idx_student_memberships_one_active',
     )
-    expect(sql).not.toMatch(
-      /UPDATE public\.student_memberships[\s\S]*status = 'historical'[\s\S]*WHERE student_id = p_student_id/,
+    expect(assignmentSql).toContain(functionMarker)
+    expect(assignmentSql).not.toMatch(
+      /UPDATE\s+public\.student_memberships(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[\s\S]*?\bstatus\s*=\s*'historical'/i,
     )
   })
 })

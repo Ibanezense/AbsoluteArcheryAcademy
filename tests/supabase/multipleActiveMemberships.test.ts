@@ -12,19 +12,31 @@ const migrationPath = join(
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : ''
 
 function functionSql(functionName: string) {
-  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${functionName}`)
-  const end = sql.indexOf('REVOKE ALL ON FUNCTION', start)
+  const marker = `CREATE OR REPLACE FUNCTION public.${functionName}`
+  const start = sql.indexOf(marker)
 
-  return start === -1 ? '' : sql.slice(start, end === -1 ? undefined : end)
+  if (start === -1) return ''
+
+  const remainingSql = sql.slice(start + marker.length)
+  const nextFunctionOffset = remainingSql.search(
+    /\n\s*CREATE OR REPLACE FUNCTION public\./,
+  )
+
+  return nextFunctionOffset === -1
+    ? sql.slice(start)
+    : sql.slice(start, start + marker.length + nextFunctionOffset)
 }
 
 function expectRestrictedRpc(functionName: string) {
   const grantPattern = new RegExp(
-    `GRANT EXECUTE ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) TO ([^;]+);`,
-    'g',
+    `GRANT\\s+EXECUTE\\s+ON\\s+FUNCTION\\s+public\\.${functionName}\\([^;]*?\\)\\s+TO\\s+([^;]+);`,
+    'gi',
   )
-  const grantedRoles = [...sql.matchAll(grantPattern)].map((match) =>
-    match[1].trim(),
+  const grantedRoles = [...sql.matchAll(grantPattern)].flatMap((match) =>
+    match[1]
+      .split(',')
+      .map((role) => role.trim().toLowerCase())
+      .filter(Boolean),
   )
 
   expect(sql).toMatch(
@@ -37,12 +49,9 @@ function expectRestrictedRpc(functionName: string) {
       `REVOKE ALL ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) FROM anon;`,
     ),
   )
-  expect(sql).toMatch(
-    new RegExp(
-      `GRANT EXECUTE ON FUNCTION public\\.${functionName}\\([\\s\\S]*?\\) TO authenticated, service_role;`,
-    ),
+  expect(new Set(grantedRoles)).toEqual(
+    new Set(['authenticated', 'service_role']),
   )
-  expect(grantedRoles).toEqual(['authenticated, service_role'])
 }
 
 describe('multiple active student memberships migration', () => {
@@ -55,8 +64,8 @@ describe('multiple active student memberships migration', () => {
     expect(sql).toContain(
       'CREATE OR REPLACE FUNCTION public.admin_create_student_membership_cycles',
     )
-    expect(sql).not.toMatch(
-      /UPDATE public\.student_memberships[\s\S]*status = 'historical'[\s\S]*WHERE student_id = p_student_id/,
+    expect(functionSql('admin_assign_membership_plan')).not.toMatch(
+      /UPDATE\s+public\.student_memberships(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[\s\S]*?\bstatus\s*=\s*'historical'/i,
     )
   })
 
@@ -65,6 +74,12 @@ describe('multiple active student memberships migration', () => {
 
     expect(selectorSql).toContain(
       'CREATE OR REPLACE FUNCTION public.select_student_membership_for_date',
+    )
+    expect(selectorSql).toMatch(/sm\.student_id\s*=\s*p_student_id/i)
+    expect(selectorSql).toMatch(/sm\.status\s*=\s*'active'/i)
+    expect(selectorSql).toMatch(/sm\.start_date\s*<=\s*p_service_date/i)
+    expect(selectorSql).toMatch(
+      /\(sm\.end_date\s+IS\s+NULL\s+OR\s+sm\.end_date\s*>=\s*p_service_date\)/i,
     )
     expect(selectorSql).toMatch(
       /sm\.classes_remaining\s*>\s*\([\s\S]*COUNT\(\*\)[\s\S]*FROM public\.bookings b[\s\S]*b\.active_membership_id = sm\.id[\s\S]*b\.status = 'reserved'[\s\S]*\)/i,
