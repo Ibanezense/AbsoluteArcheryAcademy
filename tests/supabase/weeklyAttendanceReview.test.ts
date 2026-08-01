@@ -32,8 +32,10 @@ describe('weekly attendance review migration', () => {
 
     expect(reviewSql).toContain('EXTRACT(DOW FROM p_sunday) <> 0')
     expect(reviewSql).toContain("AT TIME ZONE 'America/Lima'")
+    expect(reviewSql).toContain("p_sunday > (now() AT TIME ZONE 'America/Lima')::date")
     expect(reviewSql).toContain("b.status = 'attended'")
     expect(reviewSql).toContain("pending_booking.status = 'reserved'")
+    expect(reviewSql).toContain('pending_booking.student_id IS NOT NULL')
     expect(reviewSql).toContain("sm.status = 'active'")
     expect(reviewSql).toContain('sm.classes_remaining > 0')
     expect(reviewSql).toContain('sm.end_date >= p_sunday')
@@ -44,8 +46,10 @@ describe('weekly attendance review migration', () => {
     const markSql = functionSql('admin_mark_weekly_no_show')
 
     expect(markSql).toContain('FOR UPDATE')
+    expect(markSql).toContain("p_sunday > (now() AT TIME ZONE 'America/Lima')::date")
     expect(markSql).toContain("attendance_booking.status = 'attended'")
     expect(markSql).toContain("pending_booking.status = 'reserved'")
+    expect(markSql).toContain('pending_booking.student_id IS NOT NULL')
     expect(markSql).toContain('classes_used = classes_used + 1')
     expect(markSql).toContain('classes_remaining = classes_remaining - 1')
     expect(markSql).toContain("'weekly_no_show_consumed'")

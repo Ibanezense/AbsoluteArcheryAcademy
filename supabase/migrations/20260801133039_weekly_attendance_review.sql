@@ -93,6 +93,10 @@ BEGIN
     );
   END IF;
 
+  IF p_sunday > (now() AT TIME ZONE 'America/Lima')::date THEN
+    RAISE EXCEPTION 'No se puede revisar una semana futura';
+  END IF;
+
   v_week_start := p_sunday - 3;
 
   SELECT COUNT(*)::integer
@@ -101,6 +105,7 @@ BEGIN
   INNER JOIN public.sessions pending_session
     ON pending_session.id = pending_booking.session_id
   WHERE pending_booking.status = 'reserved'
+    AND pending_booking.student_id IS NOT NULL
     AND (pending_session.start_at AT TIME ZONE 'America/Lima')::date
       BETWEEN v_week_start AND p_sunday;
 
@@ -207,6 +212,10 @@ BEGIN
     RAISE EXCEPTION 'La revisión semanal solo puede registrarse para un domingo';
   END IF;
 
+  IF p_sunday > (now() AT TIME ZONE 'America/Lima')::date THEN
+    RAISE EXCEPTION 'No se puede registrar una inasistencia para una semana futura';
+  END IF;
+
   v_week_start := p_sunday - 3;
 
   SELECT st.id
@@ -241,6 +250,7 @@ BEGIN
     INNER JOIN public.sessions pending_session
       ON pending_session.id = pending_booking.session_id
     WHERE pending_booking.status = 'reserved'
+      AND pending_booking.student_id IS NOT NULL
       AND (pending_session.start_at AT TIME ZONE 'America/Lima')::date
         BETWEEN v_week_start AND p_sunday
   ) THEN

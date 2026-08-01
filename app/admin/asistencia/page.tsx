@@ -84,6 +84,7 @@ function AsistenciaContent() {
   const [weeklyReviewError, setWeeklyReviewError] = useState<string | null>(null)
   const [weeklyActionLoading, setWeeklyActionLoading] = useState<string | null>(null)
   const weeklyWindow = useMemo(() => getWeeklyAttendanceWindow(selectedDate), [selectedDate])
+  const canReviewWeeklyAttendance = weeklyWindow.isSunday && !dayjs(selectedDate).isAfter(dayjs(), 'day')
 
   useEffect(() => {
     if (requestedDate && requestedDate !== selectedDate) {
@@ -114,7 +115,7 @@ function AsistenciaContent() {
   }
 
   const loadWeeklyReview = async (date: string) => {
-    if (!getWeeklyAttendanceWindow(date).isSunday) {
+    if (!getWeeklyAttendanceWindow(date).isSunday || dayjs(date).isAfter(dayjs(), 'day')) {
       setWeeklyReview(null)
       setWeeklyReviewError(null)
       setWeeklyReviewLoading(false)
@@ -444,7 +445,7 @@ function AsistenciaContent() {
         </div>
       )}
 
-      {weeklyWindow.isSunday && (
+      {canReviewWeeklyAttendance && (
         <WeeklyAttendanceReview
           review={weeklyReview}
           isLoading={weeklyReviewLoading}
