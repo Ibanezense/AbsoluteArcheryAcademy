@@ -163,6 +163,110 @@ describe('mapStudentListRow', () => {
     expect(result.last_attendance_at).toBe('2026-07-12T21:00:00.000Z')
   })
 
+  it('keeps the current FIFO balance separate from all open membership classes', () => {
+    const result = mapStudentListRow({
+      id: 'student-fifo',
+      full_name: 'Alumno FIFO',
+      is_active: true,
+      operational_status: null,
+      memberships: [
+        {
+          id: 'future',
+          custom_name: 'Plan futuro',
+          classes_total: 8,
+          classes_remaining: 8,
+          start_date: '2026-07-01',
+          end_date: '2026-07-31',
+          expired_at: null,
+          status: 'active',
+          created_at: '2026-06-02T12:00:00.000Z',
+          membership_origin: 'paid',
+        },
+        {
+          id: 'current',
+          custom_name: 'Plan antiguo',
+          classes_total: 4,
+          classes_remaining: 2,
+          start_date: '2026-06-01',
+          end_date: '2026-06-30',
+          expired_at: null,
+          status: 'active',
+          created_at: '2026-06-01T12:00:00.000Z',
+          membership_origin: 'paid',
+        },
+      ],
+    })
+
+    expect(result.membership_name).toBe('Plan antiguo')
+    expect(result.classes_remaining).toBe(2)
+    expect(result.total_open_classes).toBe(10)
+    expect(result.open_membership_count).toBe(2)
+  })
+
+  it('breaks overlapping membership ties by created_at and id', () => {
+    const result = mapStudentListRow({
+      id: 'student-overlap',
+      full_name: 'Alumno solapado',
+      is_active: true,
+      operational_status: null,
+      memberships: [
+        {
+          id: 'membership-z',
+          custom_name: 'Creada despues',
+          classes_total: 8,
+          classes_remaining: 8,
+          start_date: '2026-06-01',
+          end_date: '2026-06-30',
+          expired_at: null,
+          status: 'active',
+          created_at: '2026-06-02T12:00:00.000Z',
+          membership_origin: 'paid',
+        },
+        {
+          id: 'membership-a',
+          custom_name: 'Creada primero',
+          classes_total: 4,
+          classes_remaining: 2,
+          start_date: '2026-06-01',
+          end_date: '2026-06-30',
+          expired_at: null,
+          status: 'active',
+          created_at: '2026-06-01T12:00:00.000Z',
+          membership_origin: 'gift',
+        },
+      ],
+    })
+
+    expect(result.membership_name).toBe('Creada primero')
+    expect(result.classes_remaining).toBe(2)
+  })
+
+  it('counts a future cycle as open without presenting its balance as usable today', () => {
+    const result = mapStudentListRow({
+      id: 'student-future',
+      full_name: 'Alumno futuro',
+      is_active: true,
+      operational_status: null,
+      memberships: [{
+        id: 'future-only',
+        custom_name: 'Plan futuro',
+        classes_total: 8,
+        classes_remaining: 8,
+        start_date: '2026-07-01',
+        end_date: '2026-07-31',
+        expired_at: null,
+        status: 'active',
+        created_at: '2026-06-03T12:00:00.000Z',
+        membership_origin: 'paid',
+      }],
+    })
+
+    expect(result.membership_status).toBe('scheduled')
+    expect(result.classes_remaining).toBe(0)
+    expect(result.total_open_classes).toBe(8)
+    expect(result.open_membership_count).toBe(1)
+  })
+
   it('keeps the newest attended class date for each student', () => {
     const result = buildLastAttendanceByStudent([
       {

@@ -93,7 +93,11 @@ function MembershipCell({ student }: { student: StudentListRow }) {
   return (
     <div>
       <p className="font-semibold text-slate-800">{student.membership_name}</p>
-      {student.membership_status === 'active' ? (
+      {student.open_membership_count > 1 ? (
+        <p className="mt-1 text-xs font-semibold text-accent">
+          {student.total_open_classes} clases en {student.open_membership_count} membresías
+        </p>
+      ) : student.membership_status === 'active' ? (
         <p className="mt-1 text-xs text-slate-400">
           {student.classes_remaining} {student.classes_remaining === 1 ? 'clase disponible' : 'clases disponibles'}
         </p>
@@ -213,7 +217,12 @@ function MobileStudentList({ students }: { students: StudentListRow[] }) {
 
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-slate-50/80 p-3.5">
               <MobileDetail label="Teléfono" value={student.phone || 'Sin teléfono'} />
-              <MobileDetail label="Membresía" value={student.membership_name || 'Sin membresía'} />
+              <MobileDetail
+                label="Membresía"
+                value={student.open_membership_count > 1
+                  ? `${student.total_open_classes} clases en ${student.open_membership_count} membresías`
+                  : student.membership_name || 'Sin membresía'}
+              />
               <MobileDetail label="Última asistencia" value={lastAttendance || 'Sin asistencias'} />
               <MobileDetail label="Fecha de ingreso" value={enrollmentDate || 'Sin fecha'} />
             </dl>

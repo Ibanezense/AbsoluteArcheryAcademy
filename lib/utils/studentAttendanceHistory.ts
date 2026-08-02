@@ -14,6 +14,7 @@ export function buildStudentAttendanceHistory(
   const weeklyRows: StudentBookingSummary[] = weeklyAttendance.map((event) => ({
     id: `weekly-${event.id}`,
     session_id: '',
+    active_membership_id: null,
     status: event.status,
     distance_m: null,
     bow_usage_type: null,

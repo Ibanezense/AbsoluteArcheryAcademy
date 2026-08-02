@@ -51,11 +51,11 @@ describe('admin student profile operational redesign', () => {
     expect(page).toContain('Copiar código')
   })
 
-  it('shows the renewal replacement warning and uses profile membership RPCs', () => {
+  it('explains independent FIFO cycles and uses profile membership RPCs', () => {
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
-    expect(page).toContain('La membresía anterior pasará al historial')
-    expect(page).toContain('Las clases restantes no se acumularán automáticamente')
+    expect(page).toContain('Se creará un ciclo independiente')
+    expect(page).toContain('se consumen primero en orden cronológico')
     expect(page).toContain("supabase.rpc('admin_assign_membership_from_profile'")
     expect(page).toContain("supabase.rpc('admin_manage_student_membership'")
   })

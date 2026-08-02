@@ -8,6 +8,7 @@ describe('buildStudentAttendanceHistory', () => {
         {
           id: 'booking-1',
           session_id: 'session-1',
+          active_membership_id: null,
           status: 'attended',
           distance_m: 18,
           bow_usage_type: 'own',

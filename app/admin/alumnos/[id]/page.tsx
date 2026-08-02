@@ -53,6 +53,7 @@ import {
   type StudentBowUsageType,
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
+import { summarizeMemberships } from '@/lib/utils/membershipCycles'
 import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
@@ -153,6 +154,9 @@ function daysBetweenToday(value: string | null | undefined) {
 
 function statusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
+    current: 'En consumo',
+    scheduled: 'Programada',
+    queued: 'En espera',
     active: 'Activa',
     expiring: 'Por vencer',
     paused: 'En pausa',
@@ -179,8 +183,8 @@ function statusLabel(status: string | null | undefined) {
 }
 
 function statusTone(status: string | null | undefined): BadgeTone {
-  if (status === 'active' || status === 'attended' || status === 'paid') return 'success'
-  if (status === 'reserved' || status === 'pending' || status === 'draft' || status === 'expiring') return 'warning'
+  if (status === 'active' || status === 'current' || status === 'attended' || status === 'paid') return 'success'
+  if (status === 'reserved' || status === 'pending' || status === 'draft' || status === 'expiring' || status === 'queued' || status === 'scheduled') return 'warning'
   if (status === 'no_show' || status === 'late' || status === 'expired' || status === 'inactive' || status === 'consumed' || status === 'blocked' || status === 'suspended') return 'danger'
   if (status === 'waived') return 'info'
   return 'neutral'
@@ -403,6 +407,33 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [assignmentOpen, setAssignmentOpen] = useState(false)
   const [assignmentForm, setAssignmentForm] = useState<MembershipAssignmentFormState>(emptyMembershipAssignment)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
+
+  const membershipStatusesById = useMemo(() => {
+    if (!data) return {} as Record<string, string>
+    return summarizeMemberships(
+      data.memberships.map((membership) => ({
+        ...membership,
+        status: membership.status === 'draft' ? 'historical' as const : membership.status,
+      })),
+      new Date().toISOString().slice(0, 10),
+    ).statusesById
+  }, [data])
+
+  const upcomingBookings = useMemo(() => (data?.bookings || [])
+    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(dayjs()))
+    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data])
+
+  const reservedByMembershipId = useMemo(() => {
+    const reserved = new Map<string, number>()
+    for (const booking of upcomingBookings) {
+      if (!booking.active_membership_id) continue
+      reserved.set(
+        booking.active_membership_id,
+        (reserved.get(booking.active_membership_id) || 0) + 1,
+      )
+    }
+    return reserved
+  }, [upcomingBookings])
 
   useEffect(() => {
     if (!data) return
@@ -717,9 +748,6 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const activeMembership = data.active_membership
   const latestMembership = getLatestMembership(data.memberships)
   const membershipEndDelta = daysBetweenToday(activeMembership?.end_date)
-  const upcomingBookings = data.bookings
-    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(dayjs()))
-    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime())
   const nextBooking = upcomingBookings[0] || null
   const recentClasses = data.bookings.filter((booking) => booking.status !== 'reserved')
   const pendingPayments = data.payments.filter((payment) => payment.payment_status === 'pending' || payment.payment_status === 'late')
@@ -727,9 +755,11 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     if (booking.status !== 'no_show' || !booking.start_at) return false
     return dayjs(booking.start_at).isAfter(dayjs().subtract(14, 'day'))
   })
-  const reservedAgainstBalance = upcomingBookings.length
+  const reservedAgainstBalance = activeMembership
+    ? reservedByMembershipId.get(activeMembership.id) || 0
+    : 0
   const committedFreeBalance = Math.max((activeMembership?.classes_remaining || 0) - reservedAgainstBalance, 0)
-  const renewalWarning = 'Esta acción reemplazará la membresía actual del alumno. La membresía anterior pasará al historial y el nuevo plan iniciará un ciclo independiente. Las clases restantes no se acumularán automáticamente.'
+  const renewalWarning = 'Se creará un ciclo independiente. Los saldos anteriores se conservan y se consumen primero en orden cronológico.'
 
   const alerts = [
     activeMembership && membershipEndDelta !== null && membershipEndDelta < 0
@@ -853,8 +883,9 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <KpiCard icon={<Target className="h-5 w-5" />} label="Clases disponibles" value={activeMembership?.classes_remaining ?? 0} helper={`de ${activeMembership?.classes_total ?? 0}`} tone="border border-emerald-200 bg-emerald-50 text-emerald-600" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <KpiCard icon={<WalletCards className="h-5 w-5" />} label="Total abierto" value={data.total_open_classes} helper={`${data.open_membership_count} membresías abiertas`} tone="border border-orange-200 bg-orange-50 text-accent" />
+            <KpiCard icon={<Target className="h-5 w-5" />} label="Clases disponibles" value={committedFreeBalance} helper={`Utilizable hoy · ${activeMembership?.classes_remaining ?? 0} del ciclo actual`} tone="border border-emerald-200 bg-emerald-50 text-emerald-600" />
             <KpiCard icon={<CalendarDays className="h-5 w-5" />} label="Reservas próximas" value={upcomingBookings.length} helper={nextBooking ? `Próxima: ${formatDate(nextBooking.start_at)}` : 'Sin agenda'} tone="border border-blue-200 bg-blue-50 text-blue-600" />
             <KpiCard icon={<Clock3 className="h-5 w-5" />} label="Vence" value={membershipEndDelta ?? '-'} helper={activeMembership?.end_date ? `${membershipEndDelta === 1 ? 'día' : 'días'} - ${formatDate(activeMembership.end_date)}` : 'Sin fecha'} tone="border border-orange-200 bg-orange-50 text-accent" />
             <KpiCard icon={<BadgeDollarSign className="h-5 w-5" />} label="Pagos pendientes" value={pendingPayments.length} helper={pendingPayments[0] ? formatMoney(pendingPayments[0].amount, pendingPayments[0].currency) : 'Al dia'} tone="border border-amber-200 bg-amber-50 text-amber-600" />
@@ -949,6 +980,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         <MembershipTab
           studentName={data.full_name}
           memberships={data.memberships}
+          membershipStatusesById={membershipStatusesById}
           plans={(plansQuery.data || []).filter((plan) => plan.is_active)}
           plansLoading={plansQuery.isLoading}
           membershipEditor={membershipEditor}
@@ -1253,7 +1285,7 @@ function LegacyMembershipTab({
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <SectionShell
         title="Membresia actual"
-        description="El ciclo activo no acumula saldo al renovarse; una nueva venta reemplaza el ciclo anterior."
+        description="Los ciclos conservan sus saldos por separado y se consumen en orden cronológico."
         action={<OperationalStatusBadge label={statusLabel(activeMembership?.status || latestMembership?.status)} tone={statusTone(activeMembership?.status || latestMembership?.status)} />}
       >
         {activeMembership ? (
@@ -1370,6 +1402,7 @@ function LegacyMembershipTab({
 function MembershipTab({
   studentName,
   memberships,
+  membershipStatusesById,
   plans,
   plansLoading,
   membershipEditor,
@@ -1387,6 +1420,7 @@ function MembershipTab({
 }: {
   studentName: string
   memberships: StudentMembershipSummary[]
+  membershipStatusesById: Record<string, string>
   plans: MembershipPlan[]
   plansLoading: boolean
   membershipEditor: MembershipEditorState | null
@@ -1430,6 +1464,7 @@ function MembershipTab({
                   <th className="px-5 py-4">Fecha de finalización</th>
                   <th className="px-5 py-4">Número de documento</th>
                   <th className="px-5 py-4">Estado</th>
+                  <th className="px-5 py-4">Origen</th>
                   <th className="px-5 py-4">Tipo de pago</th>
                   <th className="px-5 py-4 text-right">Acciones</th>
                 </tr>
@@ -1437,13 +1472,15 @@ function MembershipTab({
               <tbody className="divide-y divide-slate-100">
                 {memberships.map((membership) => {
                   const display = getMembershipDisplayFields(membership)
+                  const queueStatus = membershipStatusesById[membership.id] || membership.status
                   return (
                     <tr key={membership.id} className="group bg-white transition hover:bg-slate-50/70">
                       <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases disponibles</p></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.start_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.end_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-mono text-xs font-black text-blue-600">{display.documentNumber}</td>
-                      <td className="px-5 py-5"><div className="flex flex-wrap gap-2"><OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} />{display.frozen && <OperationalStatusBadge label="Congelada" tone="info" />}</div></td>
+                      <td className="px-5 py-5"><div className="flex flex-wrap gap-2"><OperationalStatusBadge label={statusLabel(queueStatus)} tone={statusTone(queueStatus)} />{display.frozen && <OperationalStatusBadge label="Congelada" tone="info" />}</div></td>
+                      <td className="px-5 py-5"><OperationalStatusBadge label={membership.membership_origin === 'gift' ? 'Obsequio' : 'Pagada'} tone={membership.membership_origin === 'gift' ? 'info' : 'neutral'} /></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{display.paymentType}</td>
                       <td className="relative px-5 py-5 text-right">
                         <button type="button" aria-label={`Acciones de ${membership.custom_name}`} aria-expanded={membershipMenuId === membership.id} onClick={() => setMembershipMenuId(membershipMenuId === membership.id ? null : membership.id)} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-accent/40 hover:text-accent ml-auto"><MoreHorizontal className="h-5 w-5" /></button>

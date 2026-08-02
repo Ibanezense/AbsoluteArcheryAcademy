@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
+import { summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentAccountSummary = {
   id: string
@@ -17,13 +18,15 @@ export type StudentAccountSummary = {
 export type StudentMembershipSummary = {
   id: string
   membership_plan_id: string | null
+  membership_origin: 'paid' | 'gift'
+  assignment_batch_id: string | null
   custom_name: string
   classes_total: number
   classes_used: number
   classes_remaining: number
   start_date: string
   end_date: string | null
-  status: string
+  status: 'draft' | 'active' | 'expired' | 'cancelled' | 'consumed' | 'historical'
   total_amount: number
   currency: string
   notes: string | null
@@ -66,6 +69,7 @@ export type StudentLedgerSummary = {
 export type StudentBookingSummary = {
   id: string
   session_id: string
+  active_membership_id: string | null
   status: string
   distance_m: number | null
   bow_usage_type: string | null
@@ -116,6 +120,8 @@ export type StudentDetailData = {
     guardian_profile_id: string
   }) | null
   active_membership: StudentMembershipSummary | null
+  total_open_classes: number
+  open_membership_count: number
   memberships: StudentMembershipSummary[]
   payments: StudentPaymentSummary[]
   ledger: StudentLedgerSummary[]
@@ -138,6 +144,12 @@ function sortMemberships(memberships: StudentMembershipSummary[]) {
     const rightRank = rank[right.status] ?? 99
 
     if (leftRank !== rightRank) return leftRank - rightRank
+
+    if (left.status === 'active' && right.status === 'active') {
+      return left.start_date.localeCompare(right.start_date)
+        || new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+        || left.id.localeCompare(right.id)
+    }
 
     return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
   })
@@ -205,6 +217,8 @@ export function useStudentDetail(studentId: string) {
               memberships:student_memberships (
                 id,
                 membership_plan_id,
+                membership_origin,
+                assignment_batch_id,
                 custom_name,
                 classes_total,
                 classes_used,
@@ -242,7 +256,7 @@ export function useStudentDetail(studentId: string) {
             .limit(250),
           supabase
             .from('bookings')
-            .select('id,session_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)')
+            .select('id,session_id,active_membership_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)')
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
@@ -263,7 +277,16 @@ export function useStudentDetail(studentId: string) {
 
       const typedStudent = studentRow as any
       const memberships = sortMemberships((typedStudent.memberships || []) as StudentMembershipSummary[])
-      const activeMembership = memberships.find((membership) => membership.status === 'active') || null
+      const membershipSummary = summarizeMemberships(
+        memberships.map((membership) => ({
+          ...membership,
+          status: membership.status === 'draft' ? 'historical' as const : membership.status,
+        })),
+        new Date().toISOString().slice(0, 10),
+      )
+      const activeMembership = memberships.find(
+        (membership) => membership.id === membershipSummary.currentMembershipId,
+      ) || null
 
       // PostgREST devuelve objeto (no array) si student_guardians tiene UNIQUE(student_id)
       const guardianRow = Array.isArray(typedStudent.guardians)
@@ -331,6 +354,8 @@ export function useStudentDetail(studentId: string) {
           }
           : null,
         active_membership: activeMembership,
+        total_open_classes: membershipSummary.totalOpenClasses,
+        open_membership_count: membershipSummary.openCount,
         memberships,
         payments: ((payments || []) as StudentPaymentSummary[]).map((payment) => ({
           ...payment,
@@ -340,6 +365,7 @@ export function useStudentDetail(studentId: string) {
         bookings: ((bookings || []) as any[]).map((booking) => ({
           id: booking.id,
           session_id: booking.session_id,
+          active_membership_id: booking.active_membership_id || null,
           status: booking.status,
           distance_m: booking.distance_m,
           bow_usage_type: booking.bow_usage_type,

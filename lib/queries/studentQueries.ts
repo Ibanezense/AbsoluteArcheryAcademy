@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
+import { summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentListRow = {
   id: string
@@ -34,6 +35,8 @@ export type StudentListRow = {
   membership_status: string | null
   membership_raw_classes_remaining: number
   classes_remaining: number
+  total_open_classes: number
+  open_membership_count: number
   access_code: string | null
 }
 
@@ -100,33 +103,40 @@ function daysSinceExpiration(expiredAt: string | null | undefined, endDate: stri
 }
 
 export function mapStudentListRow(student: any): StudentListRow {
+  const today = todayKey()
   const memberships = [...(student.memberships || [])].sort((left, right) =>
     new Date(right.expired_at || right.end_date || right.start_date || right.created_at).getTime() -
     new Date(left.expired_at || left.end_date || left.start_date || left.created_at).getTime()
   )
-  const today = todayKey()
-  const activeMembership =
-    memberships.find(
-      (membership) =>
-        membership.status === 'active' &&
-        (membership.start_date == null || membership.start_date <= today) &&
-        (membership.classes_remaining ?? 0) > 0 &&
-        (!membership.end_date || membership.end_date >= today)
-    ) || null
+  const summarizableMemberships = memberships.map((membership, index) => {
+    const startDate = membership.start_date || dateKey(membership.created_at) || today
+    return {
+      ...membership,
+      id: membership.id || `legacy-membership-${index}`,
+      start_date: startDate,
+      status: membership.status === 'draft' ? 'historical' as const : membership.status,
+      classes_remaining: membership.classes_remaining ?? 0,
+      created_at: membership.created_at || `${startDate}T00:00:00.000Z`,
+    }
+  })
+  const membershipSummary = summarizeMemberships(summarizableMemberships, today)
+  const activeMembership = memberships.find(
+    (_membership, index) => summarizableMemberships[index].id === membershipSummary.currentMembershipId,
+  ) || null
   const latestMembership = memberships[0] || null
   const membershipForDisplay = activeMembership || latestMembership
-  const displayStatus =
-    membershipForDisplay?.status === 'active' &&
-      (
-        (membershipForDisplay?.end_date && membershipForDisplay.end_date < today) ||
-        (membershipForDisplay?.classes_remaining ?? 0) <= 0
-      )
+  const displayMembershipIndex = membershipForDisplay
+    ? memberships.indexOf(membershipForDisplay)
+    : -1
+  const summarizedDisplayStatus = displayMembershipIndex >= 0
+    ? membershipSummary.statusesById[summarizableMemberships[displayMembershipIndex].id]
+    : null
+  const displayStatus = activeMembership
+    ? 'active'
+    : summarizedDisplayStatus === 'consumed'
       ? 'expired'
-      : membershipForDisplay?.status || null
-  const displayClassesRemaining =
-    displayStatus === 'active'
-      ? membershipForDisplay?.classes_remaining || 0
-      : 0
+      : summarizedDisplayStatus || membershipForDisplay?.status || null
+  const displayClassesRemaining = activeMembership?.classes_remaining || 0
   const persistedOperationalStatus = student.operational_status || null
   const effectiveOperationalStatus = (() => {
     if (persistedOperationalStatus && PROTECTED_OPERATIONAL_STATUSES.has(persistedOperationalStatus)) {
@@ -189,6 +199,8 @@ export function mapStudentListRow(student: any): StudentListRow {
     membership_status: displayStatus,
     membership_raw_classes_remaining: membershipForDisplay?.classes_remaining ?? 0,
     classes_remaining: displayClassesRemaining,
+    total_open_classes: membershipSummary.totalOpenClasses,
+    open_membership_count: membershipSummary.openCount,
     access_code: Array.isArray(student.self_profile)
       ? student.self_profile[0]?.access_code || null
       : student.self_profile?.access_code || null,
@@ -235,13 +247,17 @@ export function useStudents() {
               )
             ),
             memberships:student_memberships (
+              id,
               custom_name,
+              classes_total,
               classes_remaining,
               start_date,
               end_date,
               expired_at,
               status,
-              created_at
+              created_at,
+              membership_origin,
+              assignment_batch_id
             )
           `)
           .order('full_name', { ascending: true }),
