@@ -72,6 +72,11 @@ describe('student mobile redesign', () => {
 
     expect(home).toContain('getDashboardMembershipBadge')
     expect(home).toContain('membershipStatus: dashboard.membership_status')
+    expect(home).toContain('label={membershipBadge.label}')
+    expect(home).not.toContain("label={dashboard.membership_name || membershipBadge.label}")
+    expect(home).toContain("membershipBadge.status === 'scheduled'")
+    expect(home).toContain('Plan programado')
+    expect(home).toContain('Último plan')
     expect(memberships).toContain('getDashboardMembershipBadge')
     expect(memberships).toContain('membershipStatus: dashboard.membership_status')
     expect(memberships).toContain('label={membershipBadge.label}')

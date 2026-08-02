@@ -111,6 +111,15 @@ function StudentHomeContent() {
     membershipStatus: dashboard.membership_status,
     membershipEnd: dashboard.membership_end,
   })
+  const membershipPlanCopy = membershipBadge.status === 'scheduled'
+    ? { label: 'Plan programado', detail: 'Próximo plan' }
+    : membershipBadge.status === 'expired'
+      ? { label: 'Último plan', detail: 'Membresía vencida' }
+      : membershipBadge.status === 'no_membership'
+        ? { label: 'Plan', detail: 'Sin membresía' }
+        : membershipBadge.status === 'no_classes'
+          ? { label: 'Plan actual', detail: 'Sin clases disponibles' }
+          : { label: 'Plan actual', detail: 'Plan vigente' }
   const nextReservationLabel = nextBooking ? dayjs(nextBooking.start_at).format('D MMM') : 'Sin reserva'
   const nextReservationDetail = nextBooking ? dayjs(nextBooking.start_at).format('HH:mm') : 'Aún no tienes reservas'
   const recentHistory = history.slice(0, 4)
@@ -154,7 +163,7 @@ function StudentHomeContent() {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <StatusBadge status={dashboard.student_is_active ? 'active' : 'expired'} label={dashboard.student_is_active ? 'Activo' : 'Inactivo'} />
-                <StatusBadge status={membershipBadge.status} label={dashboard.membership_name || membershipBadge.label} />
+                <StatusBadge status={membershipBadge.status} label={membershipBadge.label} />
               </div>
               {(dashboard.category || dashboard.level) && (
                 <div className="mt-2 inline-flex max-w-full rounded-full border border-line bg-white/80 px-3 py-1 text-xs font-semibold text-textsec">
@@ -192,9 +201,9 @@ function StudentHomeContent() {
           />
           <QuickMetric
             icon={<Medal className="h-5 w-5" />}
-            label="Plan actual"
+            label={membershipPlanCopy.label}
             value={dashboard.membership_name || '-'}
-            detail="Plan vigente"
+            detail={membershipPlanCopy.detail}
             tone="orange"
           />
         </div>
