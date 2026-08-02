@@ -63,6 +63,21 @@ export interface MembershipSummary {
   statusesById: Record<string, MembershipDisplayStatus>
 }
 
+export const MEMBERSHIP_TIMEZONE = 'America/Lima'
+
+export function getLimaDateKey(value: Date = new Date()): string {
+  if (Number.isNaN(value.getTime())) throw new Error('Invalid date for Lima business day')
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: MEMBERSHIP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value)
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 export function buildMembershipCyclePreview(
   input: CyclePreviewInput,
 ): MembershipCyclePreview[] {
@@ -149,6 +164,7 @@ export function suggestNextMembershipStart(
 export function summarizeMemberships(
   memberships: MembershipLike[],
   serviceDate: string,
+  committedByMembershipId: ReadonlyMap<string, number> = new Map(),
 ): MembershipSummary {
   assertIsoDate(serviceDate)
 
@@ -162,11 +178,15 @@ export function summarizeMemberships(
       isOpenMembership(membership) &&
       (membership.end_date === null || membership.end_date >= serviceDate),
   )
-  const usableMemberships = openMemberships.filter(
+  const eligibleMemberships = openMemberships.filter(
     (membership) => membership.start_date <= serviceDate,
   )
+  const usableMemberships = eligibleMemberships.filter(
+    (membership) =>
+      availableClasses(membership, committedByMembershipId) > 0,
+  )
   const currentMembershipId = usableMemberships[0]?.id ?? null
-  const usableIds = new Set(usableMemberships.map((membership) => membership.id))
+  const eligibleIds = new Set(eligibleMemberships.map((membership) => membership.id))
   const statusesById: Record<string, MembershipDisplayStatus> = {}
 
   for (const membership of ordered) {
@@ -174,13 +194,13 @@ export function summarizeMemberships(
       membership,
       serviceDate,
       currentMembershipId,
-      usableIds,
+      eligibleIds,
     )
   }
 
   return {
     usableClasses: usableMemberships.reduce(
-      (total, membership) => total + membership.classes_remaining,
+      (total, membership) => total + availableClasses(membership, committedByMembershipId),
       0,
     ),
     totalOpenClasses: openMemberships.reduce(
@@ -191,6 +211,15 @@ export function summarizeMemberships(
     currentMembershipId,
     statusesById,
   }
+}
+
+function availableClasses(
+  membership: MembershipLike,
+  committedByMembershipId: ReadonlyMap<string, number>,
+): number {
+  const committedValue = committedByMembershipId.get(membership.id) || 0
+  const committed = Number.isFinite(committedValue) ? Math.max(committedValue, 0) : 0
+  return Math.max(membership.classes_remaining - committed, 0)
 }
 
 function validateMembershipDates(membership: MembershipLike): void {
@@ -217,7 +246,7 @@ function displayStatus(
   membership: MembershipLike,
   serviceDate: string,
   currentMembershipId: string | null,
-  usableIds: Set<string>,
+  eligibleIds: Set<string>,
 ): MembershipDisplayStatus {
   if (membership.status === 'cancelled') return 'cancelled'
   if (membership.status === 'historical') return 'historical'
@@ -230,7 +259,7 @@ function displayStatus(
   }
   if (membership.start_date > serviceDate) return 'scheduled'
   if (membership.id === currentMembershipId) return 'current'
-  if (usableIds.has(membership.id)) return 'queued'
+  if (eligibleIds.has(membership.id)) return 'queued'
 
   return 'historical'
 }

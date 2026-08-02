@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
-import { summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentAccountSummary = {
   id: string
@@ -277,12 +277,21 @@ export function useStudentDetail(studentId: string) {
 
       const typedStudent = studentRow as any
       const memberships = sortMemberships((typedStudent.memberships || []) as StudentMembershipSummary[])
+      const reservedByMembershipId = new Map<string, number>()
+      for (const booking of (bookings || []) as any[]) {
+        if (booking.status !== 'reserved' || !booking.active_membership_id) continue
+        reservedByMembershipId.set(
+          booking.active_membership_id,
+          (reservedByMembershipId.get(booking.active_membership_id) || 0) + 1,
+        )
+      }
       const membershipSummary = summarizeMemberships(
         memberships.map((membership) => ({
           ...membership,
           status: membership.status === 'draft' ? 'historical' as const : membership.status,
         })),
-        new Date().toISOString().slice(0, 10),
+        getLimaDateKey(),
+        reservedByMembershipId,
       )
       const activeMembership = memberships.find(
         (membership) => membership.id === membershipSummary.currentMembershipId,

@@ -38,6 +38,7 @@ describe('admin student membership queue', () => {
   })
 
   it('attributes reserved bookings to their concrete membership', () => {
+    const query = source('lib/queries/studentQueries.ts')
     const hook = source('lib/hooks/useStudentDetail.ts')
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
@@ -45,6 +46,22 @@ describe('admin student membership queue', () => {
     expect(hook).toContain('active_membership_id,')
     expect(page).toContain('reservedByMembershipId')
     expect(page).toContain('booking.active_membership_id')
+    expect(page).toContain("booking.status !== 'reserved'")
+    expect(page).toContain('summarizeMemberships')
+    expect(query).toContain('active_membership_id')
+  })
+
+  it('uses the America/Lima business date on list, detail query, and detail UI', () => {
+    const query = source('lib/queries/studentQueries.ts')
+    const hook = source('lib/hooks/useStudentDetail.ts')
+    const page = source('app/admin/alumnos/[id]/page.tsx')
+
+    expect(query).toContain('getLimaDateKey')
+    expect(hook).toContain('getLimaDateKey')
+    expect(page).toContain('getLimaDateKey')
+    expect(query).not.toContain('new Date().toISOString().slice(0, 10)')
+    expect(hook).not.toContain('new Date().toISOString().slice(0, 10)')
+    expect(page).not.toContain('new Date().toISOString().slice(0, 10)')
   })
 
   it('renders total and current balances plus each cycle queue status', () => {

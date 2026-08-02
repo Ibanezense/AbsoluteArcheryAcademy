@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMembershipCyclePreview,
+  getLimaDateKey,
   suggestNextMembershipStart,
   summarizeMemberships,
   type MembershipLike,
 } from './membershipCycles'
+
+describe('getLimaDateKey', () => {
+  it('keeps the previous business day before midnight in America/Lima', () => {
+    expect(getLimaDateKey(new Date('2026-06-04T04:30:00.000Z'))).toBe('2026-06-03')
+  })
+})
 
 describe('buildMembershipCyclePreview', () => {
   it('builds consecutive inclusive paid cycles with UTC date-only arithmetic', () => {
@@ -96,6 +103,23 @@ describe('suggestNextMembershipStart', () => {
 })
 
 describe('summarizeMemberships', () => {
+  it('moves current FIFO consumption to the next cycle when reservations commit the older balance', () => {
+    const summary = summarizeMemberships(
+      [
+        membership({ id: 'older', classes_remaining: 2 }),
+        membership({ id: 'next', classes_remaining: 3, created_at: '2026-08-02T00:00:00Z' }),
+      ],
+      '2026-08-10',
+      new Map([['older', 2]]),
+    )
+
+    expect(summary.currentMembershipId).toBe('next')
+    expect(summary.usableClasses).toBe(3)
+    expect(summary.totalOpenClasses).toBe(5)
+    expect(summary.statusesById.older).toBe('queued')
+    expect(summary.statusesById.next).toBe('current')
+  })
+
   it('orders overlapping eligible memberships by start, creation, then id', () => {
     const byStart = summarizeMemberships(
       [

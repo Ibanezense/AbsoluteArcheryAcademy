@@ -267,6 +267,54 @@ describe('mapStudentListRow', () => {
     expect(result.open_membership_count).toBe(1)
   })
 
+  it('uses the Lima business date at the UTC day boundary', () => {
+    vi.setSystemTime(new Date('2026-06-04T04:30:00.000Z'))
+
+    const result = mapStudentListRow({
+      id: 'student-lima-boundary',
+      full_name: 'Alumno Lima',
+      is_active: true,
+      operational_status: null,
+      memberships: [
+        {
+          id: 'today-in-lima', custom_name: 'Vigente hoy', classes_total: 2, classes_remaining: 2,
+          start_date: '2026-06-01', end_date: '2026-06-03', status: 'active', created_at: '2026-06-01T00:00:00Z',
+        },
+        {
+          id: 'tomorrow-in-lima', custom_name: 'Empieza mañana', classes_total: 4, classes_remaining: 4,
+          start_date: '2026-06-04', end_date: '2026-07-03', status: 'active', created_at: '2026-06-02T00:00:00Z',
+        },
+      ],
+    })
+
+    expect(result.membership_name).toBe('Vigente hoy')
+    expect(result.membership_status).toBe('active')
+    expect(result.classes_remaining).toBe(2)
+  })
+
+  it('selects the next FIFO cycle when reservations commit all classes in the older cycle', () => {
+    const result = mapStudentListRow({
+      id: 'student-committed',
+      full_name: 'Alumno comprometido',
+      is_active: true,
+      operational_status: null,
+      memberships: [
+        {
+          id: 'older', custom_name: 'Plan antiguo', classes_total: 2, classes_remaining: 2,
+          start_date: '2026-06-01', end_date: '2026-06-30', status: 'active', created_at: '2026-06-01T00:00:00Z',
+        },
+        {
+          id: 'next', custom_name: 'Plan siguiente', classes_total: 3, classes_remaining: 3,
+          start_date: '2026-06-01', end_date: '2026-06-30', status: 'active', created_at: '2026-06-02T00:00:00Z',
+        },
+      ],
+    }, new Map([['older', 2]]))
+
+    expect(result.membership_name).toBe('Plan siguiente')
+    expect(result.classes_remaining).toBe(3)
+    expect(result.total_open_classes).toBe(5)
+  })
+
   it('keeps the newest attended class date for each student', () => {
     const result = buildLastAttendanceByStudent([
       {

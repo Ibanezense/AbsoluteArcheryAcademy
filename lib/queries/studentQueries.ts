@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
-import { summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentListRow = {
   id: string
@@ -54,6 +54,11 @@ type AttendedBookingRow = {
   sessions: { start_at: string | null } | Array<{ start_at: string | null }> | null
 }
 
+type ReservedBookingRow = {
+  student_id: string | null
+  active_membership_id: string | null
+}
+
 export function buildLastAttendanceByStudent(rows: AttendedBookingRow[]) {
   const latestByStudent = new Map<string, string>()
 
@@ -73,13 +78,12 @@ export function buildLastAttendanceByStudent(rows: AttendedBookingRow[]) {
   return latestByStudent
 }
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function dateKey(value: string | null | undefined) {
   if (!value) return null
-  return value.slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : getLimaDateKey(date)
 }
 
 function addDays(date: Date, days: number) {
@@ -88,22 +92,26 @@ function addDays(date: Date, days: number) {
   return next
 }
 
-function daysSinceExpiration(expiredAt: string | null | undefined, endDate: string | null | undefined) {
-  const basis = expiredAt
-    ? new Date(expiredAt)
+function daysSinceExpiration(expiredAt: string | null | undefined, endDate: string | null | undefined, todayKey: string) {
+  const expirationDate = expiredAt ? new Date(expiredAt) : null
+  const basisKey = expirationDate && !Number.isNaN(expirationDate.getTime())
+    ? getLimaDateKey(expirationDate)
     : endDate
-      ? addDays(new Date(`${endDate}T00:00:00.000Z`), 1)
+      ? addDays(new Date(`${endDate}T00:00:00.000Z`), 1).toISOString().slice(0, 10)
       : null
 
-  if (!basis || Number.isNaN(basis.getTime())) return 0
+  if (!basisKey) return 0
 
-  const today = new Date(`${todayKey()}T00:00:00.000Z`)
-  const basisDay = new Date(basis.toISOString().slice(0, 10) + 'T00:00:00.000Z')
+  const today = new Date(`${todayKey}T00:00:00.000Z`)
+  const basisDay = new Date(`${basisKey}T00:00:00.000Z`)
   return Math.floor((today.getTime() - basisDay.getTime()) / 86400000)
 }
 
-export function mapStudentListRow(student: any): StudentListRow {
-  const today = todayKey()
+export function mapStudentListRow(
+  student: any,
+  committedByMembershipId: ReadonlyMap<string, number> = new Map(),
+): StudentListRow {
+  const today = getLimaDateKey()
   const memberships = [...(student.memberships || [])].sort((left, right) =>
     new Date(right.expired_at || right.end_date || right.start_date || right.created_at).getTime() -
     new Date(left.expired_at || left.end_date || left.start_date || left.created_at).getTime()
@@ -119,7 +127,11 @@ export function mapStudentListRow(student: any): StudentListRow {
       created_at: membership.created_at || `${startDate}T00:00:00.000Z`,
     }
   })
-  const membershipSummary = summarizeMemberships(summarizableMemberships, today)
+  const membershipSummary = summarizeMemberships(
+    summarizableMemberships,
+    today,
+    committedByMembershipId,
+  )
   const activeMembership = memberships.find(
     (_membership, index) => summarizableMemberships[index].id === membershipSummary.currentMembershipId,
   ) || null
@@ -136,7 +148,13 @@ export function mapStudentListRow(student: any): StudentListRow {
     : summarizedDisplayStatus === 'consumed'
       ? 'expired'
       : summarizedDisplayStatus || membershipForDisplay?.status || null
-  const displayClassesRemaining = activeMembership?.classes_remaining || 0
+  const displayClassesRemaining = activeMembership
+    ? Math.max(
+      (activeMembership.classes_remaining || 0) -
+      (committedByMembershipId.get(activeMembership.id) || 0),
+      0,
+    )
+    : 0
   const persistedOperationalStatus = student.operational_status || null
   const effectiveOperationalStatus = (() => {
     if (persistedOperationalStatus && PROTECTED_OPERATIONAL_STATUSES.has(persistedOperationalStatus)) {
@@ -151,7 +169,7 @@ export function mapStudentListRow(student: any): StudentListRow {
     if (latestMembership) {
       const latestStatus = displayStatus || latestMembership.status
       if (latestStatus === 'expired') {
-        return daysSinceExpiration(latestMembership.expired_at, latestMembership.end_date) >= 14 ? 'paused' : 'expired'
+        return daysSinceExpiration(latestMembership.expired_at, latestMembership.end_date, today) >= 14 ? 'paused' : 'expired'
       }
     }
 
@@ -211,7 +229,7 @@ export function useStudents() {
   return useQuery({
     queryKey: studentKeys.list(),
     queryFn: async (): Promise<StudentListRow[]> => {
-      const [studentsResult, attendanceResult] = await Promise.all([
+      const [studentsResult, attendanceResult, reservedBookingsResult] = await Promise.all([
         supabase
           .from('students')
           .select(`
@@ -266,20 +284,37 @@ export function useStudents() {
           .select('student_id,attendance_marked_at,sessions(start_at)')
           .eq('status', 'attended')
           .not('student_id', 'is', null),
+        supabase
+          .from('bookings')
+          .select('student_id,active_membership_id')
+          .eq('status', 'reserved')
+          .not('student_id', 'is', null)
+          .not('active_membership_id', 'is', null),
       ])
 
       if (studentsResult.error) throw studentsResult.error
       if (attendanceResult.error) throw attendanceResult.error
+      if (reservedBookingsResult.error) throw reservedBookingsResult.error
 
       const lastAttendanceByStudent = buildLastAttendanceByStudent(
         (attendanceResult.data || []) as AttendedBookingRow[],
       )
+      const reservedByStudent = new Map<string, Map<string, number>>()
+      for (const booking of (reservedBookingsResult.data || []) as ReservedBookingRow[]) {
+        if (!booking.student_id || !booking.active_membership_id) continue
+        const byMembership = reservedByStudent.get(booking.student_id) || new Map<string, number>()
+        byMembership.set(
+          booking.active_membership_id,
+          (byMembership.get(booking.active_membership_id) || 0) + 1,
+        )
+        reservedByStudent.set(booking.student_id, byMembership)
+      }
 
       return ((studentsResult.data || []) as any[]).map((student) =>
         mapStudentListRow({
           ...student,
           last_attendance_at: lastAttendanceByStudent.get(student.id) || null,
-        }),
+        }, reservedByStudent.get(student.id)),
       )
     },
   })

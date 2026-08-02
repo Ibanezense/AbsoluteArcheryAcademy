@@ -53,7 +53,7 @@ import {
   type StudentBowUsageType,
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
-import { summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
 import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
@@ -149,7 +149,7 @@ function formatMoney(amount: number | null | undefined, currency = 'PEN') {
 
 function daysBetweenToday(value: string | null | undefined) {
   if (!value) return null
-  return dayjs(value).startOf('day').diff(dayjs().startOf('day'), 'day')
+  return dayjs(value).startOf('day').diff(dayjs(getLimaDateKey()).startOf('day'), 'day')
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -408,6 +408,22 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [assignmentForm, setAssignmentForm] = useState<MembershipAssignmentFormState>(emptyMembershipAssignment)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
 
+  const upcomingBookings = useMemo(() => (data?.bookings || [])
+    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(dayjs()))
+    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data])
+
+  const reservedByMembershipId = useMemo(() => {
+    const reserved = new Map<string, number>()
+    for (const booking of data?.bookings || []) {
+      if (booking.status !== 'reserved' || !booking.active_membership_id) continue
+      reserved.set(
+        booking.active_membership_id,
+        (reserved.get(booking.active_membership_id) || 0) + 1,
+      )
+    }
+    return reserved
+  }, [data])
+
   const membershipStatusesById = useMemo(() => {
     if (!data) return {} as Record<string, string>
     return summarizeMemberships(
@@ -415,25 +431,10 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         ...membership,
         status: membership.status === 'draft' ? 'historical' as const : membership.status,
       })),
-      new Date().toISOString().slice(0, 10),
+      getLimaDateKey(),
+      reservedByMembershipId,
     ).statusesById
-  }, [data])
-
-  const upcomingBookings = useMemo(() => (data?.bookings || [])
-    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(dayjs()))
-    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data])
-
-  const reservedByMembershipId = useMemo(() => {
-    const reserved = new Map<string, number>()
-    for (const booking of upcomingBookings) {
-      if (!booking.active_membership_id) continue
-      reserved.set(
-        booking.active_membership_id,
-        (reserved.get(booking.active_membership_id) || 0) + 1,
-      )
-    }
-    return reserved
-  }, [upcomingBookings])
+  }, [data, reservedByMembershipId])
 
   useEffect(() => {
     if (!data) return
