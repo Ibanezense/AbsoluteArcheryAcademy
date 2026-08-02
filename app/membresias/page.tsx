@@ -17,6 +17,7 @@ import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
+import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 
 type HistoryFilter = 'all' | 'attended' | 'cancelled' | 'no_show'
@@ -25,7 +26,7 @@ export default function MembresiasPage() {
   const router = useRouter()
   const { account, activeStudentId, loading: contextLoading } = useStudentContext()
   const { dashboard, loading: dashboardLoading } = useStudentDashboard(activeStudentId)
-  const { daysUntilExpiry, isExpired, isExpiringSoon } = useMembershipExpiry(dashboard)
+  const { daysUntilExpiry } = useMembershipExpiry(dashboard)
   const { booking: nextBooking } = useNextBooking(activeStudentId)
   const [filter, setFilter] = useState<HistoryFilter>('all')
 
@@ -84,7 +85,10 @@ export default function MembresiasPage() {
   const remainingClasses = dashboard.classes_remaining ?? 0
   const usedClasses = dashboard.classes_used ?? Math.max(totalClasses - remainingClasses, 0)
   const percentUsed = totalClasses > 0 ? Math.min(Math.round((usedClasses / totalClasses) * 100), 100) : 0
-  const status = isExpired ? 'expired' : isExpiringSoon ? 'expiring' : 'active'
+  const membershipBadge = getDashboardMembershipBadge({
+    membershipStatus: dashboard.membership_status,
+    membershipEnd: dashboard.membership_end,
+  })
 
   return (
     <AuthGuard>
@@ -95,7 +99,7 @@ export default function MembresiasPage() {
           <StudentCard className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <h1 className="text-xl font-black tracking-[-0.04em]">Estado de cuenta</h1>
-              <StatusBadge status={status} label={isExpired ? 'Vencida' : 'Activa'} />
+              <StatusBadge status={membershipBadge.status} label={membershipBadge.label} />
             </div>
             <div className="grid grid-cols-[112px_1fr] items-center gap-4">
               <div

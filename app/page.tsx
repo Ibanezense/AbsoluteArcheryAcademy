@@ -14,10 +14,10 @@ import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
 import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
-import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
+import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 
 function StudentHomeContent() {
   const router = useRouter()
@@ -41,8 +41,6 @@ function StudentHomeContent() {
     loadMoreBookings,
   } = useBookingHistory(activeStudentId)
   const { booking: nextBooking } = useNextBooking(activeStudentId)
-
-  const { isExpired, isExpiringSoon } = useMembershipExpiry(dashboard)
 
   useEffect(() => {
     if (account?.role === 'admin') {
@@ -109,7 +107,10 @@ function StudentHomeContent() {
   }
 
   const membershipEnd = dashboard.membership_end ? dayjs(dashboard.membership_end) : null
-  const membershipStatus = isExpired ? 'expired' : isExpiringSoon ? 'expiring' : 'active'
+  const membershipBadge = getDashboardMembershipBadge({
+    membershipStatus: dashboard.membership_status,
+    membershipEnd: dashboard.membership_end,
+  })
   const nextReservationLabel = nextBooking ? dayjs(nextBooking.start_at).format('D MMM') : 'Sin reserva'
   const nextReservationDetail = nextBooking ? dayjs(nextBooking.start_at).format('HH:mm') : 'Aún no tienes reservas'
   const recentHistory = history.slice(0, 4)
@@ -153,7 +154,7 @@ function StudentHomeContent() {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <StatusBadge status={dashboard.student_is_active ? 'active' : 'expired'} label={dashboard.student_is_active ? 'Activo' : 'Inactivo'} />
-                <StatusBadge status={membershipStatus} label={dashboard.membership_name || 'Sin membresía'} />
+                <StatusBadge status={membershipBadge.status} label={dashboard.membership_name || membershipBadge.label} />
               </div>
               {(dashboard.category || dashboard.level) && (
                 <div className="mt-2 inline-flex max-w-full rounded-full border border-line bg-white/80 px-3 py-1 text-xs font-semibold text-textsec">

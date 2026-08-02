@@ -11,10 +11,13 @@ export function StatusBadge({ status, label: overrideLabel }: StatusBadgeProps) 
     confirmed: 'border border-blue-200 bg-blue-50 text-blue-700',
     reserved: 'border border-orange-200 bg-orange-50 text-accent',
     pending: 'border border-orange-200 bg-orange-50 text-accent',
+    scheduled: 'border border-blue-200 bg-blue-50 text-blue-700',
     cancelled: 'border border-slate-200 bg-slate-100 text-slate-600',
     no_show: 'border border-danger/20 bg-danger/10 text-danger',
     expired: 'border border-danger/20 bg-danger/10 text-danger',
     expiring: 'border border-warning/20 bg-warning/10 text-warning',
+    no_classes: 'border border-warning/20 bg-warning/10 text-warning',
+    no_membership: 'border border-slate-200 bg-slate-100 text-slate-600',
   }
 
   const labels: Record<string, string> = {
@@ -24,10 +27,13 @@ export function StatusBadge({ status, label: overrideLabel }: StatusBadgeProps) 
     confirmed: 'Confirmada',
     reserved: 'Pendiente',
     pending: 'Pendiente',
+    scheduled: 'Programada',
     no_show: 'No asistió',
     cancelled: 'Cancelada',
     expired: 'Vencida',
     expiring: 'Próxima a vencer',
+    no_classes: 'Sin clases',
+    no_membership: 'Sin membresía',
   }
 
   const style = styles[status] || styles.reserved

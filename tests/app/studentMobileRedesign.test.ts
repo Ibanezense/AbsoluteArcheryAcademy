@@ -65,6 +65,20 @@ describe('student mobile redesign', () => {
     expect(memberships).toContain('Cargar más historial')
   })
 
+  it('renders the canonical dashboard membership status across student surfaces', () => {
+    const home = source('app/page.tsx')
+    const memberships = source('app/membresias/page.tsx')
+    const statusBadge = source('components/ui/StatusBadge.tsx')
+
+    expect(home).toContain('getDashboardMembershipBadge')
+    expect(home).toContain('membershipStatus: dashboard.membership_status')
+    expect(memberships).toContain('getDashboardMembershipBadge')
+    expect(memberships).toContain('membershipStatus: dashboard.membership_status')
+    expect(memberships).toContain('label={membershipBadge.label}')
+    expect(statusBadge).toContain("scheduled: 'Programada'")
+    expect(statusBadge).toContain('border-blue-200 bg-blue-50 text-blue-700')
+  })
+
   it('keeps booking detail copy tied to canStudentCancelBooking', () => {
     const detail = source('app/reserva/[id]/page.tsx')
 
