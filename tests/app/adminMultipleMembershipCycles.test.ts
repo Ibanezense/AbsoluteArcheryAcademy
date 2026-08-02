@@ -37,12 +37,82 @@ describe('admin multiple membership cycles', () => {
     const page = source('app/admin/membresias/page.tsx')
 
     expect(page).toContain('assignmentIdempotencyKeyRef')
+    expect(page).toContain('assignmentSubmissionLockRef')
+    expect(page).toContain('if (assignmentSubmissionLockRef.current) return')
+    expect(page.indexOf('assignmentSubmissionLockRef.current = true')).toBeLessThan(
+      page.indexOf('await confirm(confirmMessage'),
+    )
+    expect(page).toContain('releaseAssignmentSubmissionLock')
     expect(page).toContain('studentKeys.all')
     expect(page).toContain('membershipPlanKeys.all')
     expect(page).toContain("['admin-students']")
     expect(page).toContain("['admin-bookings']")
     expect(page).toContain("['weekly-attendance-review']")
     expect(page).toContain('await refreshAll()')
+  })
+
+  it('validates paid and gift values before opening confirmation', () => {
+    const page = source('app/admin/membresias/page.tsx')
+
+    expect(page).toContain('validateAssignmentForm')
+    expect(page).toContain('La cantidad de periodos debe ser un entero entre 1 y 12.')
+    expect(page).toContain('El descuento debe ser un numero mayor o igual a cero.')
+    expect(page).toContain('El descuento porcentual no puede superar 100%.')
+    expect(page).toContain('El pago total debe ser un numero mayor o igual a cero.')
+    expect(page).toContain('Las clases de obsequio deben ser un entero positivo.')
+    expect(page).toContain('La fecha final del obsequio no puede ser anterior al inicio.')
+    expect(page.indexOf('validateAssignmentForm(')).toBeLessThan(
+      page.indexOf('await confirm(confirmMessage'),
+    )
+  })
+
+  it('locks form controls and exposes pressed state for the origin selector', () => {
+    const page = source('app/admin/membresias/page.tsx')
+
+    expect(page).toContain('assignmentSubmissionLocked')
+    expect(page).toContain('disabled={isSaving}')
+    expect(page).toContain('aria-pressed={form.origin === origin}')
+    expect(page).toContain("role=\"group\"")
+  })
+
+  it('forces paid mode in shortcuts and rejects orphan renewals', () => {
+    const page = source('app/admin/membresias/page.tsx')
+
+    expect(page).toContain("origin: 'paid'")
+    expect(page).toContain("patchAssignmentForm({ origin: 'paid', student_id: student.id })")
+    expect(page).toContain("patchAssignmentForm({ origin: 'paid', membership_plan_id: plan.id })")
+    expect(page).toContain('No se puede renovar una membresia sin alumno asociado.')
+    expect(page).toContain('if (!student)')
+    expect(page).not.toContain("membership.student?.id || current.student_id")
+  })
+
+  it('invalidates attendance and booking views after edit and delete mutations', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const saveBlock = page.slice(
+      page.indexOf('async function saveMembershipEditor'),
+      page.indexOf('async function deleteMembership'),
+    )
+    const deleteBlock = page.slice(
+      page.indexOf('async function deleteMembership'),
+      page.indexOf('async function savePlanEditor'),
+    )
+
+    for (const block of [saveBlock, deleteBlock]) {
+      expect(block).toContain("['admin-students']")
+      expect(block).toContain("['admin-bookings']")
+      expect(block).toContain("['weekly-attendance-review']")
+      expect(block).toContain('studentKeys.all')
+      expect(block).toContain('membershipPlanKeys.all')
+      expect(block).toContain('await refreshAll()')
+    }
+  })
+
+  it('precomputes display statuses instead of summarizing inside every row', () => {
+    const page = source('app/admin/membresias/page.tsx')
+
+    expect(page).toContain('membershipStatusesById')
+    expect(page).toContain('useMemo')
+    expect(page).not.toContain('function cycleDisplayStatus')
   })
 
   it('labels independent FIFO cycles without replacement messaging', () => {
