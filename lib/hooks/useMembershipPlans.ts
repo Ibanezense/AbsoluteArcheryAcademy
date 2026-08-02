@@ -16,8 +16,10 @@ export type MembershipPlan = {
 export type AdminStudentMembership = {
   id: string
   membership_plan_id: string | null
+  membership_origin: 'paid' | 'gift'
+  assignment_batch_id: string | null
   custom_name: string
-  status: string
+  status: 'draft' | 'active' | 'expired' | 'cancelled' | 'consumed' | 'historical'
   classes_total: number
   classes_used: number
   classes_remaining: number
@@ -44,6 +46,8 @@ export const membershipPlanKeys = {
 const studentMembershipSelect = `
   id,
   membership_plan_id,
+  membership_origin,
+  assignment_batch_id,
   custom_name,
   status,
   classes_total,
@@ -66,6 +70,8 @@ function mapAdminStudentMembership(row: any): AdminStudentMembership {
   return {
     id: row.id,
     membership_plan_id: row.membership_plan_id,
+    membership_origin: row.membership_origin,
+    assignment_batch_id: row.assignment_batch_id,
     custom_name: row.custom_name,
     status: row.status,
     classes_total: row.classes_total,

@@ -35,6 +35,16 @@ import { studentKeys, useStudents, type StudentListRow } from '@/lib/queries/stu
 import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershipStudents'
 import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
 import {
+  buildMembershipCyclePreview,
+  suggestNextMembershipStart,
+  summarizeMemberships,
+  type MembershipCyclePreview,
+} from '@/lib/utils/membershipCycles'
+import {
+  createStudentMembershipCycles,
+  type MembershipPaymentType,
+} from '@/lib/services/adminMembershipService'
+import {
   membershipPlanKeys,
   useAdminStudentMemberships,
   useMembershipPlans,
@@ -45,9 +55,14 @@ import {
 type MembershipTab = 'summary' | 'active' | 'plans'
 
 type AssignmentFormState = {
+  origin: 'paid' | 'gift'
   student_id: string
   membership_plan_id: string
   start_date: string
+  period_count: string
+  gift_classes: string
+  gift_end_date: string
+  payment_type: MembershipPaymentType
   discount_type: 'none' | 'amount' | 'percentage'
   discount_value: string
   payment_amount: string
@@ -83,9 +98,6 @@ type ActiveMembershipStatusFilter = 'all' | 'active' | 'expiring' | 'expired' | 
 type MembershipSort = 'recent' | 'expiration' | 'balance'
 type PlanFilter = 'all' | 'active' | 'inactive'
 
-const replacementWarning =
-  'Esta accion reemplazara la membresia actual del alumno. La membresia anterior pasara al historial y el nuevo plan iniciara un ciclo independiente. Las clases restantes no se acumularan automaticamente.'
-
 function getTodayLocalISODate() {
   const now = new Date()
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
@@ -94,9 +106,14 @@ function getTodayLocalISODate() {
 
 function emptyAssignmentForm(): AssignmentFormState {
   return {
+    origin: 'paid',
     student_id: '',
     membership_plan_id: '',
     start_date: getTodayLocalISODate(),
+    period_count: '1',
+    gift_classes: '1',
+    gift_end_date: getTodayLocalISODate(),
+    payment_type: 'manual',
     discount_type: 'none',
     discount_value: '',
     payment_amount: '',
@@ -185,6 +202,9 @@ function membershipOperationalStatus(membership: AdminStudentMembership) {
 }
 
 function statusLabel(status: string) {
+  if (status === 'current') return 'En consumo'
+  if (status === 'scheduled') return 'Programada'
+  if (status === 'queued') return 'En espera'
   if (status === 'active') return 'Activa'
   if (status === 'expiring') return 'Por vencer'
   if (status === 'expired') return 'Vencida'
@@ -197,7 +217,9 @@ function statusLabel(status: string) {
 }
 
 function statusBadgeClass(status: string) {
-  if (status === 'active') return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+  if (status === 'active' || status === 'current') return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+  if (status === 'scheduled') return 'bg-blue-50 text-blue-700 ring-blue-200'
+  if (status === 'queued') return 'bg-orange-50 text-orange-700 ring-orange-200'
   if (status === 'expiring') return 'bg-amber-50 text-amber-700 ring-amber-200'
   if (status === 'expired' || status === 'empty' || status === 'cancelled') return 'bg-rose-50 text-rose-700 ring-rose-200'
   if (status === 'historical' || status === 'consumed') return 'bg-slate-100 text-slate-600 ring-slate-200'
@@ -218,17 +240,38 @@ function currentMembershipForStudent(
   studentId: string,
   memberships: AdminStudentMembership[],
 ) {
-  return memberships.find((membership) => membership.student?.id === studentId && membership.status === 'active')
-    || memberships.find((membership) => membership.student?.id === studentId)
+  const studentMemberships = memberships.filter(
+    (membership) => membership.student?.id === studentId,
+  )
+  const currentId = summarizeMemberships(
+    studentMemberships.map((membership) => ({
+      ...membership,
+      status: membership.status === 'draft' ? 'historical' : membership.status,
+    })),
+    getTodayLocalISODate(),
+  ).currentMembershipId
+
+  return studentMemberships.find((membership) => membership.id === currentId)
+    || studentMemberships[0]
     || null
 }
 
-function shouldWarnReplacement(membership: AdminStudentMembership | null, student: StudentListRow | null) {
-  if (!membership && !student) return false
-  return membership?.status === 'active'
-    || (membership?.classes_remaining ?? 0) > 0
-    || student?.membership_status === 'active'
-    || (student?.classes_remaining ?? 0) > 0
+function cycleDisplayStatus(
+  membership: AdminStudentMembership,
+  memberships: AdminStudentMembership[],
+) {
+  const studentMemberships = membership.student
+    ? memberships.filter(
+      (candidate) => candidate.student?.id === membership.student?.id,
+    )
+    : [membership]
+  return summarizeMemberships(
+    studentMemberships.map((candidate) => ({
+      ...candidate,
+      status: candidate.status === 'draft' ? 'historical' : candidate.status,
+    })),
+    getTodayLocalISODate(),
+  ).statusesById[membership.id] || membershipOperationalStatus(membership)
 }
 
 function MembershipTabs({
@@ -333,7 +376,7 @@ function MembershipSaleForm({
   basePrice,
   computedDiscountAmount,
   finalAmount,
-  newEndDate,
+  cyclePreview,
   isSaving,
   onPatch,
   onSubmit,
@@ -348,15 +391,14 @@ function MembershipSaleForm({
   basePrice: number | null
   computedDiscountAmount: number
   finalAmount: number | null
-  newEndDate: string | null
+  cyclePreview: MembershipCyclePreview[]
   isSaving: boolean
   onPatch: (patch: Partial<AssignmentFormState>) => void
   onSubmit: () => void
   onClear: () => void
 }) {
-  const warnReplacement = shouldWarnReplacement(currentMembership, selectedStudent)
   const currentRemaining = currentMembership?.classes_remaining ?? selectedStudent?.classes_remaining ?? 0
-  const actionLabel = warnReplacement ? 'Renovar membresia' : 'Activar membresia'
+  const actionLabel = 'Crear membresia'
 
   return (
     <AdminContentPanel className="overflow-hidden p-0">
@@ -364,19 +406,40 @@ function MembershipSaleForm({
         <div className="pointer-events-none absolute right-0 top-0 h-44 w-44 rounded-full bg-accent/20 blur-3xl" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-200">Venta o renovacion</p>
-            <h2 className="mt-2 font-heading text-3xl font-black tracking-[-0.055em]">Nuevo ciclo de membresia</h2>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-200">Asignacion de ciclos</p>
+            <h2 className="mt-2 font-heading text-3xl font-black tracking-[-0.055em]">Nueva membresia</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-              Selecciona alumno y plan. Si existe un ciclo activo, el backend lo pasa a historial y crea una membresia nueva independiente.
+              Cada ciclo conserva sus propias fechas y saldo. El consumo siempre comienza por el ciclo mas antiguo disponible.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-orange-100">
-            Sin acumulacion automatica
+            FIFO · ciclo antiguo primero
           </div>
         </div>
       </div>
 
       <div className="grid gap-5 p-5 sm:p-6">
+        <fieldset className="grid gap-2" disabled={isSaving}>
+          <legend className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Tipo de membresia</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              ['paid', 'Membresia pagada'],
+              ['gift', 'Obsequio'],
+            ] as const).map(([origin, label]) => (
+              <button
+                key={origin}
+                type="button"
+                onClick={() => onPatch({ origin })}
+                className={`rounded-2xl border px-4 py-3 text-sm font-black transition ${form.origin === origin
+                  ? 'border-accent bg-orange-50 text-accent'
+                  : 'border-slate-200 bg-white text-slate-600'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
         <div className="grid gap-4 xl:grid-cols-2">
           <label className="grid gap-2">
             <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Paso 1 · Alumno</span>
@@ -392,7 +455,7 @@ function MembershipSaleForm({
             </select>
           </label>
 
-          <label className="grid gap-2">
+          {form.origin === 'paid' && <label className="grid gap-2">
             <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Paso 2 · Plan</span>
             <select
               className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
@@ -404,7 +467,37 @@ function MembershipSaleForm({
                 <option key={plan.id} value={plan.id}>{plan.name}</option>
               ))}
             </select>
-          </label>
+          </label>}
+        </div>
+
+        <div className="grid gap-4 rounded-[1.35rem] border border-orange-100 bg-orange-50/50 p-4 sm:grid-cols-3">
+          {form.origin === 'paid' ? (
+            <label className="grid gap-2">
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Cantidad de periodos</span>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={form.period_count}
+                onChange={(event) => onPatch({ period_count: event.target.value })}
+                className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              />
+            </label>
+          ) : (
+            <>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Clases de obsequio</span>
+                <input type="number" min={1} value={form.gift_classes} onChange={(event) => onPatch({ gift_classes: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Fin del obsequio</span>
+                <input type="date" value={form.gift_end_date} onChange={(event) => onPatch({ gift_end_date: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
+              </label>
+            </>
+          )}
+          <div className="rounded-2xl border border-white bg-white/80 p-4 text-sm text-slate-600">
+            {form.origin === 'gift' ? 'Costo cero · registra el motivo en notas.' : 'Cada periodo crea un ciclo separado.'}
+          </div>
         </div>
 
         <div className="grid gap-4 rounded-[1.35rem] border border-slate-200 bg-slate-50 p-4 xl:grid-cols-5">
@@ -418,6 +511,7 @@ function MembershipSaleForm({
             />
           </label>
 
+          {form.origin === 'paid' && <>
           <label className="grid gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Descuento</span>
             <select
@@ -448,7 +542,7 @@ function MembershipSaleForm({
           </label>
 
           <label className="grid gap-2">
-            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pago inicial</span>
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pago total del lote</span>
             <input
               type="number"
               min={0}
@@ -458,6 +552,23 @@ function MembershipSaleForm({
               onChange={(event) => onPatch({ payment_amount: event.target.value })}
             />
           </label>
+
+          <label className="grid gap-2">
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Metodo de pago</span>
+            <select
+              value={form.payment_type}
+              onChange={(event) => onPatch({ payment_type: event.target.value as MembershipPaymentType })}
+              className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+            >
+              <option value="manual">Manual</option>
+              <option value="cash">Efectivo</option>
+              <option value="card">Tarjeta</option>
+              <option value="transfer">Transferencia</option>
+              <option value="yape">Yape</option>
+              <option value="plin">Plin</option>
+            </select>
+          </label>
+          </>}
 
           <label className="grid gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Moneda</span>
@@ -473,18 +584,29 @@ function MembershipSaleForm({
           <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-black text-slate-950">
               <Sparkles className="h-4 w-4 text-accent" />
-              Resumen del nuevo ciclo
+              Vista previa
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <SummaryLine label="Precio base" value={formatMoney(basePrice, selectedPlan?.currency)} />
-              <SummaryLine label="Descuento aplicado" value={selectedPlan ? formatMoney(computedDiscountAmount, selectedPlan.currency) : 'Sin plan'} />
-              <SummaryLine label="Precio final" value={formatMoney(finalAmount, selectedPlan?.currency)} accent />
-              <SummaryLine label="Pago inicial" value={form.payment_amount ? formatMoney(Number(form.payment_amount), selectedPlan?.currency) : 'Sin pago'} />
-              <SummaryLine label="Nuevo plan" value={selectedPlan?.name || 'Sin plan'} />
-              <SummaryLine label="Clases del nuevo ciclo" value={selectedPlan ? selectedPlan.classes_included : 'Sin plan'} />
-              <SummaryLine label="Fecha inicio" value={form.start_date ? formatDate(form.start_date) : 'Sin fecha'} />
-              <SummaryLine label="Fecha vencimiento" value={formatDate(newEndDate)} />
-            </div>
+            {cyclePreview.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                Completa los datos para ver los ciclos antes de confirmar.
+              </p>
+            ) : (
+              <div className="grid gap-3">
+                {cyclePreview.map((cycle) => (
+                  <article key={cycle.cycleNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-black text-slate-950">Ciclo {cycle.cycleNumber} · {cycle.origin === 'gift' ? 'Obsequio' : 'Membresia pagada'}</p>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-accent">{cycle.classes} clases</span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">{formatDate(cycle.startDate)} — {formatDate(cycle.endDate)} · {formatMoney(cycle.amount, selectedPlan?.currency)}</p>
+                  </article>
+                ))}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <SummaryLine label="Precio por ciclo" value={formatMoney(form.origin === 'gift' ? 0 : finalAmount, selectedPlan?.currency)} />
+                  <SummaryLine label="Total combinado" value={formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)} accent />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
@@ -506,15 +628,9 @@ function MembershipSaleForm({
               <SummaryLine label="Clases restantes del ciclo actual" value={currentRemaining} accent={currentRemaining > 0} />
               <SummaryLine label="Vencimiento actual" value={formatDate(currentMembership?.end_date || selectedStudent?.membership_end)} />
             </div>
-            {warnReplacement && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                <p className="font-black">Advertencia de reemplazo</p>
-                <p className="mt-1">{replacementWarning}</p>
-                <p className="mt-2 font-bold">
-                  Clases restantes del ciclo actual: {currentRemaining}. Estas clases no se trasladaran automaticamente al nuevo plan.
-                </p>
-              </div>
-            )}
+            <p className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-800">
+              Los saldos existentes se conservan separados. El ciclo mas antiguo se consume primero.
+            </p>
           </div>
         </div>
 
@@ -691,14 +807,17 @@ function MembershipsActiveTab({
   const filteredMemberships = useMemo(() => {
     return memberships
       .filter((membership) => {
-        const status = membershipOperationalStatus(membership)
+        const status = cycleDisplayStatus(membership, memberships)
         const matchesSearch = !normalizedSearch
           || membership.custom_name.toLowerCase().includes(normalizedSearch)
           || (membership.student?.full_name || '').toLowerCase().includes(normalizedSearch)
 
         if (!matchesSearch) return false
         if (statusFilter === 'all') return true
-        if (statusFilter === 'active') return status === 'active' || status === 'expiring' || status === 'empty'
+        if (statusFilter === 'active') return ['current', 'queued', 'scheduled'].includes(status)
+        if (statusFilter === 'expiring' || statusFilter === 'empty') {
+          return membershipOperationalStatus(membership) === statusFilter
+        }
         return status === statusFilter
       })
       .sort((left, right) => {
@@ -777,7 +896,7 @@ function MembershipsActiveTab({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredMemberships.map((membership) => {
-                const status = membershipOperationalStatus(membership)
+                const status = cycleDisplayStatus(membership, memberships)
                 const usage = classUsagePercent(membership)
                 const canDeleteMembership = canDeleteExpiredMembership(membership)
 
@@ -794,6 +913,7 @@ function MembershipsActiveTab({
                     </td>
                     <td className="px-5 py-4">
                       <p className="font-bold text-slate-800">{membership.custom_name}</p>
+                      {membership.membership_origin === 'gift' && <span className="mt-2 inline-flex rounded-full bg-orange-50 px-2 py-1 text-[11px] font-black text-accent">Obsequio</span>}
                       <p className="mt-1 text-xs text-slate-500">{formatMoney(membership.total_amount, membership.currency)}</p>
                     </td>
                     <td className="px-5 py-4">
@@ -829,7 +949,7 @@ function MembershipsActiveTab({
 
         <div className="grid gap-3 p-4 lg:hidden">
           {filteredMemberships.map((membership) => {
-            const status = membershipOperationalStatus(membership)
+            const status = cycleDisplayStatus(membership, memberships)
             const canDeleteMembership = canDeleteExpiredMembership(membership)
 
             return (
@@ -839,6 +959,7 @@ function MembershipsActiveTab({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-black text-slate-950">{membership.student?.full_name || 'Alumno eliminado'}</p>
                     <p className="mt-1 text-xs text-slate-500">{membership.custom_name}</p>
+                    {membership.membership_origin === 'gift' && <span className="mt-2 inline-flex rounded-full bg-orange-50 px-2 py-1 text-[11px] font-black text-accent">Obsequio</span>}
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${statusBadgeClass(status)}`}>{statusLabel(status)}</span>
                 </div>
@@ -1130,6 +1251,7 @@ export default function AdminMembershipsPage() {
   const toast = useToast()
   const confirm = useConfirm()
   const saleRef = useRef<HTMLDivElement | null>(null)
+  const assignmentIdempotencyKeyRef = useRef<string | null>(null)
 
   const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMembershipPlans()
   const {
@@ -1189,18 +1311,39 @@ export default function AdminMembershipsPage() {
     return Math.max(0, basePrice - computedDiscountAmount)
   }, [basePrice, computedDiscountAmount])
 
-  const newEndDate = useMemo(
-    () => addDaysISODate(assignmentForm.start_date, selectedPlan?.duration_days),
-    [assignmentForm.start_date, selectedPlan?.duration_days],
-  )
+  const cyclePreview = useMemo(() => {
+    try {
+      if (assignmentForm.origin === 'gift') {
+        return buildMembershipCyclePreview({
+          origin: 'gift',
+          startDate: assignmentForm.start_date,
+          giftEndDate: assignmentForm.gift_end_date,
+          giftClasses: Number(assignmentForm.gift_classes),
+        })
+      }
+
+      if (!selectedPlan?.duration_days || finalAmount === null) return []
+      return buildMembershipCyclePreview({
+        origin: 'paid',
+        startDate: assignmentForm.start_date,
+        periodCount: Number(assignmentForm.period_count),
+        durationDays: selectedPlan.duration_days,
+        classesPerPeriod: selectedPlan.classes_included,
+        amountPerPeriod: finalAmount,
+      })
+    } catch {
+      return []
+    }
+  }, [assignmentForm, finalAmount, selectedPlan])
 
   useEffect(() => {
-    if (finalAmount === null) return
+    if (finalAmount === null || assignmentForm.origin !== 'paid') return
+    const suggestedBatchPayment = finalAmount * Number(assignmentForm.period_count || 1)
     setAssignmentForm((current) => {
-      if (current.payment_amount !== '' && current.payment_amount !== String(basePrice ?? '')) return current
-      return { ...current, payment_amount: finalAmount.toString() }
+      if (current.payment_amount === suggestedBatchPayment.toString()) return current
+      return { ...current, payment_amount: suggestedBatchPayment.toString() }
     })
-  }, [basePrice, finalAmount])
+  }, [assignmentForm.origin, assignmentForm.period_count, basePrice, finalAmount])
 
   const membershipKpis = useMemo(() => {
     const activeMemberships = allMemberships.filter((membership) => membership.status === 'active')
@@ -1242,7 +1385,30 @@ export default function AdminMembershipsPage() {
   const recentMemberships = useMemo(() => allMemberships.slice(0, 6), [allMemberships])
 
   function patchAssignmentForm(patch: Partial<AssignmentFormState>) {
-    setAssignmentForm((current) => ({ ...current, ...patch }))
+    assignmentIdempotencyKeyRef.current = null
+    setAssignmentForm((current) => {
+      if (patch.student_id !== undefined && patch.student_id !== current.student_id) {
+        const memberships = allMemberships.filter(
+          (membership) => membership.student?.id === patch.student_id,
+        )
+        const suggestedStart = suggestNextMembershipStart(
+          memberships.map((membership) => ({
+            ...membership,
+            status: membership.status === 'draft' ? 'historical' : membership.status,
+          })),
+          getTodayLocalISODate(),
+        )
+        return {
+          ...current,
+          ...patch,
+          start_date: suggestedStart,
+          gift_end_date: current.gift_end_date === current.start_date
+            ? suggestedStart
+            : current.gift_end_date,
+        }
+      }
+      return { ...current, ...patch }
+    })
   }
 
   function scrollToSaleForm() {
@@ -1257,37 +1423,36 @@ export default function AdminMembershipsPage() {
   }
 
   async function assignMembership() {
-    if (!assignmentForm.student_id || !assignmentForm.membership_plan_id) {
-      toast.push({ message: 'Selecciona alumno y plan.', type: 'error' })
+    if (!assignmentForm.student_id || (assignmentForm.origin === 'paid' && !assignmentForm.membership_plan_id)) {
+      toast.push({ message: 'Selecciona un alumno y completa los datos de la membresia.', type: 'error' })
       return
     }
 
-    if (!selectedPlan || !selectedStudent) {
+    if (!selectedStudent || (assignmentForm.origin === 'paid' && !selectedPlan)) {
       toast.push({ message: 'No pudimos preparar el resumen de la membresia.', type: 'error' })
       return
     }
 
-    const warnReplacement = shouldWarnReplacement(currentMembership, selectedStudent)
-    const currentRemaining = currentMembership?.classes_remaining ?? selectedStudent.classes_remaining ?? 0
+    if (cyclePreview.length === 0) {
+      toast.push({ message: 'Revisa las fechas, periodos y clases antes de continuar.', type: 'error' })
+      return
+    }
+
     const confirmMessage = [
-      warnReplacement ? replacementWarning : 'Se creara un nuevo ciclo de membresia para el alumno seleccionado.',
+      'Se crearan ciclos independientes sin modificar los saldos existentes.',
       '',
-      'Resumen previo a la renovacion:',
+      'Vista previa:',
       `Alumno: ${selectedStudent.full_name}`,
-      `Plan actual: ${currentMembership?.custom_name || selectedStudent.membership_name || 'Sin membresia previa'}`,
-      `Clases restantes que dejaran de estar activas: ${warnReplacement ? currentRemaining : 0}`,
-      `Nuevo plan: ${selectedPlan.name}`,
-      `Nuevo saldo de clases: ${selectedPlan.classes_included}`,
-      `Nuevas fechas: ${formatDate(assignmentForm.start_date)} - ${formatDate(newEndDate)}`,
-      `Total: ${formatMoney(finalAmount, selectedPlan.currency)}`,
+      ...cyclePreview.map((cycle) => (
+        `Ciclo ${cycle.cycleNumber}: ${cycle.origin === 'gift' ? 'Obsequio' : selectedPlan?.name || 'Membresia pagada'} · ${formatDate(cycle.startDate)} - ${formatDate(cycle.endDate)} · ${cycle.classes} clases`
+      )),
+      `Total combinado: ${formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)}`,
     ].join('\n')
 
     const accepted = await confirm(confirmMessage, {
-      title: warnReplacement ? 'Confirmar reemplazo de membresia' : 'Confirmar activacion de membresia',
-      description: warnReplacement
-        ? 'Esta confirmacion no acumula clases restantes ni extiende la vigencia anterior.'
-        : 'Revisa el nuevo ciclo antes de activar la membresia.',
-      confirmLabel: warnReplacement ? 'Renovar membresia' : 'Activar membresia',
+      title: 'Confirmar ciclos de membresia',
+      description: 'Revisa fechas, clases y origen. El consumo seguira el orden FIFO.',
+      confirmLabel: 'Crear membresia',
       cancelLabel: 'Volver a revisar',
       tone: 'warning',
     })
@@ -1297,33 +1462,46 @@ export default function AdminMembershipsPage() {
     setAssignmentSaving(true)
 
     try {
-      const { error } = await supabase.rpc('admin_assign_membership_plan', {
-        p_student_id: assignmentForm.student_id,
-        p_membership_plan_id: assignmentForm.membership_plan_id,
-        p_start_date: assignmentForm.start_date || null,
-        p_total_amount: finalAmount,
-        p_payment_amount: assignmentForm.payment_amount.trim() ? Number(assignmentForm.payment_amount) : null,
-        p_notes: [
-          assignmentForm.notes.trim() || null,
-          assignmentForm.discount_type !== 'none' && finalAmount !== null
-            ? `Descuento aplicado: ${assignmentForm.discount_type === 'percentage'
-              ? `${normalizedDiscountValue}%`
-              : `${selectedPlan.currency || 'PEN'} ${normalizedDiscountValue.toFixed(2)}`
-            }. Precio final: ${selectedPlan.currency || 'PEN'} ${finalAmount.toFixed(2)}.`
-            : null,
-        ].filter(Boolean).join(' | ') || null,
-      })
+      assignmentIdempotencyKeyRef.current ??= globalThis.crypto.randomUUID()
+      const common = {
+        studentId: assignmentForm.student_id,
+        startDate: assignmentForm.start_date,
+        notes: assignmentForm.notes.trim() || undefined,
+        idempotencyKey: assignmentIdempotencyKeyRef.current,
+      }
 
-      if (error) throw error
+      await createStudentMembershipCycles(supabase, assignmentForm.origin === 'gift'
+        ? {
+          ...common,
+          origin: 'gift',
+          giftClasses: Number(assignmentForm.gift_classes),
+          giftEndDate: assignmentForm.gift_end_date,
+        }
+        : {
+          ...common,
+          origin: 'paid',
+          membershipPlanId: assignmentForm.membership_plan_id,
+          periodCount: Number(assignmentForm.period_count),
+          totalAmountPerCycle: finalAmount ?? 0,
+          batchPaymentAmount: assignmentForm.payment_amount.trim()
+            ? Number(assignmentForm.payment_amount)
+            : (finalAmount ?? 0) * Number(assignmentForm.period_count),
+          paymentType: assignmentForm.payment_type,
+          discountType: assignmentForm.discount_type,
+          discountValue: normalizedDiscountValue,
+        })
 
-      toast.push({ message: warnReplacement ? 'Membresia renovada correctamente.' : 'Membresia activada correctamente.', type: 'success' })
+      toast.push({ message: 'Membresia creada correctamente.', type: 'success' })
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
-        queryClient.invalidateQueries({ queryKey: studentKeys.detail(assignmentForm.student_id) }),
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
       ])
 
+      assignmentIdempotencyKeyRef.current = null
       setAssignmentForm(emptyAssignmentForm())
       await refreshAll()
     } catch (error: any) {
@@ -1334,11 +1512,18 @@ export default function AdminMembershipsPage() {
   }
 
   function selectMembershipForRenewal(membership: AdminStudentMembership) {
+    assignmentIdempotencyKeyRef.current = null
+    const studentMemberships = allMemberships
+      .filter((candidate) => candidate.student?.id === membership.student?.id)
+      .map((candidate) => ({
+        ...candidate,
+        status: candidate.status === 'draft' ? 'historical' as const : candidate.status,
+      }))
     setAssignmentForm((current) => ({
       ...current,
       student_id: membership.student?.id || current.student_id,
       membership_plan_id: membership.membership_plan_id || current.membership_plan_id,
-      start_date: getTodayLocalISODate(),
+      start_date: suggestNextMembershipStart(studentMemberships, getTodayLocalISODate()),
     }))
     scrollToSaleForm()
   }
@@ -1606,11 +1791,14 @@ export default function AdminMembershipsPage() {
                 basePrice={basePrice}
                 computedDiscountAmount={computedDiscountAmount}
                 finalAmount={finalAmount}
-                newEndDate={newEndDate}
+                cyclePreview={cyclePreview}
                 isSaving={assignmentSaving}
                 onPatch={patchAssignmentForm}
                 onSubmit={assignMembership}
-                onClear={() => setAssignmentForm(emptyAssignmentForm())}
+                onClear={() => {
+                  assignmentIdempotencyKeyRef.current = null
+                  setAssignmentForm(emptyAssignmentForm())
+                }}
               />
             </div>
 
@@ -1782,6 +1970,7 @@ export default function AdminMembershipsPage() {
           onTogglePlan={togglePlanStatus}
           onDeletePlan={deletePlan}
           onUsePlan={(plan) => {
+            assignmentIdempotencyKeyRef.current = null
             setAssignmentForm((current) => ({ ...current, membership_plan_id: plan.id }))
             scrollToSaleForm()
           }}
