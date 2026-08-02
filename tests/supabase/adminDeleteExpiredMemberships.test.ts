@@ -6,8 +6,8 @@ function migration(path: string) {
   return readFileSync(join(process.cwd(), 'supabase/migrations', path), 'utf8')
 }
 
-describe('admin expired membership deletion migration', () => {
-  it('allows purging closed memberships while blocking active current memberships', () => {
+describe('superseded admin expired membership deletion migration', () => {
+  it('documents the former status-based restriction superseded by the corrective deletion contract', () => {
     const sql = migration('20260608_130000_restrict_admin_membership_delete_to_expired.sql')
 
     expect(sql).toContain('CREATE OR REPLACE FUNCTION public.admin_delete_student_membership')

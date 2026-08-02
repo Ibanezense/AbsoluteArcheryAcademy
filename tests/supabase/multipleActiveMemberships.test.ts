@@ -54,6 +54,26 @@ function expectRestrictedRpc(functionName: string) {
   )
 }
 
+function expectNoMembershipStatusGate(functionBody: string, membershipLookup: string) {
+  const executableSql = functionBody
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--.*$/gm, '')
+    .replace(/'(?:''|[^'])*'/g, "''")
+  const lookupPredicate = membershipLookup
+    .slice(membershipLookup.search(/\bWHERE\b/i))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--.*$/gm, '')
+    .replace(/'(?:''|[^'])*'/g, "''")
+
+  expect(lookupPredicate).not.toMatch(/\bstatus\b/i)
+  expect(executableSql).not.toMatch(
+    /(?:IF|ELSIF|WHEN|WHERE|AND|OR)\b(?:(?!\bTHEN\b|;)[\s\S]){0,600}?(?:(?:[a-z_][a-z0-9_]*membership[a-z0-9_]*|sm)\.status|\bv_(?:[a-z0-9_]*membership[a-z0-9_]*status|status)\b)(?:(?!\bTHEN\b|;)[\s\S]){0,250}?(?:=|<>|!=|NOT\s+IN\b|IN\b|IS\b|LIKE\b|~)/i,
+  )
+  expect(executableSql).not.toMatch(
+    /(?:WHERE|AND|OR)\s+(?:COALESCE\s*\(|lower\s*\(|upper\s*\(|\(+\s*)*status\b(?:(?!;)[\s\S]){0,250}?(?:=|<>|!=|NOT\s+IN\b|IN\b|IS\b|LIKE\b|~)/i,
+  )
+}
+
 describe('multiple active student memberships migration', () => {
   it('allows separate paid and gift membership rows without replacing active siblings', () => {
     expect(existsSync(migrationPath)).toBe(true)
@@ -188,6 +208,8 @@ describe('multiple active student memberships migration', () => {
     expectRestrictedRpc('get_my_children')
     expectRestrictedRpc('get_student_class_cards')
     expectRestrictedRpc('get_admin_quick_booking_students')
+    expectRestrictedRpc('admin_get_membership_deletion_preview')
+    expectRestrictedRpc('admin_delete_student_membership')
   })
 
   it('aggregates unresolved reservation commitments in one secure admin RPC', () => {
@@ -284,5 +306,156 @@ describe('multiple active student memberships migration', () => {
     expect(dashboardSql).toMatch(/WHEN sm\.id IS NOT NULL THEN sm\.available_classes[\s\S]*ELSE 0/i)
     expect(dashboardSql).toContain("fallback_membership.status = 'active'")
     expect(dashboardSql).toContain('fallback_membership.start_date > v_today')
+  })
+
+  it('previews corrective deletion dependencies without using membership status as eligibility', () => {
+    const previewSql = functionSql('admin_get_membership_deletion_preview')
+
+    expect(previewSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.admin_get_membership_deletion_preview',
+    )
+    expect(previewSql).toMatch(/p_membership_id uuid/i)
+    expect(previewSql).toMatch(/RETURNS jsonb/i)
+    expect(previewSql).toContain('SECURITY DEFINER')
+    expect(previewSql).toContain('SET search_path = public')
+    expect(previewSql).toContain('auth.uid()')
+    expect(previewSql).toContain('public.is_admin_user()')
+    const attendanceBookingCount = previewSql.match(
+      /SELECT\s+COUNT\(\*\)[^;]*INTO\s+(v_[a-z0-9_]+)[^;]*FROM public\.bookings[^;]*active_membership_id\s*=\s*p_membership_id[^;]*status\s+IN\s*\('attended',\s*'no_show'\)[^;]*;/i,
+    )?.[1] ?? '__missing_attendance_booking_count__'
+    const weeklyAttendanceCount = previewSql.match(
+      /SELECT\s+COUNT\(\*\)[^;]*INTO\s+(v_[a-z0-9_]+)[^;]*FROM public\.student_weekly_attendance[^;]*student_membership_id\s*=\s*p_membership_id[^;]*;/i,
+    )?.[1] ?? '__missing_weekly_attendance_count__'
+
+    expect(attendanceBookingCount).not.toContain('__missing')
+    expect(weeklyAttendanceCount).not.toContain('__missing')
+    expect(previewSql).toContain("'booking_count'")
+    expect(previewSql).toContain("'payment_count'")
+    expect(previewSql).toContain("'ledger_count'")
+    expect(previewSql).toContain("'weekly_attendance_count'")
+    expect(previewSql).toContain("'can_delete'")
+    expect(previewSql).toMatch(new RegExp(
+      `'can_delete'\\s*,\\s*\\(?\\s*(?:${attendanceBookingCount}\\s*=\\s*0\\s+AND\\s+${weeklyAttendanceCount}\\s*=\\s*0|${weeklyAttendanceCount}\\s*=\\s*0\\s+AND\\s+${attendanceBookingCount}\\s*=\\s*0)\\s*\\)?`,
+      'i',
+    ))
+
+    const countStatements = [...previewSql.matchAll(
+      /SELECT\s+COUNT\(\*\)[^;]*INTO\s+(v_[a-z0-9_]+)[^;]*FROM public\.([a-z0-9_]+)[^;]*;/gi,
+    )]
+    const bookingCount = countStatements.find((match) => (
+      match[2].toLowerCase() === 'bookings'
+      && /active_membership_id\s*=\s*p_membership_id/i.test(match[0])
+      && !/\bstatus\b/i.test(match[0])
+    ))?.[1] ?? '__missing_booking_count__'
+    const paymentCount = countStatements.find((match) => (
+      match[2].toLowerCase() === 'student_membership_payments'
+      && /student_membership_id\s*=\s*p_membership_id/i.test(match[0])
+    ))?.[1] ?? '__missing_payment_count__'
+    const ledgerCount = countStatements.find((match) => (
+      match[2].toLowerCase() === 'student_credit_ledger'
+      && /student_membership_id\s*=\s*p_membership_id/i.test(match[0])
+    ))?.[1] ?? '__missing_ledger_count__'
+
+    for (const [key, count] of [
+      ['booking_count', bookingCount],
+      ['payment_count', paymentCount],
+      ['ledger_count', ledgerCount],
+      ['weekly_attendance_count', weeklyAttendanceCount],
+    ]) {
+      expect(count).not.toContain('__missing')
+      expect(previewSql).toMatch(new RegExp(`'${key}'\\s*,\\s*${count}\\b`, 'i'))
+    }
+
+    const membershipLookup = previewSql.match(
+      /(?:SELECT|PERFORM)[^;]*FROM public\.student_memberships[^;]*WHERE[^;]*id\s*=\s*p_membership_id[^;]*;/i,
+    )?.[0] ?? ''
+
+    expect(membershipLookup).toContain('public.student_memberships')
+    expectNoMembershipStatusGate(previewSql, membershipLookup)
+  })
+
+  it('deletes every dependency only when no attendance history exists', () => {
+    const deleteSql = functionSql('admin_delete_student_membership')
+
+    expect(deleteSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.admin_delete_student_membership',
+    )
+    expect(deleteSql).toMatch(/p_membership_id uuid/i)
+    expect(deleteSql).toMatch(/RETURNS jsonb/i)
+    expect(deleteSql).toContain('SECURITY DEFINER')
+    expect(deleteSql).toContain('SET search_path = public')
+    expect(deleteSql).toContain('auth.uid()')
+    expect(deleteSql).toContain('public.is_admin_user()')
+    expect(deleteSql).toMatch(
+      /(?:SELECT|PERFORM)[^;]*FROM public\.student_memberships[^;]*id\s*=\s*p_membership_id[^;]*FOR UPDATE\s*;/i,
+    )
+    expect(deleteSql).toMatch(
+      /(?:SELECT|PERFORM)[^;]*FROM public\.bookings[^;]*active_membership_id\s*=\s*p_membership_id[^;]*FOR UPDATE\s*;/i,
+    )
+    expect(deleteSql).toMatch(
+      /(?:SELECT|PERFORM)[^;]*FROM public\.student_weekly_attendance[^;]*student_membership_id\s*=\s*p_membership_id[^;]*FOR UPDATE\s*;/i,
+    )
+    const attendanceBookingCount = deleteSql.match(
+      /SELECT\s+COUNT\(\*\)[^;]*INTO\s+(v_[a-z0-9_]+)[^;]*FROM public\.bookings[^;]*active_membership_id\s*=\s*p_membership_id[^;]*status\s+IN\s*\('attended',\s*'no_show'\)[^;]*;/i,
+    )?.[1] ?? '__missing_attendance_booking_count__'
+    const weeklyAttendanceCount = deleteSql.match(
+      /SELECT\s+COUNT\(\*\)[^;]*INTO\s+(v_[a-z0-9_]+)[^;]*FROM public\.student_weekly_attendance[^;]*student_membership_id\s*=\s*p_membership_id[^;]*;/i,
+    )?.[1] ?? '__missing_weekly_attendance_count__'
+
+    expect(attendanceBookingCount).not.toContain('__missing')
+    expect(weeklyAttendanceCount).not.toContain('__missing')
+    const membershipLookup = deleteSql.match(
+      /(?:SELECT|PERFORM)[^;]*FROM public\.student_memberships[^;]*WHERE[^;]*id\s*=\s*p_membership_id[^;]*FOR UPDATE\s*;/i,
+    )?.[0] ?? ''
+
+    expectNoMembershipStatusGate(deleteSql, membershipLookup)
+
+    const bookingDelete = deleteSql.indexOf('DELETE FROM public.bookings')
+    const paymentDelete = deleteSql.indexOf(
+      'DELETE FROM public.student_membership_payments',
+    )
+    const ledgerDelete = deleteSql.indexOf(
+      'DELETE FROM public.student_credit_ledger',
+    )
+    const membershipDelete = deleteSql.indexOf(
+      'DELETE FROM public.student_memberships',
+    )
+
+    expect(bookingDelete).toBeGreaterThan(-1)
+    const guardSql = deleteSql.slice(0, bookingDelete)
+    expect(guardSql).toMatch(new RegExp(
+      `IF(?:(?!END IF;)[\\s\\S])*(?:${attendanceBookingCount}\\s*>\\s*0\\s+OR\\s+${weeklyAttendanceCount}\\s*>\\s*0|${weeklyAttendanceCount}\\s*>\\s*0\\s+OR\\s+${attendanceBookingCount}\\s*>\\s*0)(?:(?!END IF;)[\\s\\S])*THEN(?:(?!END IF;)[\\s\\S])*RAISE EXCEPTION(?:(?!END IF;)[\\s\\S])*END IF;`,
+      'i',
+    ))
+    expect(paymentDelete).toBeGreaterThan(bookingDelete)
+    expect(ledgerDelete).toBeGreaterThan(paymentDelete)
+    expect(membershipDelete).toBeGreaterThan(ledgerDelete)
+    const deletedBookingCount = deleteSql.match(
+      /DELETE FROM public\.bookings[^;]*;\s*GET DIAGNOSTICS\s+(v_[a-z0-9_]+)\s*=\s*ROW_COUNT\s*;/i,
+    )?.[1] ?? '__missing_deleted_booking_count__'
+    const deletedPaymentCount = deleteSql.match(
+      /DELETE FROM public\.student_membership_payments[^;]*;\s*GET DIAGNOSTICS\s+(v_[a-z0-9_]+)\s*=\s*ROW_COUNT\s*;/i,
+    )?.[1] ?? '__missing_deleted_payment_count__'
+    const deletedLedgerCount = deleteSql.match(
+      /DELETE FROM public\.student_credit_ledger[^;]*;\s*GET DIAGNOSTICS\s+(v_[a-z0-9_]+)\s*=\s*ROW_COUNT\s*;/i,
+    )?.[1] ?? '__missing_deleted_ledger_count__'
+    const deletedMembershipCount = deleteSql.match(
+      /DELETE FROM public\.student_memberships[^;]*;\s*GET DIAGNOSTICS\s+(v_[a-z0-9_]+)\s*=\s*ROW_COUNT\s*;/i,
+    )?.[1] ?? '__missing_deleted_membership_count__'
+
+    for (const count of [deletedBookingCount, deletedPaymentCount, deletedLedgerCount, deletedMembershipCount]) {
+      expect(count).not.toContain('__missing')
+    }
+    for (const [key, count] of [
+      ['booking_count', deletedBookingCount],
+      ['payment_count', deletedPaymentCount],
+      ['ledger_count', deletedLedgerCount],
+      ['membership_count', deletedMembershipCount],
+    ]) {
+      expect(deleteSql).toMatch(new RegExp(`'${key}'\\s*,\\s*${count}\\b`, 'i'))
+    }
+    expect(deleteSql).toContain(
+      'public.sync_student_membership_operational_status(v_membership.student_id)',
+    )
   })
 })
