@@ -2060,17 +2060,23 @@ BEGIN
       AND COALESCE(s.operational_status, 'active') = 'active'
       AND COALESCE(sm.available_classes, 0) > 0
     ) AS student_is_active,
-    sm.custom_name AS membership_name,
-    sm.start_date AS membership_start,
-    sm.end_date AS membership_end,
+    COALESCE(sm.custom_name, fallback_membership.custom_name) AS membership_name,
+    COALESCE(sm.start_date, fallback_membership.start_date) AS membership_start,
+    COALESCE(sm.end_date, fallback_membership.end_date) AS membership_end,
     CASE
-      WHEN sm.id IS NULL THEN 'no_membership'
-      WHEN sm.available_classes > 0 THEN 'active'
-      ELSE 'no_classes'
+      WHEN sm.id IS NOT NULL AND sm.available_classes > 0 THEN 'active'
+      WHEN sm.id IS NOT NULL THEN 'no_classes'
+      WHEN fallback_membership.status = 'active'
+        AND fallback_membership.start_date > v_today THEN 'scheduled'
+      WHEN fallback_membership.id IS NOT NULL THEN fallback_membership.display_status
+      ELSE 'no_membership'
     END AS membership_status,
-    sm.classes_total,
-    sm.classes_used,
-    COALESCE(sm.available_classes, 0)::integer AS classes_remaining
+    COALESCE(sm.classes_total, fallback_membership.classes_total) AS classes_total,
+    COALESCE(sm.classes_used, fallback_membership.classes_used) AS classes_used,
+    CASE
+      WHEN sm.id IS NOT NULL THEN sm.available_classes
+      ELSE 0
+    END::integer AS classes_remaining
   FROM public.students s
   LEFT JOIN LATERAL (
     SELECT
@@ -2107,6 +2113,54 @@ BEGIN
       sm_inner.id ASC
     LIMIT 1
   ) sm ON true
+  LEFT JOIN LATERAL (
+    SELECT
+      fallback_inner.id,
+      fallback_inner.status,
+      fallback_inner.custom_name,
+      fallback_inner.start_date,
+      fallback_inner.end_date,
+      fallback_inner.classes_total,
+      fallback_inner.classes_used,
+      CASE
+        WHEN fallback_inner.status = 'active'
+          AND fallback_inner.start_date > v_today THEN 'scheduled'
+        ELSE 'expired'
+      END::text AS display_status
+    FROM public.student_memberships fallback_inner
+    WHERE fallback_inner.student_id = s.id
+      AND (
+        (
+          fallback_inner.status = 'active'
+          AND fallback_inner.start_date > v_today
+          AND COALESCE(fallback_inner.classes_remaining, 0) > 0
+          AND (fallback_inner.end_date IS NULL OR fallback_inner.end_date >= fallback_inner.start_date)
+        )
+        OR fallback_inner.status IN ('expired', 'historical')
+      )
+    ORDER BY
+      CASE
+        WHEN fallback_inner.status = 'active'
+          AND fallback_inner.start_date > v_today THEN 0
+        ELSE 1
+      END,
+      CASE
+        WHEN fallback_inner.status = 'active'
+          AND fallback_inner.start_date > v_today THEN fallback_inner.start_date
+      END ASC,
+      CASE
+        WHEN fallback_inner.status IN ('expired', 'historical') THEN
+          COALESCE(
+            fallback_inner.expired_at,
+            public.membership_end_date_expired_at(fallback_inner.end_date),
+            fallback_inner.updated_at,
+            fallback_inner.created_at
+          )
+      END DESC,
+      fallback_inner.created_at DESC,
+      fallback_inner.id DESC
+    LIMIT 1
+  ) fallback_membership ON sm.id IS NULL
   WHERE s.id = v_student_id;
 END;
 $$;

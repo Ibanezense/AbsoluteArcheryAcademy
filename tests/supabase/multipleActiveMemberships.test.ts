@@ -272,4 +272,17 @@ describe('multiple active student memberships migration', () => {
     expect(sql).not.toMatch(/UPDATE public\.student_memberships[\s\S]{0,500}status\s*=\s*'historical'/i)
     expect(sql).not.toMatch(/start_date DESC/i)
   })
+
+  it('preserves an expired dashboard fallback without making it consumable', () => {
+    const dashboardSql = functionSql('get_student_dashboard')
+
+    expect(dashboardSql).toContain('fallback_membership')
+    expect(dashboardSql).toMatch(/status IN \('expired', 'historical'\)/i)
+    expect(dashboardSql).toContain("THEN 'scheduled'")
+    expect(dashboardSql).toContain("ELSE 'expired'")
+    expect(dashboardSql).toContain('COALESCE(sm.custom_name, fallback_membership.custom_name)')
+    expect(dashboardSql).toMatch(/WHEN sm\.id IS NOT NULL THEN sm\.available_classes[\s\S]*ELSE 0/i)
+    expect(dashboardSql).toContain("fallback_membership.status = 'active'")
+    expect(dashboardSql).toContain('fallback_membership.start_date > v_today')
+  })
 })
