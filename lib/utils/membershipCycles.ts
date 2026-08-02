@@ -90,8 +90,12 @@ export function buildMembershipCyclePreview(
     ]
   }
 
-  if (!Number.isInteger(input.periodCount) || input.periodCount <= 0) {
-    throw new Error('Period count must be a positive integer')
+  if (
+    !Number.isInteger(input.periodCount) ||
+    input.periodCount < 1 ||
+    input.periodCount > 12
+  ) {
+    throw new Error('Period count must be between 1 and 12')
   }
   if (!Number.isInteger(input.durationDays) || input.durationDays <= 0) {
     throw new Error('Duration must be a positive integer')
@@ -148,6 +152,10 @@ export function summarizeMemberships(
 ): MembershipSummary {
   assertIsoDate(serviceDate)
 
+  for (const membership of memberships) {
+    validateMembershipDates(membership)
+  }
+
   const ordered = [...memberships].sort(compareMembershipsFifo)
   const openMemberships = ordered.filter(
     (membership) =>
@@ -182,6 +190,26 @@ export function summarizeMemberships(
     openCount: openMemberships.length,
     currentMembershipId,
     statusesById,
+  }
+}
+
+function validateMembershipDates(membership: MembershipLike): void {
+  try {
+    assertIsoDate(membership.start_date)
+  } catch {
+    throw new Error(`Invalid membership start_date for ${membership.id}`)
+  }
+
+  if (membership.end_date !== null) {
+    try {
+      assertIsoDate(membership.end_date)
+    } catch {
+      throw new Error(`Invalid membership end_date for ${membership.id}`)
+    }
+  }
+
+  if (!Number.isFinite(Date.parse(membership.created_at))) {
+    throw new Error(`Invalid membership created_at for ${membership.id}`)
   }
 }
 

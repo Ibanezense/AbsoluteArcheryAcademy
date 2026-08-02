@@ -56,6 +56,19 @@ describe('buildMembershipCyclePreview', () => {
       },
     ])
   })
+
+  it('rejects more than the twelve periods accepted by the membership RPC', () => {
+    expect(() =>
+      buildMembershipCyclePreview({
+        origin: 'paid',
+        startDate: '2026-08-01',
+        periodCount: 13,
+        durationDays: 30,
+        classesPerPeriod: 8,
+        amountPerPeriod: 180,
+      }),
+    ).toThrow('Period count must be between 1 and 12')
+  })
 })
 
 describe('suggestNextMembershipStart', () => {
@@ -163,6 +176,38 @@ describe('summarizeMemberships', () => {
       historical: 'historical',
       'date-expired': 'expired',
     })
+  })
+
+  it.each([
+    [
+      'start_date',
+      membership({ id: 'bad-start', start_date: '2026-02-30' }),
+      'Invalid membership start_date for bad-start',
+    ],
+    [
+      'end_date',
+      membership({ id: 'bad-end', end_date: 'not-a-date' }),
+      'Invalid membership end_date for bad-end',
+    ],
+    [
+      'created_at',
+      membership({ id: 'bad-created', created_at: 'not-a-timestamp' }),
+      'Invalid membership created_at for bad-created',
+    ],
+  ])('rejects an invalid %s before summarizing', (_field, row, message) => {
+    expect(() => summarizeMemberships([row], '2026-08-10')).toThrow(message)
+  })
+
+  it('does not mutate the membership array while applying FIFO order', () => {
+    const memberships = [
+      membership({ id: 'later', start_date: '2026-08-05' }),
+      membership({ id: 'earlier', start_date: '2026-08-01' }),
+    ]
+    const original = structuredClone(memberships)
+
+    summarizeMemberships(memberships, '2026-08-10')
+
+    expect(memberships).toEqual(original)
   })
 })
 
