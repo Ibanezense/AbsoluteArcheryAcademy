@@ -2656,4 +2656,196 @@ REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments(uuid)
 REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments(uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_admin_membership_reservation_commitments(uuid) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.admin_get_membership_deletion_preview(
+  p_membership_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_membership public.student_memberships;
+  v_booking_count integer := 0;
+  v_payment_count integer := 0;
+  v_ledger_count integer := 0;
+  v_attendance_booking_count integer := 0;
+  v_weekly_attendance_count integer := 0;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  SELECT *
+  INTO v_membership
+  FROM public.student_memberships
+  WHERE id = p_membership_id;
+
+  IF v_membership.id IS NULL THEN
+    RAISE EXCEPTION 'Membresia no encontrada';
+  END IF;
+
+  SELECT COUNT(*)::integer
+  INTO v_booking_count
+  FROM public.bookings b
+  WHERE b.active_membership_id = p_membership_id;
+
+  SELECT COUNT(*)::integer
+  INTO v_payment_count
+  FROM public.student_membership_payments payment
+  WHERE payment.student_membership_id = p_membership_id;
+
+  SELECT COUNT(*)::integer
+  INTO v_ledger_count
+  FROM public.student_credit_ledger ledger
+  WHERE ledger.student_membership_id = p_membership_id;
+
+  SELECT COUNT(*)::integer
+  INTO v_attendance_booking_count
+  FROM public.bookings b
+  WHERE b.active_membership_id = p_membership_id
+    AND b.status IN ('attended', 'no_show');
+
+  SELECT COUNT(*)::integer
+  INTO v_weekly_attendance_count
+  FROM public.student_weekly_attendance weekly
+  WHERE weekly.student_membership_id = p_membership_id;
+
+  RETURN jsonb_build_object(
+    'membership_id', v_membership.id,
+    'student_id', v_membership.student_id,
+    'booking_count', v_booking_count,
+    'payment_count', v_payment_count,
+    'ledger_count', v_ledger_count,
+    'attendance_booking_count', v_attendance_booking_count,
+    'weekly_attendance_count', v_weekly_attendance_count,
+    'can_delete', (
+      v_attendance_booking_count = 0
+      AND v_weekly_attendance_count = 0
+    ),
+    'reason', CASE
+      WHEN v_attendance_booking_count > 0
+        THEN 'No se puede eliminar: la membresia tiene asistencias o inasistencias registradas.'
+      WHEN v_weekly_attendance_count > 0
+        THEN 'No se puede eliminar: la membresia tiene inasistencias semanales registradas.'
+      ELSE 'La membresia puede eliminarse junto con sus datos vinculados.'
+    END
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_get_membership_deletion_preview(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_get_membership_deletion_preview(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_get_membership_deletion_preview(uuid) TO authenticated, service_role;
+
+DROP FUNCTION IF EXISTS public.admin_delete_student_membership(uuid);
+
+CREATE OR REPLACE FUNCTION public.admin_delete_student_membership(
+  p_membership_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_membership public.student_memberships;
+  v_attendance_booking_count integer := 0;
+  v_weekly_attendance_count integer := 0;
+  v_deleted_booking_count integer := 0;
+  v_deleted_payment_count integer := 0;
+  v_deleted_ledger_count integer := 0;
+  v_deleted_membership_count integer := 0;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  SELECT *
+  INTO v_membership
+  FROM public.student_memberships
+  WHERE id = p_membership_id
+  FOR UPDATE;
+
+  IF v_membership.id IS NULL THEN
+    RAISE EXCEPTION 'Membresia no encontrada';
+  END IF;
+
+  PERFORM b.id
+  FROM public.bookings b
+  WHERE b.active_membership_id = p_membership_id
+  FOR UPDATE;
+
+  PERFORM weekly.id
+  FROM public.student_weekly_attendance weekly
+  WHERE weekly.student_membership_id = p_membership_id
+  FOR UPDATE;
+
+  SELECT COUNT(*)::integer
+  INTO v_attendance_booking_count
+  FROM public.bookings b
+  WHERE b.active_membership_id = p_membership_id
+    AND b.status IN ('attended', 'no_show');
+
+  SELECT COUNT(*)::integer
+  INTO v_weekly_attendance_count
+  FROM public.student_weekly_attendance weekly
+  WHERE weekly.student_membership_id = p_membership_id;
+
+  IF v_attendance_booking_count > 0 OR v_weekly_attendance_count > 0 THEN
+    RAISE EXCEPTION 'No se puede eliminar una membresia con asistencias o inasistencias registradas';
+  END IF;
+
+  DELETE FROM public.bookings
+  WHERE active_membership_id = p_membership_id;
+  GET DIAGNOSTICS v_deleted_booking_count = ROW_COUNT;
+
+  DELETE FROM public.student_membership_payments
+  WHERE student_membership_id = p_membership_id;
+  GET DIAGNOSTICS v_deleted_payment_count = ROW_COUNT;
+
+  DELETE FROM public.student_credit_ledger
+  WHERE student_membership_id = p_membership_id;
+  GET DIAGNOSTICS v_deleted_ledger_count = ROW_COUNT;
+
+  DELETE FROM public.student_memberships
+  WHERE id = p_membership_id;
+  GET DIAGNOSTICS v_deleted_membership_count = ROW_COUNT;
+
+  PERFORM public.sync_student_membership_operational_status(v_membership.student_id);
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'membership_id', p_membership_id,
+    'booking_count', v_deleted_booking_count,
+    'payment_count', v_deleted_payment_count,
+    'ledger_count', v_deleted_ledger_count,
+    'membership_count', v_deleted_membership_count,
+    'message', 'Membresia y datos vinculados eliminados correctamente.'
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'membership_id', p_membership_id,
+      'error', SQLERRM
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_delete_student_membership(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_delete_student_membership(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_delete_student_membership(uuid) TO authenticated, service_role;
+
 COMMIT;

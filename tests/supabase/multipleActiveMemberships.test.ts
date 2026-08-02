@@ -457,5 +457,9 @@ describe('multiple active student memberships migration', () => {
     expect(deleteSql).toContain(
       'public.sync_student_membership_operational_status(v_membership.student_id)',
     )
+    expect(deleteSql).toMatch(/EXCEPTION\s+WHEN OTHERS THEN/i)
+    expect(deleteSql).toMatch(
+      /jsonb_build_object\([\s\S]*'success'\s*,\s*false[\s\S]*'membership_id'\s*,\s*p_membership_id[\s\S]*'error'\s*,\s*SQLERRM[\s\S]*\)/i,
+    )
   })
 })
