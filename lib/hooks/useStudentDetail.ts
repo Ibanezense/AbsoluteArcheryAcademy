@@ -120,6 +120,10 @@ export type StudentDetailData = {
     guardian_profile_id: string
   }) | null
   active_membership: StudentMembershipSummary | null
+  bookable_membership_id: string | null
+  usable_classes: number
+  available_classes_by_id: Record<string, number>
+  membership_statuses_by_id: Record<string, string>
   total_open_classes: number
   open_membership_count: number
   memberships: StudentMembershipSummary[]
@@ -155,12 +159,12 @@ function sortMemberships(memberships: StudentMembershipSummary[]) {
   })
 }
 
-export function useStudentDetail(studentId: string) {
+export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey()) {
   return useQuery({
-    queryKey: studentKeys.detail(studentId),
+    queryKey: [...studentKeys.detail(studentId), serviceDate],
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: reservedBookings, error: reservedBookingsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -261,6 +265,12 @@ export function useStudentDetail(studentId: string) {
             .order('created_at', { ascending: false })
             .limit(250),
           supabase
+            .from('bookings')
+            .select('active_membership_id')
+            .eq('student_id', studentId)
+            .eq('status', 'reserved')
+            .not('active_membership_id', 'is', null),
+          supabase
             .from('student_weekly_attendance')
             .select('id,week_start,week_end,status,classes_consumed,marked_at')
             .eq('student_id', studentId)
@@ -272,14 +282,15 @@ export function useStudentDetail(studentId: string) {
       if (paymentsError) throw paymentsError
       if (ledgerError) throw ledgerError
       if (bookingsError) throw bookingsError
+      if (reservedBookingsError) throw reservedBookingsError
       if (weeklyAttendanceError) throw weeklyAttendanceError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
       const memberships = sortMemberships((typedStudent.memberships || []) as StudentMembershipSummary[])
       const reservedByMembershipId = new Map<string, number>()
-      for (const booking of (bookings || []) as any[]) {
-        if (booking.status !== 'reserved' || !booking.active_membership_id) continue
+      for (const booking of (reservedBookings || []) as any[]) {
+        if (!booking.active_membership_id) continue
         reservedByMembershipId.set(
           booking.active_membership_id,
           (reservedByMembershipId.get(booking.active_membership_id) || 0) + 1,
@@ -290,7 +301,7 @@ export function useStudentDetail(studentId: string) {
           ...membership,
           status: membership.status === 'draft' ? 'historical' as const : membership.status,
         })),
-        getLimaDateKey(),
+        serviceDate,
         reservedByMembershipId,
       )
       const activeMembership = memberships.find(
@@ -363,6 +374,10 @@ export function useStudentDetail(studentId: string) {
           }
           : null,
         active_membership: activeMembership,
+        bookable_membership_id: membershipSummary.bookableMembershipId,
+        usable_classes: membershipSummary.usableClasses,
+        available_classes_by_id: membershipSummary.availableClassesById,
+        membership_statuses_by_id: membershipSummary.statusesById,
         total_open_classes: membershipSummary.totalOpenClasses,
         open_membership_count: membershipSummary.openCount,
         memberships,

@@ -60,6 +60,8 @@ export interface MembershipSummary {
   totalOpenClasses: number
   openCount: number
   currentMembershipId: string | null
+  bookableMembershipId: string | null
+  availableClassesById: Record<string, number>
   statusesById: Record<string, MembershipDisplayStatus>
 }
 
@@ -181,15 +183,20 @@ export function summarizeMemberships(
   const eligibleMemberships = openMemberships.filter(
     (membership) => membership.start_date <= serviceDate,
   )
-  const usableMemberships = eligibleMemberships.filter(
+  const bookableMemberships = eligibleMemberships.filter(
     (membership) =>
       availableClasses(membership, committedByMembershipId) > 0,
   )
-  const currentMembershipId = usableMemberships[0]?.id ?? null
+  const currentMembershipId = eligibleMemberships[0]?.id ?? null
+  const bookableMembershipId = bookableMemberships[0]?.id ?? null
   const eligibleIds = new Set(eligibleMemberships.map((membership) => membership.id))
+  const availableClassesById: Record<string, number> = {}
   const statusesById: Record<string, MembershipDisplayStatus> = {}
 
   for (const membership of ordered) {
+    availableClassesById[membership.id] = eligibleIds.has(membership.id)
+      ? availableClasses(membership, committedByMembershipId)
+      : 0
     statusesById[membership.id] = displayStatus(
       membership,
       serviceDate,
@@ -199,7 +206,7 @@ export function summarizeMemberships(
   }
 
   return {
-    usableClasses: usableMemberships.reduce(
+    usableClasses: bookableMemberships.reduce(
       (total, membership) => total + availableClasses(membership, committedByMembershipId),
       0,
     ),
@@ -209,6 +216,8 @@ export function summarizeMemberships(
     ),
     openCount: openMemberships.length,
     currentMembershipId,
+    bookableMembershipId,
+    availableClassesById,
     statusesById,
   }
 }

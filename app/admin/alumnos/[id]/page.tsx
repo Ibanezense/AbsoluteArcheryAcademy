@@ -53,7 +53,7 @@ import {
   type StudentBowUsageType,
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
-import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey } from '@/lib/utils/membershipCycles'
 import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
@@ -147,9 +147,20 @@ function formatMoney(amount: number | null | undefined, currency = 'PEN') {
   }).format(amount || 0)
 }
 
-function daysBetweenToday(value: string | null | undefined) {
+function daysBetweenToday(value: string | null | undefined, serviceDate: string) {
   if (!value) return null
-  return dayjs(value).startOf('day').diff(dayjs(getLimaDateKey()).startOf('day'), 'day')
+  return dayjs(value).startOf('day').diff(dayjs(serviceDate).startOf('day'), 'day')
+}
+
+function useLimaMinuteClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return now
 }
 
 function statusLabel(status: string | null | undefined) {
@@ -388,7 +399,9 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const router = useRouter()
   const confirm = useConfirm()
   const toast = useToast()
-  const detailQuery = useStudentDetail(params.id)
+  const minuteClock = useLimaMinuteClock()
+  const serviceDate = getLimaDateKey(minuteClock)
+  const detailQuery = useStudentDetail(params.id, serviceDate)
   const plansQuery = useMembershipPlans()
   const { data, isLoading, error } = detailQuery
 
@@ -409,32 +422,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [assignmentSaving, setAssignmentSaving] = useState(false)
 
   const upcomingBookings = useMemo(() => (data?.bookings || [])
-    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(dayjs()))
-    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data])
-
-  const reservedByMembershipId = useMemo(() => {
-    const reserved = new Map<string, number>()
-    for (const booking of data?.bookings || []) {
-      if (booking.status !== 'reserved' || !booking.active_membership_id) continue
-      reserved.set(
-        booking.active_membership_id,
-        (reserved.get(booking.active_membership_id) || 0) + 1,
-      )
-    }
-    return reserved
-  }, [data])
-
-  const membershipStatusesById = useMemo(() => {
-    if (!data) return {} as Record<string, string>
-    return summarizeMemberships(
-      data.memberships.map((membership) => ({
-        ...membership,
-        status: membership.status === 'draft' ? 'historical' as const : membership.status,
-      })),
-      getLimaDateKey(),
-      reservedByMembershipId,
-    ).statusesById
-  }, [data, reservedByMembershipId])
+    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(minuteClock))
+    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data, minuteClock])
 
   useEffect(() => {
     if (!data) return
@@ -748,7 +737,11 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const operationalStatus = getOperationalStatus(data)
   const activeMembership = data.active_membership
   const latestMembership = getLatestMembership(data.memberships)
-  const membershipEndDelta = daysBetweenToday(activeMembership?.end_date)
+  const membershipEndDelta = daysBetweenToday(activeMembership?.end_date, serviceDate)
+  const membershipStatusesById = data.membership_statuses_by_id
+  const currentFreeBalance = activeMembership
+    ? data.available_classes_by_id[activeMembership.id] || 0
+    : 0
   const nextBooking = upcomingBookings[0] || null
   const recentClasses = data.bookings.filter((booking) => booking.status !== 'reserved')
   const pendingPayments = data.payments.filter((payment) => payment.payment_status === 'pending' || payment.payment_status === 'late')
@@ -756,10 +749,6 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     if (booking.status !== 'no_show' || !booking.start_at) return false
     return dayjs(booking.start_at).isAfter(dayjs().subtract(14, 'day'))
   })
-  const reservedAgainstBalance = activeMembership
-    ? reservedByMembershipId.get(activeMembership.id) || 0
-    : 0
-  const committedFreeBalance = Math.max((activeMembership?.classes_remaining || 0) - reservedAgainstBalance, 0)
   const renewalWarning = 'Se creará un ciclo independiente. Los saldos anteriores se conservan y se consumen primero en orden cronológico.'
 
   const alerts = [
@@ -783,7 +772,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         icon: <AlertTriangle className="h-6 w-6" />,
       }
       : null,
-    activeMembership && activeMembership.classes_remaining <= 0
+    activeMembership && data.usable_classes <= 0
       ? {
         title: 'Sin clases disponibles',
         description: 'El alumno no tiene saldo libre para nuevas reservas.',
@@ -793,7 +782,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         icon: <XCircle className="h-6 w-6" />,
       }
       : null,
-    activeMembership && activeMembership.classes_remaining === 1
+    activeMembership && data.usable_classes === 1
       ? {
         title: '1 clase disponible',
         description: 'Aprovecha la clase antes de que venza el ciclo.',
@@ -886,7 +875,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <KpiCard icon={<WalletCards className="h-5 w-5" />} label="Total abierto" value={data.total_open_classes} helper={`${data.open_membership_count} membresías abiertas`} tone="border border-orange-200 bg-orange-50 text-accent" />
-            <KpiCard icon={<Target className="h-5 w-5" />} label="Clases disponibles" value={committedFreeBalance} helper={`Utilizable hoy · ${activeMembership?.classes_remaining ?? 0} del ciclo actual`} tone="border border-emerald-200 bg-emerald-50 text-emerald-600" />
+            <KpiCard icon={<Target className="h-5 w-5" />} label="Clases disponibles" value={data.usable_classes} helper={`Utilizable hoy · ${currentFreeBalance} libres en el ciclo vigente`} tone="border border-emerald-200 bg-emerald-50 text-emerald-600" />
             <KpiCard icon={<CalendarDays className="h-5 w-5" />} label="Reservas próximas" value={upcomingBookings.length} helper={nextBooking ? `Próxima: ${formatDate(nextBooking.start_at)}` : 'Sin agenda'} tone="border border-blue-200 bg-blue-50 text-blue-600" />
             <KpiCard icon={<Clock3 className="h-5 w-5" />} label="Vence" value={membershipEndDelta ?? '-'} helper={activeMembership?.end_date ? `${membershipEndDelta === 1 ? 'día' : 'días'} - ${formatDate(activeMembership.end_date)}` : 'Sin fecha'} tone="border border-orange-200 bg-orange-50 text-accent" />
             <KpiCard icon={<BadgeDollarSign className="h-5 w-5" />} label="Pagos pendientes" value={pendingPayments.length} helper={pendingPayments[0] ? formatMoney(pendingPayments[0].amount, pendingPayments[0].currency) : 'Al dia'} tone="border border-amber-200 bg-amber-50 text-amber-600" />
@@ -982,6 +971,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           studentName={data.full_name}
           memberships={data.memberships}
           membershipStatusesById={membershipStatusesById}
+          availableClassesById={data.available_classes_by_id}
           plans={(plansQuery.data || []).filter((plan) => plan.is_active)}
           plansLoading={plansQuery.isLoading}
           membershipEditor={membershipEditor}
@@ -1297,7 +1287,7 @@ function LegacyMembershipTab({
               <InfoRow label="Vencimiento" value={formatDate(activeMembership.end_date)} />
               <InfoRow label="Clases totales" value={activeMembership.classes_total} />
               <InfoRow label="Usadas" value={activeMembership.classes_used} />
-              <InfoRow label="Disponibles" value={activeMembership.classes_remaining} danger={activeMembership.classes_remaining <= 1} />
+              <InfoRow label="Saldo registrado" value={activeMembership.classes_remaining} danger={activeMembership.classes_remaining <= 1} />
               <InfoRow label="Monto" value={formatMoney(activeMembership.total_amount, activeMembership.currency)} />
               <InfoRow label="Notas" value={activeMembership.notes || 'Sin notas'} />
             </div>
@@ -1404,6 +1394,7 @@ function MembershipTab({
   studentName,
   memberships,
   membershipStatusesById,
+  availableClassesById,
   plans,
   plansLoading,
   membershipEditor,
@@ -1422,6 +1413,7 @@ function MembershipTab({
   studentName: string
   memberships: StudentMembershipSummary[]
   membershipStatusesById: Record<string, string>
+  availableClassesById: Record<string, number>
   plans: MembershipPlan[]
   plansLoading: boolean
   membershipEditor: MembershipEditorState | null
@@ -1474,9 +1466,10 @@ function MembershipTab({
                 {memberships.map((membership) => {
                   const display = getMembershipDisplayFields(membership)
                   const queueStatus = membershipStatusesById[membership.id] || membership.status
+                  const availableClasses = availableClassesById[membership.id] || 0
                   return (
                     <tr key={membership.id} className="group bg-white transition hover:bg-slate-50/70">
-                      <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases disponibles</p></td>
+                      <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{availableClasses} libres de {membership.classes_remaining} restantes · {membership.classes_total} totales</p></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.start_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.end_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-mono text-xs font-black text-blue-600">{display.documentNumber}</td>

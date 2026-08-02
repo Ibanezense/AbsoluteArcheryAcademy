@@ -35,6 +35,8 @@ export type StudentListRow = {
   membership_status: string | null
   membership_raw_classes_remaining: number
   classes_remaining: number
+  usable_classes: number
+  bookable_membership_id: string | null
   total_open_classes: number
   open_membership_count: number
   access_code: string | null
@@ -57,6 +59,7 @@ type AttendedBookingRow = {
 type ReservedBookingRow = {
   student_id: string | null
   active_membership_id: string | null
+  reserved_count: number | string | null
 }
 
 export function buildLastAttendanceByStudent(rows: AttendedBookingRow[]) {
@@ -217,6 +220,8 @@ export function mapStudentListRow(
     membership_status: displayStatus,
     membership_raw_classes_remaining: membershipForDisplay?.classes_remaining ?? 0,
     classes_remaining: displayClassesRemaining,
+    usable_classes: membershipSummary.usableClasses,
+    bookable_membership_id: membershipSummary.bookableMembershipId,
     total_open_classes: membershipSummary.totalOpenClasses,
     open_membership_count: membershipSummary.openCount,
     access_code: Array.isArray(student.self_profile)
@@ -284,12 +289,7 @@ export function useStudents() {
           .select('student_id,attendance_marked_at,sessions(start_at)')
           .eq('status', 'attended')
           .not('student_id', 'is', null),
-        supabase
-          .from('bookings')
-          .select('student_id,active_membership_id')
-          .eq('status', 'reserved')
-          .not('student_id', 'is', null)
-          .not('active_membership_id', 'is', null),
+        supabase.rpc('get_admin_membership_reservation_commitments'),
       ])
 
       if (studentsResult.error) throw studentsResult.error
@@ -303,10 +303,7 @@ export function useStudents() {
       for (const booking of (reservedBookingsResult.data || []) as ReservedBookingRow[]) {
         if (!booking.student_id || !booking.active_membership_id) continue
         const byMembership = reservedByStudent.get(booking.student_id) || new Map<string, number>()
-        byMembership.set(
-          booking.active_membership_id,
-          (byMembership.get(booking.active_membership_id) || 0) + 1,
-        )
+        byMembership.set(booking.active_membership_id, Number(booking.reserved_count || 0))
         reservedByStudent.set(booking.student_id, byMembership)
       }
 

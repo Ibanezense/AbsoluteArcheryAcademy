@@ -292,7 +292,7 @@ describe('mapStudentListRow', () => {
     expect(result.classes_remaining).toBe(2)
   })
 
-  it('selects the next FIFO cycle when reservations commit all classes in the older cycle', () => {
+  it('keeps the current FIFO cycle visible while exposing the next bookable balance', () => {
     const result = mapStudentListRow({
       id: 'student-committed',
       full_name: 'Alumno comprometido',
@@ -310,8 +310,10 @@ describe('mapStudentListRow', () => {
       ],
     }, new Map([['older', 2]]))
 
-    expect(result.membership_name).toBe('Plan siguiente')
-    expect(result.classes_remaining).toBe(3)
+    expect(result.membership_name).toBe('Plan antiguo')
+    expect(result.classes_remaining).toBe(0)
+    expect(result.bookable_membership_id).toBe('next')
+    expect(result.usable_classes).toBe(3)
     expect(result.total_open_classes).toBe(5)
   })
 

@@ -181,5 +181,18 @@ describe('multiple active student memberships migration', () => {
     expectRestrictedRpc('admin_book_session')
     expectRestrictedRpc('get_weekly_attendance_review')
     expectRestrictedRpc('admin_mark_weekly_no_show')
+    expectRestrictedRpc('get_admin_membership_reservation_commitments')
+  })
+
+  it('aggregates unresolved reservation commitments in one secure admin RPC', () => {
+    const commitmentsSql = functionSql('get_admin_membership_reservation_commitments')
+
+    expect(commitmentsSql).toContain('SECURITY DEFINER')
+    expect(commitmentsSql).toContain('SET search_path = public')
+    expect(commitmentsSql).toContain('auth.uid()')
+    expect(commitmentsSql).toContain('public.is_admin_user()')
+    expect(commitmentsSql).toMatch(/RETURNS TABLE\s*\([\s\S]*student_id uuid[\s\S]*active_membership_id uuid[\s\S]*reserved_count bigint/i)
+    expect(commitmentsSql).toMatch(/COUNT\(\*\)::bigint[\s\S]*FROM public\.bookings[\s\S]*status\s*=\s*'reserved'/i)
+    expect(commitmentsSql).toMatch(/GROUP BY[\s\S]*student_id[\s\S]*active_membership_id/i)
   })
 })

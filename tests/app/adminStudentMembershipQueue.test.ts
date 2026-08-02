@@ -44,11 +44,20 @@ describe('admin student membership queue', () => {
 
     expect(hook).toContain('active_membership_id: string | null')
     expect(hook).toContain('active_membership_id,')
-    expect(page).toContain('reservedByMembershipId')
-    expect(page).toContain('booking.active_membership_id')
-    expect(page).toContain("booking.status !== 'reserved'")
-    expect(page).toContain('summarizeMemberships')
-    expect(query).toContain('active_membership_id')
+    expect(hook).toContain('reservedByMembershipId')
+    expect(hook).toContain('booking.active_membership_id')
+    expect(page).not.toContain('const reservedByMembershipId')
+    expect(hook).toContain('summarizeMemberships')
+    expect(query).toContain("rpc('get_admin_membership_reservation_commitments')")
+    expect(query).not.toContain(".select('student_id,active_membership_id')")
+  })
+
+  it('loads detail commitments separately from the 250-row booking history', () => {
+    const hook = source('lib/hooks/useStudentDetail.ts')
+
+    expect(hook).toContain('reservedBookings')
+    expect(hook).toMatch(/from\('bookings'\)[\s\S]*select\('active_membership_id'\)[\s\S]*eq\('student_id', studentId\)[\s\S]*eq\('status', 'reserved'\)/)
+    expect(hook).toContain('reservedBookingsError')
   })
 
   it('uses the America/Lima business date on list, detail query, and detail UI', () => {
@@ -75,6 +84,17 @@ describe('admin student membership queue', () => {
     expect(page).toContain('Obsequio')
     expect(page).toContain('Pagada')
     expect(page).toContain('membershipStatusesById')
+    expect(page).toContain('available_classes_by_id')
+    expect(page).toContain('libres de')
     expect(page).toContain('useMemo')
+  })
+
+  it('refreshes the Lima service date and consumes the summary from the detail hook', () => {
+    const page = source('app/admin/alumnos/[id]/page.tsx')
+
+    expect(page).toContain('useLimaMinuteClock')
+    expect(page).toContain('clearInterval')
+    expect(page).toContain('serviceDate')
+    expect(page).not.toContain('const reservedByMembershipId = useMemo')
   })
 })

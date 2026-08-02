@@ -103,7 +103,7 @@ describe('suggestNextMembershipStart', () => {
 })
 
 describe('summarizeMemberships', () => {
-  it('moves current FIFO consumption to the next cycle when reservations commit the older balance', () => {
+  it('keeps the current cycle visible while moving bookable FIFO availability forward', () => {
     const summary = summarizeMemberships(
       [
         membership({ id: 'older', classes_remaining: 2 }),
@@ -113,11 +113,13 @@ describe('summarizeMemberships', () => {
       new Map([['older', 2]]),
     )
 
-    expect(summary.currentMembershipId).toBe('next')
+    expect(summary.currentMembershipId).toBe('older')
+    expect(summary.bookableMembershipId).toBe('next')
     expect(summary.usableClasses).toBe(3)
     expect(summary.totalOpenClasses).toBe(5)
-    expect(summary.statusesById.older).toBe('queued')
-    expect(summary.statusesById.next).toBe('current')
+    expect(summary.availableClassesById).toMatchObject({ older: 0, next: 3 })
+    expect(summary.statusesById.older).toBe('current')
+    expect(summary.statusesById.next).toBe('queued')
   })
 
   it('orders overlapping eligible memberships by start, creation, then id', () => {
@@ -166,6 +168,12 @@ describe('summarizeMemberships', () => {
       totalOpenClasses: 9,
       openCount: 3,
       currentMembershipId: 'current',
+      bookableMembershipId: 'current',
+      availableClassesById: {
+        current: 2,
+        queued: 3,
+        future: 0,
+      },
       statusesById: {
         current: 'current',
         queued: 'queued',

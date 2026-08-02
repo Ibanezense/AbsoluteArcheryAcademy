@@ -1731,4 +1731,41 @@ REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_cancel_session(uuid, boolean) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.get_admin_membership_reservation_commitments()
+RETURNS TABLE (
+  student_id uuid,
+  active_membership_id uuid,
+  reserved_count bigint
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    b.student_id,
+    b.active_membership_id,
+    COUNT(*)::bigint AS reserved_count
+  FROM public.bookings b
+  WHERE b.status = 'reserved'
+    AND b.student_id IS NOT NULL
+    AND b.active_membership_id IS NOT NULL
+  GROUP BY b.student_id, b.active_membership_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments() FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_admin_membership_reservation_commitments() TO authenticated, service_role;
+
 COMMIT;
