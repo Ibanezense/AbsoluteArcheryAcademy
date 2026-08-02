@@ -99,12 +99,77 @@ describe('multiple active student memberships migration', () => {
     )
   })
 
+  it('locks and revalidates FIFO membership free balance before either booking insert', () => {
+    for (const functionName of ['book_session', 'admin_book_session']) {
+      const bookingSql = functionSql(functionName)
+
+      expect(bookingSql).toMatch(
+        /select_student_membership_for_date[\s\S]*FROM public\.student_memberships sm[\s\S]*sm\.id\s*=\s*v_membership\.id[\s\S]*FOR UPDATE/i,
+      )
+      expect(bookingSql).toMatch(
+        /COUNT\(\*\)[\s\S]*b\.active_membership_id\s*=\s*v_membership\.id[\s\S]*b\.status\s*=\s*'reserved'/i,
+      )
+      expect(bookingSql).toMatch(
+        /v_pending_reserved_count\s*<\s*COALESCE\(v_membership\.classes_remaining,\s*0\)/i,
+      )
+    }
+  })
+
   it('uses and locks the oldest eligible membership for a weekly no-show', () => {
     const weeklyNoShowSql = functionSql('admin_mark_weekly_no_show')
 
+    expect(weeklyNoShowSql).toContain(
+      'public.select_student_membership_for_date',
+    )
     expect(weeklyNoShowSql).toContain('FOR UPDATE')
     expect(weeklyNoShowSql).toMatch(
-      /ORDER BY[\s\S]*sm\.start_date ASC[\s\S]*sm\.created_at ASC[\s\S]*sm\.id ASC/,
+      /COUNT\(\*\)[\s\S]*reserved_booking\.active_membership_id\s*=\s*v_membership\.id[\s\S]*reserved_booking\.status\s*=\s*'reserved'/i,
+    )
+  })
+
+  it('returns each weekly candidate once through one FIFO lateral membership', () => {
+    const reviewSql = functionSql('get_weekly_attendance_review')
+
+    expect(reviewSql).toContain('public.select_student_membership_for_date')
+    expect(reviewSql).toMatch(/JOIN LATERAL[\s\S]*select_student_membership_for_date/i)
+    expect(reviewSql).not.toMatch(
+      /INNER JOIN public\.student_memberships\s+sm\s+ON\s+sm\.student_id\s*=\s*st\.id/i,
+    )
+  })
+
+  it('treats total amount per cycle and distributes one batch payment without duplication', () => {
+    const bulkSql = functionSql('admin_create_student_membership_cycles')
+
+    expect(bulkSql).toContain('p_total_amount is the price of each cycle')
+    expect(bulkSql).toContain('p_payment_amount is the payment for the whole batch')
+    expect(bulkSql).toMatch(/ROUND\([\s\S]*v_batch_payment_amount[\s\S]*v_period_count[\s\S]*2\)/i)
+    expect(bulkSql).toMatch(
+      /WHEN v_period = v_period_count[\s\S]*v_batch_payment_amount\s*-\s*v_distributed_payment/i,
+    )
+    expect(bulkSql).toMatch(
+      /v_distributed_payment\s*:=\s*v_distributed_payment\s*\+\s*v_payment_amount/i,
+    )
+  })
+
+  it('syncs by Lima eligibility and never directly reactivates protected or future students', () => {
+    const syncSql = functionSql('sync_student_membership_operational_status')
+    const assignmentSql = functionSql('admin_assign_membership_plan')
+    const bulkSql = functionSql('admin_create_student_membership_cycles')
+
+    expect(syncSql).toContain("now() AT TIME ZONE 'America/Lima'")
+    expect(syncSql).toMatch(/active_sm\.start_date\s*<=\s*v_today/i)
+    expect(syncSql).toContain('public.is_student_protected_operational_status')
+    expect(assignmentSql).toContain(
+      'PERFORM public.sync_student_membership_operational_status(p_student_id)',
+    )
+    expect(bulkSql).toContain(
+      'PERFORM public.sync_student_membership_operational_status(p_student_id)',
+    )
+    expect(assignmentSql).not.toMatch(
+      /UPDATE public\.students[\s\S]*operational_status\s*=\s*'active'/i,
+    )
+    expect(bulkSql).not.toMatch(
+      /UPDATE public\.students[\s\S]*operational_status\s*=\s*'active'/i,
     )
   })
 
@@ -114,6 +179,7 @@ describe('multiple active student memberships migration', () => {
     expectRestrictedRpc('admin_create_student_membership_cycles')
     expectRestrictedRpc('book_session')
     expectRestrictedRpc('admin_book_session')
+    expectRestrictedRpc('get_weekly_attendance_review')
     expectRestrictedRpc('admin_mark_weekly_no_show')
   })
 })

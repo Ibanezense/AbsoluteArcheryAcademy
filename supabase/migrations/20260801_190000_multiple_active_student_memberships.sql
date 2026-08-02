@@ -229,14 +229,7 @@ BEGIN
     );
   END IF;
 
-  UPDATE public.students
-  SET
-    operational_status = 'active',
-    operational_status_reason = 'Nueva membresia activa asignada por administrador',
-    operational_status_updated_at = now(),
-    is_active = true,
-    updated_at = now()
-  WHERE id = p_student_id;
+  PERFORM public.sync_student_membership_operational_status(p_student_id);
 
   RETURN v_membership_id;
 END;
@@ -267,6 +260,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+-- Financial contract:
+-- p_total_amount is the price of each cycle.
+-- p_payment_amount is the payment for the whole batch and is distributed once.
 DECLARE
   v_actor_id uuid := auth.uid();
   v_student public.students;
@@ -283,6 +279,8 @@ DECLARE
   v_currency text := 'PEN';
   v_total_amount numeric;
   v_payment_amount numeric;
+  v_batch_payment_amount numeric;
+  v_distributed_payment numeric := 0;
   v_payment_status text;
 BEGIN
   IF v_actor_id IS NULL THEN
@@ -394,7 +392,10 @@ BEGIN
     v_name := v_plan.name;
     v_currency := COALESCE(v_plan.currency, 'PEN');
     v_total_amount := COALESCE(p_total_amount, v_plan.base_price, 0);
-    v_payment_amount := COALESCE(p_payment_amount, v_total_amount);
+    v_batch_payment_amount := COALESCE(
+      p_payment_amount,
+      v_total_amount * v_period_count
+    );
   ELSE
     v_period_count := 1;
 
@@ -413,10 +414,11 @@ BEGIN
       CASE WHEN p_gift_classes = 1 THEN '' ELSE 's' END
     );
     v_total_amount := 0;
+    v_batch_payment_amount := 0;
     v_payment_amount := 0;
   END IF;
 
-  IF v_total_amount < 0 OR v_payment_amount < 0 THEN
+  IF v_total_amount < 0 OR v_batch_payment_amount < 0 THEN
     RAISE EXCEPTION 'Los importes no pueden ser negativos';
   END IF;
 
@@ -426,6 +428,13 @@ BEGIN
     ELSE
       v_end_date := p_gift_end_date;
     END IF;
+
+    v_payment_amount := CASE
+      WHEN v_origin = 'gift' THEN 0
+      WHEN v_period = v_period_count
+        THEN v_batch_payment_amount - v_distributed_payment
+      ELSE ROUND(v_batch_payment_amount / v_period_count, 2)
+    END;
 
     INSERT INTO public.student_memberships (
       student_id,
@@ -517,6 +526,8 @@ BEGIN
       now()
     );
 
+    v_distributed_payment := v_distributed_payment + v_payment_amount;
+
     INSERT INTO public.student_credit_ledger (
       student_id,
       student_membership_id,
@@ -546,17 +557,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  UPDATE public.students
-  SET
-    operational_status = 'active',
-    operational_status_reason = CASE
-      WHEN v_origin = 'gift' THEN 'Obsequio de clases asignado por administrador'
-      ELSE 'Nuevos periodos de membresia asignados por administrador'
-    END,
-    operational_status_updated_at = now(),
-    is_active = true,
-    updated_at = now()
-  WHERE id = p_student_id;
+  PERFORM public.sync_student_membership_operational_status(p_student_id);
 
   RETURN QUERY
   SELECT sm.*
@@ -569,6 +570,167 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.sync_student_membership_operational_status(
+  p_student_id uuid DEFAULT NULL
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_now_lima timestamp := now() AT TIME ZONE 'America/Lima';
+  v_today date := (now() AT TIME ZONE 'America/Lima')::date;
+  v_row_count integer := 0;
+  v_total_changed integer := 0;
+BEGIN
+  UPDATE public.student_memberships
+  SET
+    status = 'expired',
+    expired_at = COALESCE(expired_at, public.membership_end_date_expired_at(end_date)),
+    expiration_reason = COALESCE(expiration_reason, 'end_date'),
+    classes_remaining = GREATEST(COALESCE(classes_remaining, 0), 0),
+    updated_at = now()
+  WHERE (p_student_id IS NULL OR student_id = p_student_id)
+    AND status = 'active'
+    AND end_date IS NOT NULL
+    AND end_date < v_today;
+
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_total_changed := v_total_changed + v_row_count;
+
+  UPDATE public.student_memberships
+  SET
+    status = 'expired',
+    expired_at = COALESCE(expired_at, now()),
+    expiration_reason = COALESCE(expiration_reason, 'no_classes_remaining'),
+    classes_remaining = 0,
+    updated_at = now()
+  WHERE (p_student_id IS NULL OR student_id = p_student_id)
+    AND status = 'active'
+    AND classes_remaining <= 0;
+
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_total_changed := v_total_changed + v_row_count;
+
+  WITH target_students AS (
+    SELECT s.id, s.is_active, s.operational_status
+    FROM public.students s
+    WHERE p_student_id IS NULL OR s.id = p_student_id
+  ),
+  computed AS (
+    SELECT
+      ts.id,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.student_memberships active_sm
+          WHERE active_sm.student_id = ts.id
+            AND active_sm.status = 'active'
+            AND COALESCE(active_sm.classes_remaining, 0) > 0
+            AND active_sm.start_date <= v_today
+            AND (active_sm.end_date IS NULL OR active_sm.end_date >= v_today)
+        ) THEN 'active'
+        WHEN latest_expired.id IS NOT NULL
+          AND v_now_lima >= (
+            COALESCE(
+              latest_expired.expired_at,
+              public.membership_end_date_expired_at(latest_expired.end_date),
+              latest_expired.updated_at,
+              latest_expired.created_at
+            ) AT TIME ZONE 'America/Lima'
+          ) + interval '14 days'
+          THEN 'paused'
+        WHEN latest_expired.id IS NOT NULL
+          THEN 'expired'
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.student_memberships any_sm
+          WHERE any_sm.student_id = ts.id
+        ) THEN 'paused'
+        WHEN COALESCE(ts.is_active, false)
+          THEN 'active'
+        ELSE 'paused'
+      END AS next_status,
+      CASE
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.student_memberships active_sm
+          WHERE active_sm.student_id = ts.id
+            AND active_sm.status = 'active'
+            AND COALESCE(active_sm.classes_remaining, 0) > 0
+            AND active_sm.start_date <= v_today
+            AND (active_sm.end_date IS NULL OR active_sm.end_date >= v_today)
+        ) THEN 'Membresia activa vigente con saldo disponible'
+        WHEN latest_expired.id IS NOT NULL
+          AND v_now_lima >= (
+            COALESCE(
+              latest_expired.expired_at,
+              public.membership_end_date_expired_at(latest_expired.end_date),
+              latest_expired.updated_at,
+              latest_expired.created_at
+            ) AT TIME ZONE 'America/Lima'
+          ) + interval '14 days'
+          THEN 'Mas de 14 dias completos sin membresia activa'
+        WHEN latest_expired.id IS NOT NULL
+          THEN 'Membresia expirada dentro del periodo de seguimiento'
+        WHEN EXISTS (
+          SELECT 1
+          FROM public.student_memberships future_sm
+          WHERE future_sm.student_id = ts.id
+            AND future_sm.status = 'active'
+            AND COALESCE(future_sm.classes_remaining, 0) > 0
+            AND future_sm.start_date > v_today
+        ) THEN 'Membresia programada aun no vigente'
+        WHEN COALESCE(ts.is_active, false)
+          THEN 'Alumno activo sin membresia registrada'
+        ELSE 'Alumno sin membresia activa'
+      END AS next_reason
+    FROM target_students ts
+    LEFT JOIN LATERAL (
+      SELECT sm.*
+      FROM public.student_memberships sm
+      WHERE sm.student_id = ts.id
+        AND sm.status = 'expired'
+      ORDER BY
+        COALESCE(
+          sm.expired_at,
+          public.membership_end_date_expired_at(sm.end_date),
+          sm.updated_at,
+          sm.created_at
+        ) DESC,
+        sm.created_at DESC,
+        sm.id DESC
+      LIMIT 1
+    ) latest_expired ON true
+  )
+  UPDATE public.students s
+  SET
+    operational_status = computed.next_status,
+    operational_status_reason = computed.next_reason,
+    operational_status_updated_at = now(),
+    is_active = computed.next_status = 'active',
+    updated_at = now()
+  FROM computed
+  WHERE s.id = computed.id
+    AND NOT public.is_student_protected_operational_status(s.operational_status)
+    AND (
+      s.operational_status IS DISTINCT FROM computed.next_status
+      OR s.operational_status_reason IS DISTINCT FROM computed.next_reason
+      OR s.is_active IS DISTINCT FROM (computed.next_status = 'active')
+    );
+
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  v_total_changed := v_total_changed + v_row_count;
+
+  RETURN v_total_changed;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.sync_student_membership_operational_status(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.sync_student_membership_operational_status(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.sync_student_membership_operational_status(uuid) TO service_role;
 
 -- Estas redefiniciones conservan las reglas vigentes y sustituyen solamente
 -- la eleccion de membresia por el selector FIFO canonico.
@@ -591,6 +753,7 @@ DECLARE
   v_availability jsonb;
   v_bow_usage_type text;
   v_session_day_cutoff timestamptz;
+  v_pending_reserved_count integer;
 BEGIN
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
@@ -642,15 +805,31 @@ BEGIN
     RAISE EXCEPTION 'Las reservas para este dia se cerraron 2 horas antes del primer turno';
   END IF;
 
-  SELECT * INTO v_membership
-  FROM public.select_student_membership_for_date(
-    v_student_id,
-    (v_session.start_at AT TIME ZONE 'America/Lima')::date
-  );
+  LOOP
+    SELECT * INTO v_membership
+    FROM public.select_student_membership_for_date(
+      v_student_id,
+      (v_session.start_at AT TIME ZONE 'America/Lima')::date
+    );
 
-  IF v_membership IS NULL THEN
-    RAISE EXCEPTION 'El alumno no tiene una membresia activa con clases disponibles para la fecha de esta sesion';
-  END IF;
+    IF v_membership IS NULL THEN
+      RAISE EXCEPTION 'El alumno no tiene una membresia activa con clases disponibles para la fecha de esta sesion';
+    END IF;
+
+    SELECT sm.* INTO v_membership
+    FROM public.student_memberships sm
+    WHERE sm.id = v_membership.id
+    FOR UPDATE;
+
+    SELECT COUNT(*)::integer INTO v_pending_reserved_count
+    FROM public.bookings b
+    WHERE b.active_membership_id = v_membership.id
+      AND b.status = 'reserved';
+
+    IF v_pending_reserved_count < COALESCE(v_membership.classes_remaining, 0) THEN
+      EXIT;
+    END IF;
+  END LOOP;
 
   IF EXISTS (
     SELECT 1
@@ -735,6 +914,7 @@ DECLARE
   v_membership public.student_memberships;
   v_availability jsonb;
   v_bow_usage_type text;
+  v_pending_reserved_count integer;
 BEGIN
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
@@ -777,15 +957,31 @@ BEGIN
     RAISE EXCEPTION 'La sesion no esta disponible';
   END IF;
 
-  SELECT * INTO v_membership
-  FROM public.select_student_membership_for_date(
-    p_student_id,
-    (v_session.start_at AT TIME ZONE 'America/Lima')::date
-  );
+  LOOP
+    SELECT * INTO v_membership
+    FROM public.select_student_membership_for_date(
+      p_student_id,
+      (v_session.start_at AT TIME ZONE 'America/Lima')::date
+    );
 
-  IF v_membership IS NULL THEN
-    RAISE EXCEPTION 'El alumno no tiene una membresia activa con clases disponibles para la fecha de esta sesion';
-  END IF;
+    IF v_membership IS NULL THEN
+      RAISE EXCEPTION 'El alumno no tiene una membresia activa con clases disponibles para la fecha de esta sesion';
+    END IF;
+
+    SELECT sm.* INTO v_membership
+    FROM public.student_memberships sm
+    WHERE sm.id = v_membership.id
+    FOR UPDATE;
+
+    SELECT COUNT(*)::integer INTO v_pending_reserved_count
+    FROM public.bookings b
+    WHERE b.active_membership_id = v_membership.id
+      AND b.status = 'reserved';
+
+    IF v_pending_reserved_count < COALESCE(v_membership.classes_remaining, 0) THEN
+      EXIT;
+    END IF;
+  END LOOP;
 
   IF EXISTS (
     SELECT 1
@@ -855,6 +1051,124 @@ REVOKE ALL ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) FROM
 REVOKE ALL ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.get_weekly_attendance_review(p_sunday date)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_week_start date;
+  v_pending_count integer := 0;
+  v_candidates jsonb := '[]'::jsonb;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'Solo administradores pueden revisar inasistencias semanales';
+  END IF;
+
+  IF p_sunday IS NULL OR EXTRACT(DOW FROM p_sunday) <> 0 THEN
+    RETURN jsonb_build_object(
+      'is_sunday', false,
+      'week_start', NULL,
+      'week_end', p_sunday,
+      'pending_count', 0,
+      'candidates', '[]'::jsonb
+    );
+  END IF;
+
+  IF p_sunday > (now() AT TIME ZONE 'America/Lima')::date THEN
+    RAISE EXCEPTION 'No se puede revisar una semana futura';
+  END IF;
+
+  v_week_start := p_sunday - 3;
+
+  SELECT COUNT(*)::integer INTO v_pending_count
+  FROM public.bookings pending_booking
+  INNER JOIN public.sessions pending_session
+    ON pending_session.id = pending_booking.session_id
+  WHERE pending_booking.status = 'reserved'
+    AND pending_booking.student_id IS NOT NULL
+    AND (pending_session.start_at AT TIME ZONE 'America/Lima')::date
+      BETWEEN v_week_start AND p_sunday;
+
+  IF v_pending_count = 0 THEN
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'student_id', candidate.student_id,
+          'student_name', candidate.student_name,
+          'avatar_url', candidate.avatar_url,
+          'membership_id', candidate.membership_id,
+          'membership_name', candidate.membership_name,
+          'membership_end', candidate.membership_end,
+          'classes_remaining', candidate.classes_remaining,
+          'membership_display_status', candidate.membership_display_status
+        )
+        ORDER BY candidate.student_name
+      ),
+      '[]'::jsonb
+    )
+    INTO v_candidates
+    FROM (
+      SELECT
+        st.id AS student_id,
+        st.full_name AS student_name,
+        st.avatar_url,
+        sm.id AS membership_id,
+        sm.custom_name AS membership_name,
+        sm.end_date AS membership_end,
+        sm.classes_remaining,
+        CASE
+          WHEN sm.end_date IS NOT NULL AND sm.end_date <= p_sunday + 7
+            THEN 'expiring'
+          ELSE 'active'
+        END AS membership_display_status
+      FROM public.students st
+      INNER JOIN LATERAL (
+        SELECT selected.*
+        FROM public.select_student_membership_for_date(st.id, p_sunday) selected
+        WHERE selected.id IS NOT NULL
+      ) sm ON true
+      WHERE st.is_active = true
+        AND COALESCE(st.operational_status, '') NOT IN ('retired', 'withdrawn', 'blocked', 'suspended')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.bookings b
+          INNER JOIN public.sessions s ON s.id = b.session_id
+          WHERE b.student_id = st.id
+            AND b.status = 'attended'
+            AND (s.start_at AT TIME ZONE 'America/Lima')::date
+              BETWEEN v_week_start AND p_sunday
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.student_weekly_attendance swa
+          WHERE swa.student_id = st.id
+            AND swa.week_start = v_week_start
+        )
+    ) candidate;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'is_sunday', true,
+    'week_start', v_week_start,
+    'week_end', p_sunday,
+    'pending_count', v_pending_count,
+    'candidates', v_candidates
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_weekly_attendance_review(date) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_weekly_attendance_review(date) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_weekly_attendance_review(date) TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.admin_mark_weekly_no_show(
   p_student_id uuid,
   p_sunday date
@@ -872,6 +1186,7 @@ DECLARE
   v_existing_id uuid;
   v_weekly_attendance_id uuid;
   v_balance_after integer;
+  v_pending_reserved_count integer;
 BEGIN
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
@@ -941,20 +1256,28 @@ BEGIN
     RAISE EXCEPTION 'El alumno registra al menos una asistencia esta semana';
   END IF;
 
-  SELECT sm.* INTO v_membership
-  FROM public.student_memberships sm
-  WHERE sm.student_id = p_student_id
-    AND sm.status = 'active'
-    AND sm.classes_remaining > 0
-    AND sm.start_date <= p_sunday
-    AND (sm.end_date IS NULL OR sm.end_date >= p_sunday)
-  ORDER BY sm.start_date ASC, sm.created_at ASC, sm.id ASC
-  LIMIT 1
-  FOR UPDATE;
+  LOOP
+    SELECT * INTO v_membership
+    FROM public.select_student_membership_for_date(p_student_id, p_sunday);
 
-  IF v_membership.id IS NULL THEN
-    RAISE EXCEPTION 'El alumno no tiene una membresia vigente con clases disponibles';
-  END IF;
+    IF v_membership IS NULL THEN
+      RAISE EXCEPTION 'El alumno no tiene una membresia vigente con clases disponibles';
+    END IF;
+
+    SELECT sm.* INTO v_membership
+    FROM public.student_memberships sm
+    WHERE sm.id = v_membership.id
+    FOR UPDATE;
+
+    SELECT COUNT(*)::integer INTO v_pending_reserved_count
+    FROM public.bookings reserved_booking
+    WHERE reserved_booking.active_membership_id = v_membership.id
+      AND reserved_booking.status = 'reserved';
+
+    IF v_pending_reserved_count < COALESCE(v_membership.classes_remaining, 0) THEN
+      EXIT;
+    END IF;
+  END LOOP;
 
   INSERT INTO public.student_weekly_attendance (
     student_id,

@@ -10,11 +10,31 @@ const migrationPath = join(
 )
 
 const sql = readFileSync(migrationPath, 'utf8')
+const fifoMigrationPath = join(
+  process.cwd(),
+  'supabase',
+  'migrations',
+  '20260801_190000_multiple_active_student_memberships.sql',
+)
+const fifoSql = readFileSync(fifoMigrationPath, 'utf8')
 
 function functionSql(functionName: string) {
   const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${functionName}`)
   const end = sql.indexOf('GRANT EXECUTE ON FUNCTION', start)
   return sql.slice(start, end)
+}
+
+function fifoFunctionSql(functionName: string) {
+  const start = fifoSql.indexOf(
+    `CREATE OR REPLACE FUNCTION public.${functionName}`,
+  )
+  const remainingSql = fifoSql.slice(start + 1)
+  const nextFunctionOffset = remainingSql.search(
+    /\n\s*CREATE OR REPLACE FUNCTION public\./,
+  )
+  return nextFunctionOffset === -1
+    ? fifoSql.slice(start)
+    : fifoSql.slice(start, start + 1 + nextFunctionOffset)
 }
 
 describe('20260430 attendance consumes membership credits migration', () => {
@@ -26,6 +46,19 @@ describe('20260430 attendance consumes membership credits migration', () => {
     expect(sql).toContain('v_pending_reserved_count >= COALESCE(v_membership.classes_remaining, 0)')
     expect(sql).not.toContain("booking_reserved',\n    -1")
     expect(sql).not.toContain('classes_used = classes_used + 1,\n    classes_remaining = classes_remaining - 1')
+  })
+
+  it('locks and rechecks the linked FIFO balance before concurrent booking inserts', () => {
+    for (const functionName of ['book_session', 'admin_book_session']) {
+      const bookingSql = fifoFunctionSql(functionName)
+
+      expect(bookingSql).toMatch(
+        /FROM public\.student_memberships sm[\s\S]*sm\.id\s*=\s*v_membership\.id[\s\S]*FOR UPDATE/i,
+      )
+      expect(bookingSql).toMatch(
+        /COUNT\(\*\)[\s\S]*active_membership_id\s*=\s*v_membership\.id[\s\S]*status\s*=\s*'reserved'/i,
+      )
+    }
   })
 
   it('consumes one class only when attendance or no-show is marked from a reserved booking', () => {

@@ -182,4 +182,19 @@ describe('student operational status automation migration', () => {
       /UPDATE\s+public\.student_memberships(?:\s+(?:AS\s+)?[a-z_][a-z0-9_]*)?[\s\S]*?\bstatus\s*=\s*'historical'/i,
     )
   })
+
+  it('keeps protected and future-only students from being reactivated by cycle assignment', () => {
+    const sql = readFileSync(multipleMembershipsPath, 'utf8')
+
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.sync_student_membership_operational_status',
+    )
+    expect(sql).toMatch(/active_sm\.start_date\s*<=\s*v_today/i)
+    expect(sql).toContain(
+      'NOT public.is_student_protected_operational_status(s.operational_status)',
+    )
+    expect(sql).toContain(
+      'PERFORM public.sync_student_membership_operational_status(p_student_id)',
+    )
+  })
 })

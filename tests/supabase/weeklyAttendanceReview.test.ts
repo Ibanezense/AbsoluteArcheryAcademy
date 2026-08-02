@@ -10,11 +10,31 @@ const migrationPath = join(
 )
 
 const sql = readFileSync(migrationPath, 'utf8')
+const fifoMigrationPath = join(
+  process.cwd(),
+  'supabase',
+  'migrations',
+  '20260801_190000_multiple_active_student_memberships.sql',
+)
+const fifoSql = readFileSync(fifoMigrationPath, 'utf8')
 
 function functionSql(functionName: string) {
   const start = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${functionName}`)
   const end = sql.indexOf('REVOKE ALL ON FUNCTION', start)
   return sql.slice(start, end)
+}
+
+function fifoFunctionSql(functionName: string) {
+  const start = fifoSql.indexOf(
+    `CREATE OR REPLACE FUNCTION public.${functionName}`,
+  )
+  const remainingSql = fifoSql.slice(start + 1)
+  const nextFunctionOffset = remainingSql.search(
+    /\n\s*CREATE OR REPLACE FUNCTION public\./,
+  )
+  return nextFunctionOffset === -1
+    ? fifoSql.slice(start)
+    : fifoSql.slice(start, start + 1 + nextFunctionOffset)
 }
 
 describe('weekly attendance review migration', () => {
@@ -53,6 +73,18 @@ describe('weekly attendance review migration', () => {
     expect(markSql).toContain('classes_used = classes_used + 1')
     expect(markSql).toContain('classes_remaining = classes_remaining - 1')
     expect(markSql).toContain("'weekly_no_show_consumed'")
+  })
+
+  it('uses one FIFO candidate per student and preserves reserved commitments', () => {
+    const reviewSql = fifoFunctionSql('get_weekly_attendance_review')
+    const markSql = fifoFunctionSql('admin_mark_weekly_no_show')
+
+    expect(reviewSql).toMatch(/JOIN LATERAL[\s\S]*select_student_membership_for_date/i)
+    expect(reviewSql).not.toContain('INNER JOIN public.student_memberships sm')
+    expect(markSql).toContain('public.select_student_membership_for_date')
+    expect(markSql).toMatch(
+      /reserved_booking\.active_membership_id\s*=\s*v_membership\.id[\s\S]*reserved_booking\.status\s*=\s*'reserved'/i,
+    )
   })
 
   it('protects privileged RPCs from anonymous execution', () => {
