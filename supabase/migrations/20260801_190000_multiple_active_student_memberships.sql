@@ -1723,9 +1723,7 @@ BEGIN
   END LOOP;
 
   UPDATE public.sessions
-  SET
-    status = 'cancelled',
-    updated_at = now()
+  SET status = 'cancelled'
   WHERE id = p_session;
 
   RETURN v_cancelled_count;
@@ -1747,7 +1745,10 @@ SET search_path = public
 AS $$
 DECLARE
   v_commitments jsonb;
-  v_is_service_role boolean := auth.role() = 'service_role';
+  v_is_service_role boolean := COALESCE(
+    (auth.jwt() ->> 'role') = 'service_role',
+    false
+  );
 BEGIN
   IF NOT v_is_service_role AND auth.uid() IS NULL THEN
     RAISE EXCEPTION 'No autenticado';

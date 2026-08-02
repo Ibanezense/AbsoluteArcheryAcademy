@@ -194,11 +194,19 @@ describe('multiple active student memberships migration', () => {
     expect(commitmentsSql).toContain('SET search_path = public')
     expect(commitmentsSql).toContain('auth.uid()')
     expect(commitmentsSql).toContain('public.is_admin_user()')
-    expect(commitmentsSql).toContain("auth.role() = 'service_role'")
+    expect(commitmentsSql).toMatch(/COALESCE\(\s*\(auth\.jwt\(\) ->> 'role'\) = 'service_role',\s*false\s*\)/i)
+    expect(commitmentsSql).not.toContain('auth.role()')
     expect(commitmentsSql).toContain('public.can_access_student(p_student_id)')
     expect(commitmentsSql).toMatch(/jsonb_object_agg[\s\S]*active_membership_id[\s\S]*reserved_count/i)
     expect(commitmentsSql).toMatch(/COALESCE\([\s\S]*'\{\}'::jsonb/i)
     expect(commitmentsSql).toMatch(/p_student_id IS NULL[\s\S]*public\.is_admin_user\(\)/i)
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS idx_bookings_reserved_membership_commitments[\s\S]*ON public\.bookings\s*\(active_membership_id\)[\s\S]*WHERE status = 'reserved'[\s\S]*active_membership_id IS NOT NULL/i)
+  })
+
+  it('cancels a session without writing a column absent from the sessions schema', () => {
+    const cancelSessionSql = functionSql('admin_cancel_session')
+
+    expect(cancelSessionSql).toContain('UPDATE public.sessions')
+    expect(cancelSessionSql).not.toMatch(/UPDATE public\.sessions[\s\S]*updated_at\s*=/i)
   })
 })
