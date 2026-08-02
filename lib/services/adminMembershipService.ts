@@ -69,9 +69,29 @@ type RpcError = {
   message?: string
 }
 
+export type RpcPayload = {
+  p_student_id: string
+  p_membership_plan_id: string | null
+  p_start_date: string
+  p_period_count: number
+  p_origin: 'paid' | 'gift'
+  p_gift_classes: number | null
+  p_gift_end_date: string | null
+  p_total_amount: number
+  p_payment_amount: number
+  p_payment_type: MembershipPaymentType | null
+  p_discount_type: MembershipDiscountType | null
+  p_discount_value: number | null
+  p_notes: string | null
+  p_idempotency_key: string
+}
+
 type RpcClient = {
-  rpc: (...args: any[]) => PromiseLike<{
-    data: unknown
+  rpc: (
+    functionName: 'admin_create_student_membership_cycles',
+    payload: RpcPayload,
+  ) => PromiseLike<{
+    data: CreatedMembershipCycle[] | null
     error: RpcError | null
   }>
 }
@@ -107,5 +127,9 @@ export async function createStudentMembershipCycles(
     throw new Error(error.message || 'No se pudieron crear las membresias.')
   }
 
-  return (data ?? []) as CreatedMembershipCycle[]
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error('La asignacion no devolvio membresias.')
+  }
+
+  return data
 }

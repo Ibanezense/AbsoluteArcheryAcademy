@@ -5,7 +5,7 @@ import {
 } from '@/lib/services/adminMembershipService'
 
 function rpcClient(result: {
-  data: unknown
+  data: CreatedMembershipCycle[] | null
   error: { message?: string } | null
 }) {
   return {
@@ -56,7 +56,10 @@ describe('createStudentMembershipCycles', () => {
   })
 
   it('normalizes a gift cycle to one free period and null optionals', async () => {
-    const client = rpcClient({ data: [], error: null })
+    const client = rpcClient({
+      data: [{ id: 'gift-membership' }] as CreatedMembershipCycle[],
+      error: null,
+    })
 
     await createStudentMembershipCycles(client, {
       origin: 'gift',
@@ -89,7 +92,10 @@ describe('createStudentMembershipCycles', () => {
   })
 
   it('generates one idempotency key per invocation when omitted', async () => {
-    const client = rpcClient({ data: [], error: null })
+    const client = rpcClient({
+      data: [{ id: 'generated-membership' }] as CreatedMembershipCycle[],
+      error: null,
+    })
     const randomUUID = vi
       .spyOn(globalThis.crypto, 'randomUUID')
       .mockReturnValue('00000000-0000-4000-8000-000000000003')
@@ -126,5 +132,35 @@ describe('createStudentMembershipCycles', () => {
         idempotencyKey: '00000000-0000-4000-8000-000000000004',
       }),
     ).rejects.toThrow('Plan inactivo')
+  })
+
+  it('rejects a null successful response', async () => {
+    const client = rpcClient({ data: null, error: null })
+
+    await expect(
+      createStudentMembershipCycles(client, {
+        origin: 'gift',
+        studentId: 'student-1',
+        startDate: '2026-10-01',
+        giftClasses: 1,
+        giftEndDate: '2026-10-31',
+        idempotencyKey: '00000000-0000-4000-8000-000000000005',
+      }),
+    ).rejects.toThrow('La asignacion no devolvio membresias.')
+  })
+
+  it('rejects an empty successful response', async () => {
+    const client = rpcClient({ data: [], error: null })
+
+    await expect(
+      createStudentMembershipCycles(client, {
+        origin: 'gift',
+        studentId: 'student-1',
+        startDate: '2026-10-01',
+        giftClasses: 1,
+        giftEndDate: '2026-10-31',
+        idempotencyKey: '00000000-0000-4000-8000-000000000006',
+      }),
+    ).rejects.toThrow('La asignacion no devolvio membresias.')
   })
 })
