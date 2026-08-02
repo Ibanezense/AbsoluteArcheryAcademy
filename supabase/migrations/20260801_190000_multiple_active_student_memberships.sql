@@ -1361,4 +1361,374 @@ REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.admin_cancel_booking(
+  p_booking_id uuid,
+  p_refund boolean DEFAULT true
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_booking public.bookings;
+  v_balance_after integer;
+  v_refunded boolean := false;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  SELECT * INTO v_booking
+  FROM public.bookings
+  WHERE id = p_booking_id
+  FOR UPDATE;
+
+  IF v_booking IS NULL THEN
+    RAISE EXCEPTION 'Reserva no encontrada';
+  END IF;
+
+  IF v_booking.status = 'cancelled' THEN
+    RETURN json_build_object(
+      'success', true,
+      'booking_id', p_booking_id,
+      'refunded', false,
+      'message', 'Reserva ya cancelada'
+    );
+  END IF;
+
+  IF v_booking.status NOT IN ('reserved', 'attended', 'no_show') THEN
+    RAISE EXCEPTION 'La reserva no puede cancelarse desde su estado actual';
+  END IF;
+
+  IF p_refund
+    AND v_booking.active_membership_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.student_credit_ledger scl
+      WHERE scl.booking_id = p_booking_id
+        AND scl.student_membership_id = v_booking.active_membership_id
+        AND scl.movement_type = 'attendance_consumed'
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.student_credit_ledger scl
+      WHERE scl.booking_id = p_booking_id
+        AND scl.student_membership_id = v_booking.active_membership_id
+        AND scl.movement_type = 'booking_cancelled_refund'
+    )
+  THEN
+    UPDATE public.student_memberships
+    SET
+      classes_used = GREATEST(classes_used - 1, 0),
+      classes_remaining = classes_remaining + 1,
+      status = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND (
+            expiration_reason = 'no_classes_remaining'
+            OR (status = 'consumed' AND classes_remaining <= 0)
+          )
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+          THEN 'active'
+        ELSE status
+      END,
+      expired_at = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND (
+            expiration_reason = 'no_classes_remaining'
+            OR (status = 'consumed' AND classes_remaining <= 0)
+          )
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+          THEN NULL
+        ELSE expired_at
+      END,
+      expiration_reason = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND (
+            expiration_reason = 'no_classes_remaining'
+            OR (status = 'consumed' AND classes_remaining <= 0)
+          )
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+          THEN NULL
+        ELSE expiration_reason
+      END,
+      updated_at = now()
+    WHERE id = v_booking.active_membership_id
+    RETURNING classes_remaining INTO v_balance_after;
+
+    INSERT INTO public.student_credit_ledger (
+      student_id,
+      student_membership_id,
+      booking_id,
+      movement_type,
+      delta,
+      balance_after,
+      reason,
+      performed_by_profile_id,
+      created_at
+    )
+    VALUES (
+      v_booking.student_id,
+      v_booking.active_membership_id,
+      v_booking.id,
+      'booking_cancelled_refund',
+      1,
+      v_balance_after,
+      'Cancelacion admin posterior a asistencia; credito restaurado',
+      v_actor_id,
+      now()
+    );
+
+    v_refunded := true;
+    PERFORM public.sync_student_membership_operational_status(v_booking.student_id);
+  ELSIF v_booking.active_membership_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.student_credit_ledger scl
+      WHERE scl.booking_id = p_booking_id
+        AND scl.student_membership_id = v_booking.active_membership_id
+        AND scl.movement_type IN ('booking_cancelled_no_refund', 'booking_cancelled_refund')
+    )
+  THEN
+    INSERT INTO public.student_credit_ledger (
+      student_id,
+      student_membership_id,
+      booking_id,
+      movement_type,
+      delta,
+      balance_after,
+      reason,
+      performed_by_profile_id,
+      created_at
+    )
+    SELECT
+      v_booking.student_id,
+      v_booking.active_membership_id,
+      v_booking.id,
+      'booking_cancelled_no_refund',
+      0,
+      sm.classes_remaining,
+      'Cancelacion admin sin devolucion porque no habia credito consumido',
+      v_actor_id,
+      now()
+    FROM public.student_memberships sm
+    WHERE sm.id = v_booking.active_membership_id;
+  END IF;
+
+  UPDATE public.bookings
+  SET
+    status = 'cancelled',
+    cancelled_by_profile_id = v_actor_id,
+    cancelled_by_role = 'admin',
+    cancelled_at = now(),
+    updated_at = now()
+  WHERE id = p_booking_id;
+
+  RETURN json_build_object(
+    'success', true,
+    'booking_id', p_booking_id,
+    'refunded', v_refunded,
+    'message', CASE
+      WHEN v_refunded THEN 'Reserva cancelada y credito restaurado'
+      ELSE 'Reserva cancelada'
+    END
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', SQLERRM,
+      'booking_id', p_booking_id
+    );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_cancel_booking(uuid, boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_cancel_booking(uuid, boolean) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_cancel_booking(uuid, boolean) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.admin_cancel_session(
+  p_session uuid,
+  p_refund boolean DEFAULT true
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_session public.sessions;
+  v_booking public.bookings;
+  v_balance_after integer;
+  v_cancelled_count integer := 0;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'No autenticado';
+  END IF;
+
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  SELECT * INTO v_session
+  FROM public.sessions
+  WHERE id = p_session
+  FOR UPDATE;
+
+  IF v_session IS NULL THEN
+    RAISE EXCEPTION 'Sesion no encontrada';
+  END IF;
+
+  FOR v_booking IN
+    SELECT *
+    FROM public.bookings
+    WHERE session_id = p_session
+      AND status IN ('reserved', 'attended', 'no_show')
+    FOR UPDATE
+  LOOP
+    IF p_refund
+      AND v_booking.active_membership_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.student_credit_ledger scl
+        WHERE scl.booking_id = v_booking.id
+          AND scl.student_membership_id = v_booking.active_membership_id
+          AND scl.movement_type = 'attendance_consumed'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.student_credit_ledger scl
+        WHERE scl.booking_id = v_booking.id
+          AND scl.student_membership_id = v_booking.active_membership_id
+          AND scl.movement_type = 'booking_cancelled_refund'
+      )
+    THEN
+      UPDATE public.student_memberships
+      SET
+        classes_used = GREATEST(classes_used - 1, 0),
+        classes_remaining = classes_remaining + 1,
+        status = CASE
+          WHEN status IN ('expired', 'consumed')
+            AND (
+              expiration_reason = 'no_classes_remaining'
+              OR (status = 'consumed' AND classes_remaining <= 0)
+            )
+            AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+            THEN 'active'
+          ELSE status
+        END,
+        expired_at = CASE
+          WHEN status IN ('expired', 'consumed')
+            AND (
+              expiration_reason = 'no_classes_remaining'
+              OR (status = 'consumed' AND classes_remaining <= 0)
+            )
+            AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+            THEN NULL
+          ELSE expired_at
+        END,
+        expiration_reason = CASE
+          WHEN status IN ('expired', 'consumed')
+            AND (
+              expiration_reason = 'no_classes_remaining'
+              OR (status = 'consumed' AND classes_remaining <= 0)
+            )
+            AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+            THEN NULL
+          ELSE expiration_reason
+        END,
+        updated_at = now()
+      WHERE id = v_booking.active_membership_id
+      RETURNING classes_remaining INTO v_balance_after;
+
+      INSERT INTO public.student_credit_ledger (
+        student_id,
+        student_membership_id,
+        booking_id,
+        movement_type,
+        delta,
+        balance_after,
+        reason,
+        performed_by_profile_id,
+        created_at
+      )
+      VALUES (
+        v_booking.student_id,
+        v_booking.active_membership_id,
+        v_booking.id,
+        'booking_cancelled_refund',
+        1,
+        v_balance_after,
+        'Cancelacion de turno admin posterior a asistencia; credito restaurado',
+        v_actor_id,
+        now()
+      );
+
+      PERFORM public.sync_student_membership_operational_status(v_booking.student_id);
+    ELSIF v_booking.active_membership_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.student_credit_ledger scl
+        WHERE scl.booking_id = v_booking.id
+          AND scl.student_membership_id = v_booking.active_membership_id
+          AND scl.movement_type IN ('booking_cancelled_no_refund', 'booking_cancelled_refund')
+      )
+    THEN
+      INSERT INTO public.student_credit_ledger (
+        student_id,
+        student_membership_id,
+        booking_id,
+        movement_type,
+        delta,
+        balance_after,
+        reason,
+        performed_by_profile_id,
+        created_at
+      )
+      SELECT
+        v_booking.student_id,
+        v_booking.active_membership_id,
+        v_booking.id,
+        'booking_cancelled_no_refund',
+        0,
+        sm.classes_remaining,
+        'Cancelacion de turno admin sin devolucion porque no habia credito consumido',
+        v_actor_id,
+        now()
+      FROM public.student_memberships sm
+      WHERE sm.id = v_booking.active_membership_id;
+    END IF;
+
+    UPDATE public.bookings
+    SET
+      status = 'cancelled',
+      cancelled_by_profile_id = v_actor_id,
+      cancelled_by_role = 'admin',
+      cancelled_at = now(),
+      updated_at = now()
+    WHERE id = v_booking.id;
+
+    v_cancelled_count := v_cancelled_count + 1;
+  END LOOP;
+
+  UPDATE public.sessions
+  SET
+    status = 'cancelled',
+    updated_at = now()
+  WHERE id = p_session;
+
+  RETURN v_cancelled_count;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_cancel_session(uuid, boolean) TO authenticated, service_role;
+
 COMMIT;

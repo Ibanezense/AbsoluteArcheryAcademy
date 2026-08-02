@@ -8,6 +8,12 @@ const migrationPath = join(
   'migrations',
   '20260601_130000_booking_cancellation_business_rule.sql',
 )
+const multipleMembershipsPath = join(
+  process.cwd(),
+  'supabase',
+  'migrations',
+  '20260801_190000_multiple_active_student_memberships.sql',
+)
 
 function migrationSql() {
   expect(existsSync(migrationPath)).toBe(true)
@@ -86,5 +92,32 @@ describe('20260601 booking cancellation business rule migration', () => {
     expect(rpc).toContain("movement_type = 'booking_cancelled_refund'")
     expect(rpc).toContain('NOT EXISTS')
     expect(rpc).toContain("cancelled_by_role = 'admin'")
+  })
+})
+
+describe('multiple membership refund restoration', () => {
+  it('reactivates only a still-valid linked cycle closed because its balance reached zero', () => {
+    const sql = readFileSync(multipleMembershipsPath, 'utf8')
+
+    for (const functionName of ['admin_cancel_booking', 'admin_cancel_session']) {
+      const rpc = functionSql(sql, functionName)
+
+      expect(rpc).toContain('WHERE id = v_booking.active_membership_id')
+      expect(rpc).toMatch(
+        /status\s*=\s*CASE[\s\S]*status IN \('expired', 'consumed'\)[\s\S]*expiration_reason = 'no_classes_remaining'[\s\S]*end_date >= \(now\(\) AT TIME ZONE 'America\/Lima'\)::date[\s\S]*THEN 'active'[\s\S]*ELSE status/i,
+      )
+      expect(rpc).toMatch(
+        /expired_at\s*=\s*CASE[\s\S]*THEN NULL[\s\S]*ELSE expired_at/i,
+      )
+      expect(rpc).toMatch(
+        /expiration_reason\s*=\s*CASE[\s\S]*THEN NULL[\s\S]*ELSE expiration_reason/i,
+      )
+      expect(rpc).toContain(
+        'PERFORM public.sync_student_membership_operational_status(v_booking.student_id)',
+      )
+      expect(rpc).toContain(
+        'scl.student_membership_id = v_booking.active_membership_id',
+      )
+    }
   })
 })
