@@ -107,6 +107,27 @@ describe('admin multiple membership cycles', () => {
     }
   })
 
+  it('previews corrective deletion before confirmation and prevents duplicate requests', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const deleteBlock = page.slice(
+      page.indexOf('async function deleteMembership'),
+      page.indexOf('async function savePlanEditor'),
+    )
+
+    expect(deleteBlock.indexOf("supabase.rpc('admin_get_membership_deletion_preview'")).toBeLessThan(
+      deleteBlock.indexOf('await confirm('),
+    )
+    expect(deleteBlock.indexOf('await confirm(')).toBeLessThan(
+      deleteBlock.indexOf("supabase.rpc('admin_delete_student_membership'"),
+    )
+    expect(deleteBlock).toContain('if (previewError)')
+    expect(deleteBlock).toContain('if (!previewData.can_delete)')
+    expect(deleteBlock).toContain('if (!deleteData?.success)')
+    expect(deleteBlock).toContain('membershipPreviewingId')
+    expect(deleteBlock).toContain('membershipDeletingId')
+    expect(page).toContain('disabled={isSaving || isPreviewing || isDeleting}')
+  })
+
   it('precomputes display statuses instead of summarizing inside every row', () => {
     const page = source('app/admin/membresias/page.tsx')
 

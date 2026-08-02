@@ -33,7 +33,13 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys, useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershipStudents'
-import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
+import {
+  buildMembershipDeletionConfirmation,
+  formatMembershipDeletionSuccess,
+  isPersistedMembership,
+  type MembershipDeletionPreview,
+  type MembershipDeletionResult,
+} from '@/lib/utils/adminMembershipDeletion'
 import {
   buildMembershipCyclePreview,
   getLimaDateKey,
@@ -689,6 +695,7 @@ function MembershipSaleForm({
 function MembershipEditPanel({
   editor,
   isSaving,
+  isPreviewing,
   isDeleting,
   canDelete,
   onPatch,
@@ -698,6 +705,7 @@ function MembershipEditPanel({
 }: {
   editor: MembershipEditorState
   isSaving: boolean
+  isPreviewing: boolean
   isDeleting: boolean
   canDelete: boolean
   onPatch: (patch: Partial<MembershipEditorState>) => void
@@ -712,10 +720,10 @@ function MembershipEditPanel({
           <p className="text-xs font-black uppercase tracking-[0.2em] text-accent">Edicion segura</p>
           <h3 className="mt-1 text-lg font-black text-slate-950">Ajustar membresia seleccionada</h3>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Solo se puede eliminar una membresia vencida, historica, cancelada o consumida.
+            El servidor verificara que no exista historial de asistencia antes de eliminar.
           </p>
         </div>
-        <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600">
+        <button type="button" onClick={onCancel} disabled={isSaving || isPreviewing || isDeleting} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-60">
           Cerrar
         </button>
       </div>
@@ -771,14 +779,14 @@ function MembershipEditPanel({
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <button type="button" onClick={onSave} disabled={isSaving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white shadow-[0_16px_35px_rgba(249,115,22,0.22)] disabled:opacity-60">
+        <button type="button" onClick={onSave} disabled={isSaving || isPreviewing || isDeleting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white shadow-[0_16px_35px_rgba(249,115,22,0.22)] disabled:cursor-not-allowed disabled:opacity-60">
           <Save className="h-4 w-4" />
           {isSaving ? 'Guardando...' : 'Guardar cambios'}
         </button>
         {canDelete && (
-          <button type="button" onClick={onDelete} disabled={isDeleting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-5 text-sm font-black text-rose-600 disabled:opacity-60">
+          <button type="button" onClick={onDelete} disabled={isSaving || isPreviewing || isDeleting} aria-busy={isPreviewing || isDeleting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-white px-5 text-sm font-black text-rose-600 disabled:cursor-not-allowed disabled:opacity-60">
             <Trash2 className="h-4 w-4" />
-            {isDeleting ? 'Eliminando...' : 'Eliminar vencida'}
+            {isPreviewing ? 'Verificando...' : isDeleting ? 'Eliminando...' : 'Eliminar membresia'}
           </button>
         )}
       </div>
@@ -794,6 +802,7 @@ function MembershipsActiveTab({
   sort,
   editingMembership,
   savingMembership,
+  previewingMembershipId,
   deletingMembershipId,
   onSearchChange,
   onStatusFilterChange,
@@ -812,6 +821,7 @@ function MembershipsActiveTab({
   sort: MembershipSort
   editingMembership: MembershipEditorState | null
   savingMembership: boolean
+  previewingMembershipId: string | null
   deletingMembershipId: string | null
   onSearchChange: (value: string) => void
   onStatusFilterChange: (value: ActiveMembershipStatusFilter) => void
@@ -912,8 +922,9 @@ function MembershipsActiveTab({
         <MembershipEditPanel
           editor={editingMembership}
           isSaving={savingMembership}
+          isPreviewing={previewingMembershipId === editingMembership.id}
           isDeleting={deletingMembershipId === editingMembership.id}
-          canDelete={canDeleteExpiredMembership(editingMembership)}
+          canDelete={isPersistedMembership(editingMembership)}
           onPatch={onPatchEditor}
           onSave={onSaveEditor}
           onCancel={onCancelEditor}
@@ -941,7 +952,9 @@ function MembershipsActiveTab({
               {filteredMemberships.map((membership) => {
                 const status = membershipStatusesById[membership.id] || membershipOperationalStatus(membership)
                 const usage = classUsagePercent(membership)
-                const canDeleteMembership = canDeleteExpiredMembership(membership)
+                const canDeleteMembership = isPersistedMembership(membership)
+                const isPreviewing = previewingMembershipId === membership.id
+                const isDeleting = deletingMembershipId === membership.id
 
                 return (
                   <tr key={membership.id} className="bg-white align-top transition hover:bg-orange-50/40">
@@ -977,8 +990,8 @@ function MembershipsActiveTab({
                         <button type="button" onClick={() => onRenew(membership)} disabled={assignmentLocked} className="rounded-xl bg-accent px-3 py-2 text-xs font-black text-white disabled:opacity-60">Renovar</button>
                         <button type="button" onClick={() => onEdit(membership)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">Editar</button>
                         {canDeleteMembership && (
-                          <button type="button" onClick={() => onDelete(membership)} disabled={deletingMembershipId === membership.id} className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60">
-                            {deletingMembershipId === membership.id ? 'Eliminando...' : 'Eliminar vencida'}
+                          <button type="button" onClick={() => onDelete(membership)} disabled={isPreviewing || isDeleting} aria-label={`Eliminar membresia ${membership.custom_name}`} aria-busy={isPreviewing || isDeleting} className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60">
+                            {isPreviewing ? 'Verificando...' : isDeleting ? 'Eliminando...' : 'Eliminar membresia'}
                           </button>
                         )}
                       </div>
@@ -993,7 +1006,9 @@ function MembershipsActiveTab({
         <div className="grid gap-3 p-4 lg:hidden">
           {filteredMemberships.map((membership) => {
             const status = membershipStatusesById[membership.id] || membershipOperationalStatus(membership)
-            const canDeleteMembership = canDeleteExpiredMembership(membership)
+            const canDeleteMembership = isPersistedMembership(membership)
+            const isPreviewing = previewingMembershipId === membership.id
+            const isDeleting = deletingMembershipId === membership.id
 
             return (
               <article key={membership.id} className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
@@ -1015,8 +1030,8 @@ function MembershipsActiveTab({
                   <button type="button" onClick={() => onRenew(membership)} disabled={assignmentLocked} className="rounded-2xl bg-accent px-3 py-3 text-sm font-black text-white disabled:opacity-60">Renovar</button>
                   <button type="button" onClick={() => onEdit(membership)} className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-black text-slate-700">Editar</button>
                   {canDeleteMembership && (
-                    <button type="button" onClick={() => onDelete(membership)} disabled={deletingMembershipId === membership.id} className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-black text-rose-700 disabled:opacity-60">
-                      {deletingMembershipId === membership.id ? 'Eliminando...' : 'Eliminar vencida'}
+                    <button type="button" onClick={() => onDelete(membership)} disabled={isPreviewing || isDeleting} aria-label={`Eliminar membresia ${membership.custom_name}`} aria-busy={isPreviewing || isDeleting} className="rounded-2xl border border-rose-200 bg-white px-3 py-3 text-sm font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60">
+                      {isPreviewing ? 'Verificando...' : isDeleting ? 'Eliminando...' : 'Eliminar membresia'}
                     </button>
                   )}
                 </div>
@@ -1298,6 +1313,7 @@ export default function AdminMembershipsPage() {
   const saleRef = useRef<HTMLDivElement | null>(null)
   const assignmentIdempotencyKeyRef = useRef<string | null>(null)
   const assignmentSubmissionLockRef = useRef(false)
+  const membershipDeletionLockRef = useRef(false)
 
   const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMembershipPlans()
   const {
@@ -1318,6 +1334,7 @@ export default function AdminMembershipsPage() {
   const [membershipSort, setMembershipSort] = useState<MembershipSort>('expiration')
   const [membershipEditor, setMembershipEditor] = useState<MembershipEditorState | null>(null)
   const [membershipSaving, setMembershipSaving] = useState(false)
+  const [membershipPreviewingId, setMembershipPreviewingId] = useState<string | null>(null)
   const [membershipDeletingId, setMembershipDeletingId] = useState<string | null>(null)
   const [planFilter, setPlanFilter] = useState<PlanFilter>('all')
   const [planEditor, setPlanEditor] = useState<PlanEditorState | null>(null)
@@ -1662,40 +1679,55 @@ export default function AdminMembershipsPage() {
   }
 
   async function deleteMembership(membership: AdminStudentMembership) {
-    if (membershipDeletingId) return
-    if (!canDeleteExpiredMembership(membership)) {
-      toast.push({ message: 'Solo se puede eliminar una membresia vencida, historica, cancelada o consumida.', type: 'error' })
+    if (membershipDeletionLockRef.current || membershipPreviewingId || membershipDeletingId) return
+    if (!isPersistedMembership(membership)) {
+      toast.push({ message: 'No se encontro una membresia guardada para eliminar.', type: 'error' })
       return
     }
 
-    const accepted = await confirm(
-      [
-        `Se eliminara la membresia ${membership.custom_name}.`,
-        'Esta accion solo aplica a ciclos vencidos o cerrados y no elimina la membresia activa nueva.',
-        'Las reservas historicas conservaran al alumno y dejaran de apuntar a este ciclo eliminado.',
-      ].join('\n'),
-      {
-        title: 'Eliminar membresia vencida',
-        description: 'Usalo para limpiar ciclos antiguos duplicados o vencidos.',
-        confirmLabel: 'Eliminar vencida',
-        cancelLabel: 'Cancelar',
-        tone: 'danger',
-      },
-    )
-
-    if (!accepted) return
-
-    setMembershipDeletingId(membership.id)
+    membershipDeletionLockRef.current = true
+    setMembershipPreviewingId(membership.id)
 
     try {
-      const { data, error } = await supabase.rpc('admin_delete_student_membership', {
+      const { data: previewData, error: previewError } = await supabase.rpc('admin_get_membership_deletion_preview', {
         p_membership_id: membership.id,
       })
 
-      if (error) throw error
-      if (!data?.success) throw new Error(data?.error || 'No se pudo eliminar la membresia.')
+      if (previewError) {
+        toast.push({ message: previewError.message || 'No se pudo verificar la membresia.', type: 'error' })
+        return
+      }
+      if (!previewData) {
+        toast.push({ message: 'El servidor no devolvio la verificacion de la membresia.', type: 'error' })
+        return
+      }
+      if (!previewData.can_delete) {
+        toast.push({ message: previewData.reason || 'El servidor no permite eliminar esta membresia.', type: 'error' })
+        return
+      }
 
-      toast.push({ message: 'Membresia eliminada.', type: 'success' })
+      const accepted = await confirm(
+        buildMembershipDeletionConfirmation(membership.custom_name, previewData as MembershipDeletionPreview),
+        {
+          title: 'Eliminar membresia',
+          description: 'Esta accion es irreversible.',
+          confirmLabel: 'Eliminar membresia',
+          cancelLabel: 'Cancelar',
+          tone: 'danger',
+        },
+      )
+
+      if (!accepted) return
+
+      setMembershipDeletingId(membership.id)
+      const { data: deleteData, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
+        p_membership_id: membership.id,
+      })
+
+      if (deleteError) throw deleteError
+      if (!deleteData?.success) throw new Error(deleteData?.error || 'No se pudo eliminar la membresia.')
+
+      toast.push({ message: formatMembershipDeletionSuccess(deleteData as MembershipDeletionResult), type: 'success' })
       if (membershipEditor?.id === membership.id) setMembershipEditor(null)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
@@ -1708,6 +1740,8 @@ export default function AdminMembershipsPage() {
     } catch (error: any) {
       toast.push({ message: error.message || 'No se pudo eliminar la membresia.', type: 'error' })
     } finally {
+      membershipDeletionLockRef.current = false
+      setMembershipPreviewingId(null)
       setMembershipDeletingId(null)
     }
   }
@@ -2035,6 +2069,7 @@ export default function AdminMembershipsPage() {
           sort={membershipSort}
           editingMembership={membershipEditor}
           savingMembership={membershipSaving}
+          previewingMembershipId={membershipPreviewingId}
           deletingMembershipId={membershipDeletingId}
           onSearchChange={setMembershipSearch}
           onStatusFilterChange={setMembershipStatusFilter}
