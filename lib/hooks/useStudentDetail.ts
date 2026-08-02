@@ -164,7 +164,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
     queryKey: [...studentKeys.detail(studentId), serviceDate],
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -264,6 +264,13 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
+          supabase
+            .from('bookings')
+            .select('id,session_id,active_membership_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions!inner(start_at,end_at)')
+            .eq('student_id', studentId)
+            .eq('status', 'reserved')
+            .gt('sessions.start_at', new Date().toISOString())
+            .order('start_at', { referencedTable: 'sessions', ascending: true }),
           supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
           supabase
             .from('student_weekly_attendance')
@@ -277,6 +284,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       if (paymentsError) throw paymentsError
       if (ledgerError) throw ledgerError
       if (bookingsError) throw bookingsError
+      if (upcomingBookingsError) throw upcomingBookingsError
       if (commitmentsError) throw commitmentsError
       if (weeklyAttendanceError) throw weeklyAttendanceError
       if (!studentRow) throw new Error('Alumno no encontrado')
@@ -304,6 +312,10 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       const selfProfile = Array.isArray(typedStudent.self_profile)
         ? typedStudent.self_profile[0] || null
         : typedStudent.self_profile || null
+      const bookingsById = new Map<string, any>()
+      for (const booking of [...(bookings || []), ...(upcomingBookings || [])] as any[]) {
+        bookingsById.set(booking.id, booking)
+      }
 
       return {
         id: typedStudent.id,
@@ -374,7 +386,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           reward_credits: payment.reward_credits || 0,
         })),
         ledger: (ledger || []) as StudentLedgerSummary[],
-        bookings: ((bookings || []) as any[]).map((booking) => ({
+        bookings: [...bookingsById.values()].map((booking) => ({
           id: booking.id,
           session_id: booking.session_id,
           active_membership_id: booking.active_membership_id || null,

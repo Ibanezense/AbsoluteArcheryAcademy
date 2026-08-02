@@ -36,6 +36,7 @@ import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershi
 import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
 import {
   buildMembershipCyclePreview,
+  getLimaDateKey,
   suggestNextMembershipStart,
   summarizeMemberships,
   type MembershipCyclePreview,
@@ -98,21 +99,15 @@ type ActiveMembershipStatusFilter = 'all' | 'active' | 'expiring' | 'expired' | 
 type MembershipSort = 'recent' | 'expiration' | 'balance'
 type PlanFilter = 'all' | 'active' | 'inactive'
 
-function getTodayLocalISODate() {
-  const now = new Date()
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 10)
-}
-
 function emptyAssignmentForm(): AssignmentFormState {
   return {
     origin: 'paid',
     student_id: '',
     membership_plan_id: '',
-    start_date: getTodayLocalISODate(),
+    start_date: getLimaDateKey(),
     period_count: '1',
     gift_classes: '1',
-    gift_end_date: getTodayLocalISODate(),
+    gift_end_date: getLimaDateKey(),
     payment_type: 'manual',
     discount_type: 'none',
     discount_value: '',
@@ -226,7 +221,7 @@ function addDaysISODate(startDate: string, days: number | null | undefined) {
 
 function daysUntil(date: string | null | undefined) {
   if (!date) return null
-  const today = new Date(`${getTodayLocalISODate()}T00:00:00-05:00`).getTime()
+  const today = new Date(`${getLimaDateKey()}T00:00:00-05:00`).getTime()
   const target = new Date(`${date}T00:00:00-05:00`).getTime()
   return Math.ceil((target - today) / 86400000)
 }
@@ -271,8 +266,8 @@ function classUsagePercent(membership: AdminStudentMembership) {
 }
 
 function isSameMonth(date: string) {
-  const current = getTodayLocalISODate().slice(0, 7)
-  return date.slice(0, 7) === current
+  const current = getLimaDateKey().slice(0, 7)
+  return getLimaDateKey(new Date(date)).slice(0, 7) === current
 }
 
 function currentMembershipForStudent(
@@ -287,7 +282,7 @@ function currentMembershipForStudent(
       ...membership,
       status: membership.status === 'draft' ? 'historical' : membership.status,
     })),
-    getTodayLocalISODate(),
+    getLimaDateKey(),
   ).currentMembershipId
 
   return studentMemberships.find((membership) => membership.id === currentId)
@@ -846,7 +841,7 @@ function MembershipsActiveTab({
           ...membership,
           status: membership.status === 'draft' ? 'historical' : membership.status,
         })),
-        getTodayLocalISODate(),
+        getLimaDateKey(),
       ).statusesById)
     }
 
@@ -1449,7 +1444,7 @@ export default function AdminMembershipsPage() {
             ...membership,
             status: membership.status === 'draft' ? 'historical' : membership.status,
           })),
-          getTodayLocalISODate(),
+          getLimaDateKey(),
         )
         return {
           ...current,
@@ -1613,7 +1608,7 @@ export default function AdminMembershipsPage() {
       origin: 'paid',
       student_id: student.id,
       membership_plan_id: membership.membership_plan_id || current.membership_plan_id,
-      start_date: suggestNextMembershipStart(studentMemberships, getTodayLocalISODate()),
+      start_date: suggestNextMembershipStart(studentMemberships, getLimaDateKey()),
     }))
     scrollToSaleForm()
   }

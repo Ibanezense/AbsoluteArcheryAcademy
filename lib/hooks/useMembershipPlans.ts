@@ -123,14 +123,25 @@ export function useAdminStudentMemberships() {
   return useQuery({
     queryKey: membershipPlanKeys.allMemberships(),
     queryFn: async (): Promise<AdminStudentMembership[]> => {
-      const { data, error } = await supabase
-        .from('student_memberships')
-        .select(studentMembershipSelect)
-        .order('created_at', { ascending: false })
+      const pageSize = 1000
+      const memberships: AdminStudentMembership[] = []
 
-      if (error) throw error
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from('student_memberships')
+          .select(studentMembershipSelect)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, from + pageSize - 1)
 
-      return ((data || []) as any[]).map(mapAdminStudentMembership)
+        if (error) throw error
+
+        const rows = (data || []) as any[]
+        memberships.push(...rows.map(mapAdminStudentMembership))
+        if (rows.length < pageSize) break
+      }
+
+      return memberships
     },
   })
 }

@@ -182,6 +182,12 @@ describe('multiple active student memberships migration', () => {
     expectRestrictedRpc('get_weekly_attendance_review')
     expectRestrictedRpc('admin_mark_weekly_no_show')
     expectRestrictedRpc('get_admin_membership_reservation_commitments')
+    expectRestrictedRpc('admin_update_student_membership')
+    expectRestrictedRpc('admin_approve_membership_renewal_request')
+    expectRestrictedRpc('get_student_dashboard')
+    expectRestrictedRpc('get_my_children')
+    expectRestrictedRpc('get_student_class_cards')
+    expectRestrictedRpc('get_admin_quick_booking_students')
   })
 
   it('aggregates unresolved reservation commitments in one secure admin RPC', () => {
@@ -208,5 +214,62 @@ describe('multiple active student memberships migration', () => {
 
     expect(cancelSessionSql).toContain('UPDATE public.sessions')
     expect(cancelSessionSql).not.toMatch(/UPDATE public\.sessions[\s\S]*updated_at\s*=/i)
+  })
+
+  it('updates only the selected membership without closing active sibling cycles', () => {
+    const updateSql = functionSql('admin_update_student_membership')
+
+    expect(updateSql).toContain('RETURNS public.student_memberships')
+    expect(updateSql).toContain('WHERE id = p_membership_id')
+    expect(updateSql).toContain('RETURNING * INTO v_updated')
+    expect(updateSql).toContain('public.sync_student_membership_operational_status(v_membership.student_id)')
+    expect(updateSql).not.toMatch(/UPDATE public\.student_memberships[\s\S]*id <> v_membership\.id[\s\S]*status = 'active'/i)
+  })
+
+  it('approves a renewal as a separate idempotent paid cycle', () => {
+    const approvalSql = functionSql('admin_approve_membership_renewal_request')
+
+    expect(approvalSql).toContain("v_request.status NOT IN ('pending_payment', 'pending_validation')")
+    expect(approvalSql).toContain('INSERT INTO public.student_memberships')
+    expect(approvalSql).toContain('membership_origin')
+    expect(approvalSql).toContain('assignment_batch_id')
+    expect(approvalSql).toContain("'paid'")
+    expect(approvalSql).toContain('INSERT INTO public.student_credit_ledger')
+    expect(approvalSql).toContain('INSERT INTO public.student_membership_payments')
+    expect(approvalSql).toContain("status = 'approved'")
+    expect(approvalSql).toContain('public.sync_student_membership_operational_status(v_request.student_id)')
+    expect(approvalSql).not.toMatch(/UPDATE public\.student_memberships[\s\S]*status = 'historical'/i)
+  })
+
+  it('overrides remaining read surfaces with Lima FIFO free balances', () => {
+    for (const functionName of [
+      'get_student_dashboard',
+      'get_my_children',
+      'get_student_class_cards',
+      'get_admin_quick_booking_students',
+    ]) {
+      const readSql = functionSql(functionName)
+
+      expect(readSql).toContain("AT TIME ZONE 'America/Lima'")
+      expect(readSql).toContain("b.status = 'reserved'")
+      expect(readSql).toMatch(/classes_remaining[\s\S]*reserved_count/i)
+      expect(readSql).toMatch(/ORDER BY[\s\S]*start_date ASC[\s\S]*created_at ASC[\s\S]*id ASC/i)
+      expect(readSql).not.toMatch(/start_date DESC/i)
+    }
+
+    expect(functionSql('get_student_dashboard')).toContain('public.resolve_accessible_student_id(p_student_id)')
+    expect(functionSql('get_my_children')).toContain('base.operational_status')
+    const classCardsSql = functionSql('get_student_class_cards')
+    expect(classCardsSql).toContain("'available'")
+    expect(classCardsSql).toMatch(/classes_total\s*-\s*LEAST\(sm\.classes_total,\s*COALESCE\(sm\.classes_remaining, 0\)\)[\s\S]*AS used_slots/i)
+    expect(classCardsSql).toContain('ON sm.used_slots + reserved.reservation_index = slot.card_index')
+    const quickBookingSql = functionSql('get_admin_quick_booking_students')
+    expect(quickBookingSql).toContain('WHERE COALESCE(s.is_active, true) = true')
+    expect(quickBookingSql).toContain("COALESCE(s.operational_status, 'active') = 'active'")
+  })
+
+  it('contains no remaining latest-migration sibling closure or descending membership priority', () => {
+    expect(sql).not.toMatch(/UPDATE public\.student_memberships[\s\S]{0,500}status\s*=\s*'historical'/i)
+    expect(sql).not.toMatch(/start_date DESC/i)
   })
 })
