@@ -123,9 +123,14 @@ describe('admin multiple membership cycles', () => {
     expect(deleteBlock).toContain('if (previewError)')
     expect(deleteBlock).toContain('if (!previewData.can_delete)')
     expect(deleteBlock).toContain('if (!deleteData?.success)')
+    expect(deleteBlock).toContain('parseMembershipDeletionPreview')
+    expect(deleteBlock).toContain('parseMembershipDeletionResult')
     expect(deleteBlock).toContain('membershipPreviewingId')
     expect(deleteBlock).toContain('membershipDeletingId')
     expect(page).toContain('disabled={isSaving || isPreviewing || isDeleting}')
+    expect(deleteBlock).toContain("queryKey: ['admin-dashboard-operational']")
+    expect(deleteBlock).toContain("queryKey: ['admin-student-search']")
+    expect(deleteBlock).toContain("queryKey: ['admin-membership-renewal-requests']")
   })
 
   it('precomputes display statuses instead of summarizing inside every row', () => {

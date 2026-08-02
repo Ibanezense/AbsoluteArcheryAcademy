@@ -112,4 +112,49 @@ describe('admin student membership queue', () => {
     expect(page).toContain('serviceDate')
     expect(page).not.toContain('const reservedByMembershipId = useMemo')
   })
+
+  it('uses the shared corrective deletion flow from student detail', () => {
+    const page = source('app/admin/alumnos/[id]/page.tsx')
+    const deleteBlock = page.slice(
+      page.indexOf('async function handleDeleteMembership'),
+      page.indexOf('if (isLoading)'),
+    )
+
+    expect(deleteBlock.indexOf("supabase.rpc('admin_get_membership_deletion_preview'")).toBeLessThan(
+      deleteBlock.indexOf('await confirm('),
+    )
+    expect(deleteBlock.indexOf('await confirm(')).toBeLessThan(
+      deleteBlock.indexOf("supabase.rpc('admin_delete_student_membership'"),
+    )
+    expect(deleteBlock).toContain('parseMembershipDeletionPreview')
+    expect(deleteBlock).toContain('parseMembershipDeletionResult')
+    expect(deleteBlock).toContain('buildMembershipDeletionConfirmation')
+    expect(deleteBlock).toContain('formatMembershipDeletionSuccess')
+    expect(deleteBlock).toContain('membershipDeletionLockRef')
+    expect(page).toContain('Esta accion es irreversible.')
+    expect(page).toContain('Eliminar membresia')
+    expect(page).toContain('membershipPreviewingId')
+    expect(page).not.toContain('canDeleteExpiredMembership')
+  })
+
+  it('invalidates all real membership correction consumers from student detail', () => {
+    const page = source('app/admin/alumnos/[id]/page.tsx')
+    const deleteBlock = page.slice(
+      page.indexOf('async function handleDeleteMembership'),
+      page.indexOf('if (isLoading)'),
+    )
+
+    for (const queryKey of [
+      "queryKey: ['admin-dashboard-operational']",
+      "queryKey: ['admin-student-search']",
+      "queryKey: ['admin-membership-renewal-requests']",
+      "queryKey: ['admin-students']",
+      "queryKey: ['admin-bookings']",
+      "queryKey: ['weekly-attendance-review']",
+    ]) {
+      expect(deleteBlock).toContain(queryKey)
+    }
+    expect(deleteBlock).toContain('membershipPlanKeys.all')
+    expect(deleteBlock).toContain('studentKeys.all')
+  })
 })

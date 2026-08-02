@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
@@ -36,11 +36,17 @@ import Avatar from '@/components/ui/Avatar'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
-import { useMembershipPlans, type MembershipPlan } from '@/lib/hooks/useMembershipPlans'
+import { membershipPlanKeys, useMembershipPlans, type MembershipPlan } from '@/lib/hooks/useMembershipPlans'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
-import { canDeleteExpiredMembership } from '@/lib/utils/adminMembershipDeletion'
+import {
+  buildMembershipDeletionConfirmation,
+  formatMembershipDeletionSuccess,
+  isPersistedMembership,
+  parseMembershipDeletionPreview,
+  parseMembershipDeletionResult,
+} from '@/lib/utils/adminMembershipDeletion'
 import {
   buildPaymentDocumentRows,
   filterAttendance,
@@ -419,6 +425,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const router = useRouter()
   const confirm = useConfirm()
   const toast = useToast()
+  const membershipDeletionLockRef = useRef(false)
   const detailQuery = useStudentDetail(params.id)
   const plansQuery = useMembershipPlans()
   const { data, isLoading, error } = detailQuery
@@ -430,6 +437,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [deleting, setDeleting] = useState(false)
   const [membershipEditor, setMembershipEditor] = useState<MembershipEditorState | null>(null)
   const [membershipSaving, setMembershipSaving] = useState(false)
+  const [membershipPreviewingId, setMembershipPreviewingId] = useState<string | null>(null)
   const [membershipDeletingId, setMembershipDeletingId] = useState<string | null>(null)
   const [profileForm, setProfileForm] = useState<ProfileFormState | null>(null)
   const [sportsForm, setSportsForm] = useState<SportsFormState | null>(null)
@@ -705,34 +713,70 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   }
 
   async function handleDeleteMembership(membership: StudentMembershipSummary) {
-    if (!data || membershipDeletingId) return
-    if (!canDeleteExpiredMembership(membership)) {
-      toast.push({ message: 'Solo se puede eliminar una membresia vencida, historica, cancelada o consumida.', type: 'error' })
+    if (!data || membershipDeletionLockRef.current || membershipPreviewingId || membershipDeletingId) return
+    if (!isPersistedMembership(membership)) {
+      toast.push({ message: 'No se encontro una membresia guardada para eliminar.', type: 'error' })
       return
     }
 
-    const accepted = await confirm(
-      'Se eliminara la membresia vencida seleccionada sin afectar la membresia activa nueva del alumno.',
-      { title: 'Eliminar membresia vencida', confirmLabel: 'Eliminar vencida', tone: 'danger' }
-    )
-
-    if (!accepted) return
+    membershipDeletionLockRef.current = true
+    setMembershipPreviewingId(membership.id)
 
     try {
+      const { data: rawPreviewData, error: previewError } = await supabase.rpc('admin_get_membership_deletion_preview', {
+        p_membership_id: membership.id,
+      })
+
+      if (previewError) {
+        toast.push({ message: previewError.message || 'No se pudo verificar la membresia.', type: 'error' })
+        return
+      }
+      const previewData = parseMembershipDeletionPreview(rawPreviewData)
+      if (!previewData.can_delete) {
+        toast.push({ message: previewData.reason || 'El servidor no permite eliminar esta membresia.', type: 'error' })
+        return
+      }
+
+      const accepted = await confirm(
+        buildMembershipDeletionConfirmation(membership.custom_name, previewData),
+        {
+          title: 'Eliminar membresia',
+          description: 'Esta accion es irreversible.',
+          confirmLabel: 'Eliminar membresia',
+          cancelLabel: 'Cancelar',
+          tone: 'danger',
+        },
+      )
+
+      if (!accepted) return
+
       setMembershipDeletingId(membership.id)
-      const { data: result, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
+      const { data: rawDeleteData, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
         p_membership_id: membership.id,
       })
 
       if (deleteError) throw deleteError
-      if (!result?.success) throw new Error(result?.error || 'No se pudo eliminar la membresia.')
+      const deleteData = parseMembershipDeletionResult(rawDeleteData)
+      if (!deleteData?.success) throw new Error(deleteData?.error || 'No se pudo eliminar la membresia.')
 
-      toast.push({ message: 'Membresia eliminada.', type: 'success' })
+      toast.push({ message: formatMembershipDeletionSuccess(deleteData), type: 'success' })
       if (membershipEditor?.id === membership.id) setMembershipEditor(null)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-student-search'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] }),
+      ])
       await refreshStudentData()
     } catch (membershipError: any) {
       toast.push({ message: membershipError.message || 'No se pudo eliminar la membresia.', type: 'error' })
     } finally {
+      membershipDeletionLockRef.current = false
+      setMembershipPreviewingId(null)
       setMembershipDeletingId(null)
     }
   }
@@ -996,10 +1040,13 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           plansLoading={plansQuery.isLoading}
           membershipEditor={membershipEditor}
           membershipSaving={membershipSaving}
+          membershipPreviewingId={membershipPreviewingId}
+          membershipDeletingId={membershipDeletingId}
           membershipMenuId={membershipMenuId}
           setMembershipEditor={setMembershipEditor}
           setMembershipMenuId={setMembershipMenuId}
           handleSaveMembership={handleSaveMembership}
+          handleDeleteMembership={handleDeleteMembership}
           assignmentOpen={assignmentOpen}
           setAssignmentOpen={setAssignmentOpen}
           assignmentForm={assignmentForm}
@@ -1273,6 +1320,7 @@ function LegacyMembershipTab({
   renewalWarning,
   membershipEditor,
   membershipSaving,
+  membershipPreviewingId,
   membershipDeletingId,
   setMembershipEditor,
   setActiveTab,
@@ -1286,6 +1334,7 @@ function LegacyMembershipTab({
   renewalWarning: string
   membershipEditor: MembershipEditorState | null
   membershipSaving: boolean
+  membershipPreviewingId: string | null
   membershipDeletingId: string | null
   setMembershipEditor: (value: MembershipEditorState | null) => void
   setActiveTab: (tab: TabId) => void
@@ -1351,7 +1400,7 @@ function LegacyMembershipTab({
                     <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} /></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{payments.find((payment) => payment.student_membership_id === membership.id)?.payment_method || 'Sin registro'}</td>
                     <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatMoney(membership.total_amount, membership.currency)}</td>
-                    <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>Informacion y cambios</button>{canDeleteExpiredMembership(membership) && <button type="button" className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipDeletingId === membership.id}>{membershipDeletingId === membership.id ? 'Eliminando...' : 'Cancelar / eliminar'}</button>}</div></td>
+                    <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>Informacion y cambios</button>{isPersistedMembership(membership) && <button type="button" className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipPreviewingId === membership.id || membershipDeletingId === membership.id} aria-busy={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}>{membershipPreviewingId === membership.id ? 'Verificando...' : membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar membresia'}</button>}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1419,10 +1468,13 @@ function MembershipTab({
   plansLoading,
   membershipEditor,
   membershipSaving,
+  membershipPreviewingId,
+  membershipDeletingId,
   membershipMenuId,
   setMembershipEditor,
   setMembershipMenuId,
   handleSaveMembership,
+  handleDeleteMembership,
   assignmentOpen,
   setAssignmentOpen,
   assignmentForm,
@@ -1438,10 +1490,13 @@ function MembershipTab({
   plansLoading: boolean
   membershipEditor: MembershipEditorState | null
   membershipSaving: boolean
+  membershipPreviewingId: string | null
+  membershipDeletingId: string | null
   membershipMenuId: string | null
   setMembershipEditor: (value: MembershipEditorState | null) => void
   setMembershipMenuId: (value: string | null) => void
   handleSaveMembership: () => void
+  handleDeleteMembership: (membership: StudentMembershipSummary) => void
   assignmentOpen: boolean
   setAssignmentOpen: (value: boolean) => void
   assignmentForm: MembershipAssignmentFormState
@@ -1512,6 +1567,22 @@ function MembershipTab({
                             ] as Array<[MembershipAction, string]>).map(([action, label]) => (
                               <button key={action} type="button" className={`block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition hover:bg-slate-50 ${action === 'cancel' ? 'text-rose-600' : 'text-slate-700'}`} onClick={() => openAction(membership, action)}>{label}</button>
                             ))}
+                            {isPersistedMembership(membership) && (
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-black text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => handleDeleteMembership(membership)}
+                                disabled={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}
+                                aria-busy={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {membershipPreviewingId === membership.id
+                                  ? 'Verificando...'
+                                  : membershipDeletingId === membership.id
+                                    ? 'Eliminando...'
+                                    : 'Eliminar membresia'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

@@ -37,8 +37,8 @@ import {
   buildMembershipDeletionConfirmation,
   formatMembershipDeletionSuccess,
   isPersistedMembership,
-  type MembershipDeletionPreview,
-  type MembershipDeletionResult,
+  parseMembershipDeletionPreview,
+  parseMembershipDeletionResult,
 } from '@/lib/utils/adminMembershipDeletion'
 import {
   buildMembershipCyclePreview,
@@ -1689,7 +1689,7 @@ export default function AdminMembershipsPage() {
     setMembershipPreviewingId(membership.id)
 
     try {
-      const { data: previewData, error: previewError } = await supabase.rpc('admin_get_membership_deletion_preview', {
+      const { data: rawPreviewData, error: previewError } = await supabase.rpc('admin_get_membership_deletion_preview', {
         p_membership_id: membership.id,
       })
 
@@ -1697,17 +1697,14 @@ export default function AdminMembershipsPage() {
         toast.push({ message: previewError.message || 'No se pudo verificar la membresia.', type: 'error' })
         return
       }
-      if (!previewData) {
-        toast.push({ message: 'El servidor no devolvio la verificacion de la membresia.', type: 'error' })
-        return
-      }
+      const previewData = parseMembershipDeletionPreview(rawPreviewData)
       if (!previewData.can_delete) {
         toast.push({ message: previewData.reason || 'El servidor no permite eliminar esta membresia.', type: 'error' })
         return
       }
 
       const accepted = await confirm(
-        buildMembershipDeletionConfirmation(membership.custom_name, previewData as MembershipDeletionPreview),
+        buildMembershipDeletionConfirmation(membership.custom_name, previewData),
         {
           title: 'Eliminar membresia',
           description: 'Esta accion es irreversible.',
@@ -1720,14 +1717,15 @@ export default function AdminMembershipsPage() {
       if (!accepted) return
 
       setMembershipDeletingId(membership.id)
-      const { data: deleteData, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
+      const { data: rawDeleteData, error: deleteError } = await supabase.rpc('admin_delete_student_membership', {
         p_membership_id: membership.id,
       })
 
       if (deleteError) throw deleteError
+      const deleteData = parseMembershipDeletionResult(rawDeleteData)
       if (!deleteData?.success) throw new Error(deleteData?.error || 'No se pudo eliminar la membresia.')
 
-      toast.push({ message: formatMembershipDeletionSuccess(deleteData as MembershipDeletionResult), type: 'success' })
+      toast.push({ message: formatMembershipDeletionSuccess(deleteData), type: 'success' })
       if (membershipEditor?.id === membership.id) setMembershipEditor(null)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
@@ -1735,6 +1733,9 @@ export default function AdminMembershipsPage() {
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
         queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-student-search'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] }),
       ])
       await refreshAll()
     } catch (error: any) {
