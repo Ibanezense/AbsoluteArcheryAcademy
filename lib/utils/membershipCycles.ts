@@ -80,6 +80,22 @@ export function getLimaDateKey(value: Date = new Date()): string {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+export function normalizeMembershipCommitments(value: unknown): Map<string, number> {
+  const commitments = new Map<string, number>()
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return commitments
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  for (const [membershipId, rawCount] of Object.entries(value)) {
+    const count = typeof rawCount === 'number' || typeof rawCount === 'string'
+      ? Number(rawCount)
+      : Number.NaN
+    if (!uuidPattern.test(membershipId) || !Number.isInteger(count) || count < 0) continue
+    commitments.set(membershipId, count)
+  }
+
+  return commitments
+}
+
 export function buildMembershipCyclePreview(
   input: CyclePreviewInput,
 ): MembershipCyclePreview[] {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMembershipCyclePreview,
   getLimaDateKey,
+  normalizeMembershipCommitments,
   suggestNextMembershipStart,
   summarizeMemberships,
   type MembershipLike,
@@ -10,6 +11,22 @@ import {
 describe('getLimaDateKey', () => {
   it('keeps the previous business day before midnight in America/Lima', () => {
     expect(getLimaDateKey(new Date('2026-06-04T04:30:00.000Z'))).toBe('2026-06-03')
+  })
+})
+
+describe('normalizeMembershipCommitments', () => {
+  it('accepts a single JSON commitment map and rejects malformed keys and counts', () => {
+    expect(normalizeMembershipCommitments({
+      '11111111-1111-4111-8111-111111111111': 2,
+      '22222222-2222-4222-8222-222222222222': '3',
+      invalid: 9,
+      '33333333-3333-4333-8333-333333333333': -1,
+      '44444444-4444-4444-8444-444444444444': 1.5,
+    })).toEqual(new Map([
+      ['11111111-1111-4111-8111-111111111111', 2],
+      ['22222222-2222-4222-8222-222222222222', 3],
+    ]))
+    expect(normalizeMembershipCommitments(null)).toEqual(new Map())
   })
 })
 

@@ -53,7 +53,7 @@ import {
   type StudentBowUsageType,
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
-import { getLimaDateKey } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, MEMBERSHIP_TIMEZONE } from '@/lib/utils/membershipCycles'
 import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
@@ -152,13 +152,33 @@ function daysBetweenToday(value: string | null | undefined, serviceDate: string)
   return dayjs(value).startOf('day').diff(dayjs(serviceDate).startOf('day'), 'day')
 }
 
-function useLimaMinuteClock() {
+function useLimaBoundaryClock(bookings: StudentDetailData['bookings'] | undefined) {
   const [now, setNow] = useState(() => new Date())
+  const nextBoundaryAt = useMemo(() => {
+    const nowMs = now.getTime()
+    const nextLimaMidnight = dayjs(now)
+      .tz(MEMBERSHIP_TIMEZONE)
+      .add(1, 'day')
+      .startOf('day')
+      .valueOf()
+    let boundary = nextLimaMidnight
+
+    for (const booking of bookings || []) {
+      if (booking.status !== 'reserved' || !booking.start_at) continue
+      const startsAt = new Date(booking.start_at).getTime()
+      if (Number.isFinite(startsAt) && startsAt > nowMs && startsAt < boundary) {
+        boundary = startsAt
+      }
+    }
+
+    return boundary
+  }, [bookings, now])
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
+    const delay = Math.max(nextBoundaryAt - Date.now() + 50, 50)
+    const timer = setTimeout(() => setNow(new Date()), delay)
+    return () => clearTimeout(timer)
+  }, [nextBoundaryAt])
 
   return now
 }
@@ -399,11 +419,11 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const router = useRouter()
   const confirm = useConfirm()
   const toast = useToast()
-  const minuteClock = useLimaMinuteClock()
-  const serviceDate = getLimaDateKey(minuteClock)
-  const detailQuery = useStudentDetail(params.id, serviceDate)
+  const detailQuery = useStudentDetail(params.id)
   const plansQuery = useMembershipPlans()
   const { data, isLoading, error } = detailQuery
+  const boundaryClock = useLimaBoundaryClock(data?.bookings)
+  const serviceDate = getLimaDateKey(boundaryClock)
 
   const [activeTab, setActiveTab] = useState<TabId>('profile')
   const [revealedAccessTarget, setRevealedAccessTarget] = useState<string | null>(null)
@@ -422,8 +442,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [assignmentSaving, setAssignmentSaving] = useState(false)
 
   const upcomingBookings = useMemo(() => (data?.bookings || [])
-    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(minuteClock))
-    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [data, minuteClock])
+    .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(boundaryClock))
+    .sort((left, right) => new Date(left.start_at || '').getTime() - new Date(right.start_at || '').getTime()), [boundaryClock, data])
 
   useEffect(() => {
     if (!data) return

@@ -48,16 +48,19 @@ describe('admin student membership queue', () => {
     expect(hook).toContain('booking.active_membership_id')
     expect(page).not.toContain('const reservedByMembershipId')
     expect(hook).toContain('summarizeMemberships')
-    expect(query).toContain("rpc('get_admin_membership_reservation_commitments')")
+    expect(query).toContain("rpc('get_admin_membership_reservation_commitments',")
+    expect(query).toContain('{ p_student_id: null }')
+    expect(query).toContain('normalizeMembershipCommitments')
     expect(query).not.toContain(".select('student_id,active_membership_id')")
   })
 
-  it('loads detail commitments separately from the 250-row booking history', () => {
+  it('loads detail commitments through the single-payload RPC outside booking history', () => {
     const hook = source('lib/hooks/useStudentDetail.ts')
 
-    expect(hook).toContain('reservedBookings')
-    expect(hook).toMatch(/from\('bookings'\)[\s\S]*select\('active_membership_id'\)[\s\S]*eq\('student_id', studentId\)[\s\S]*eq\('status', 'reserved'\)/)
-    expect(hook).toContain('reservedBookingsError')
+    expect(hook).toContain("rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId })")
+    expect(hook).toContain('commitmentsError')
+    expect(hook).toContain('normalizeMembershipCommitments')
+    expect(hook).not.toMatch(/select\('active_membership_id'\)[\s\S]*eq\('status', 'reserved'\)/)
   })
 
   it('uses the America/Lima business date on list, detail query, and detail UI', () => {
@@ -92,8 +95,10 @@ describe('admin student membership queue', () => {
   it('refreshes the Lima service date and consumes the summary from the detail hook', () => {
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
-    expect(page).toContain('useLimaMinuteClock')
-    expect(page).toContain('clearInterval')
+    expect(page).toContain('useLimaBoundaryClock')
+    expect(page).toContain('setTimeout')
+    expect(page).toContain('clearTimeout')
+    expect(page).not.toContain('setInterval')
     expect(page).toContain('serviceDate')
     expect(page).not.toContain('const reservedByMembershipId = useMemo')
   })

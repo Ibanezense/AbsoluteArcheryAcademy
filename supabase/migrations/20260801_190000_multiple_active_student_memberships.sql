@@ -31,6 +31,11 @@ CREATE INDEX IF NOT EXISTS idx_student_memberships_assignment_batch
   ON public.student_memberships(assignment_batch_id)
   WHERE assignment_batch_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_bookings_reserved_membership_commitments
+  ON public.bookings(active_membership_id)
+  WHERE status = 'reserved'
+    AND active_membership_id IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION public.select_student_membership_for_date(
   p_student_id uuid,
   p_service_date date
@@ -1731,41 +1736,60 @@ REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_cancel_session(uuid, boolean) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_cancel_session(uuid, boolean) TO authenticated, service_role;
 
-CREATE OR REPLACE FUNCTION public.get_admin_membership_reservation_commitments()
-RETURNS TABLE (
-  student_id uuid,
-  active_membership_id uuid,
-  reserved_count bigint
+CREATE OR REPLACE FUNCTION public.get_admin_membership_reservation_commitments(
+  p_student_id uuid DEFAULT NULL
 )
+RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_commitments jsonb;
+  v_is_service_role boolean := auth.role() = 'service_role';
 BEGIN
-  IF auth.uid() IS NULL THEN
+  IF NOT v_is_service_role AND auth.uid() IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
   END IF;
 
-  IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'No autorizado';
+  IF NOT v_is_service_role THEN
+    IF p_student_id IS NULL THEN
+      IF NOT public.is_admin_user() THEN
+        RAISE EXCEPTION 'No autorizado para listar compromisos globales';
+      END IF;
+    ELSIF NOT public.is_admin_user()
+      AND NOT public.can_access_student(p_student_id)
+    THEN
+      RAISE EXCEPTION 'No autorizado para consultar este alumno';
+    END IF;
   END IF;
 
-  RETURN QUERY
-  SELECT
-    b.student_id,
-    b.active_membership_id,
-    COUNT(*)::bigint AS reserved_count
-  FROM public.bookings b
-  WHERE b.status = 'reserved'
-    AND b.student_id IS NOT NULL
-    AND b.active_membership_id IS NOT NULL
-  GROUP BY b.student_id, b.active_membership_id;
+  SELECT COALESCE(
+    jsonb_object_agg(
+      commitment.active_membership_id::text,
+      commitment.reserved_count
+    ),
+    '{}'::jsonb
+  )
+  INTO v_commitments
+  FROM (
+    SELECT
+      b.active_membership_id,
+      COUNT(*)::bigint AS reserved_count
+    FROM public.bookings b
+    WHERE b.status = 'reserved'
+      AND b.active_membership_id IS NOT NULL
+      AND (p_student_id IS NULL OR b.student_id = p_student_id)
+    GROUP BY b.active_membership_id
+  ) commitment;
+
+  RETURN v_commitments;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments() FROM anon;
-GRANT EXECUTE ON FUNCTION public.get_admin_membership_reservation_commitments() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_admin_membership_reservation_commitments(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_admin_membership_reservation_commitments(uuid) TO authenticated, service_role;
 
 COMMIT;

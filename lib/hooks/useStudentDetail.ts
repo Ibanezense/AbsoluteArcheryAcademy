@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
-import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentAccountSummary = {
   id: string
@@ -164,7 +164,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
     queryKey: [...studentKeys.detail(studentId), serviceDate],
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: reservedBookings, error: reservedBookingsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -264,12 +264,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
-          supabase
-            .from('bookings')
-            .select('active_membership_id')
-            .eq('student_id', studentId)
-            .eq('status', 'reserved')
-            .not('active_membership_id', 'is', null),
+          supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
           supabase
             .from('student_weekly_attendance')
             .select('id,week_start,week_end,status,classes_consumed,marked_at')
@@ -282,20 +277,13 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       if (paymentsError) throw paymentsError
       if (ledgerError) throw ledgerError
       if (bookingsError) throw bookingsError
-      if (reservedBookingsError) throw reservedBookingsError
+      if (commitmentsError) throw commitmentsError
       if (weeklyAttendanceError) throw weeklyAttendanceError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
       const memberships = sortMemberships((typedStudent.memberships || []) as StudentMembershipSummary[])
-      const reservedByMembershipId = new Map<string, number>()
-      for (const booking of (reservedBookings || []) as any[]) {
-        if (!booking.active_membership_id) continue
-        reservedByMembershipId.set(
-          booking.active_membership_id,
-          (reservedByMembershipId.get(booking.active_membership_id) || 0) + 1,
-        )
-      }
+      const reservedByMembershipId = normalizeMembershipCommitments(commitments)
       const membershipSummary = summarizeMemberships(
         memberships.map((membership) => ({
           ...membership,

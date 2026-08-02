@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
-import { getLimaDateKey, summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentListRow = {
   id: string
@@ -54,12 +54,6 @@ type AttendedBookingRow = {
   student_id: string | null
   attendance_marked_at: string | null
   sessions: { start_at: string | null } | Array<{ start_at: string | null }> | null
-}
-
-type ReservedBookingRow = {
-  student_id: string | null
-  active_membership_id: string | null
-  reserved_count: number | string | null
 }
 
 export function buildLastAttendanceByStudent(rows: AttendedBookingRow[]) {
@@ -289,7 +283,7 @@ export function useStudents() {
           .select('student_id,attendance_marked_at,sessions(start_at)')
           .eq('status', 'attended')
           .not('student_id', 'is', null),
-        supabase.rpc('get_admin_membership_reservation_commitments'),
+        supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: null }),
       ])
 
       if (studentsResult.error) throw studentsResult.error
@@ -299,20 +293,20 @@ export function useStudents() {
       const lastAttendanceByStudent = buildLastAttendanceByStudent(
         (attendanceResult.data || []) as AttendedBookingRow[],
       )
-      const reservedByStudent = new Map<string, Map<string, number>>()
-      for (const booking of (reservedBookingsResult.data || []) as ReservedBookingRow[]) {
-        if (!booking.student_id || !booking.active_membership_id) continue
-        const byMembership = reservedByStudent.get(booking.student_id) || new Map<string, number>()
-        byMembership.set(booking.active_membership_id, Number(booking.reserved_count || 0))
-        reservedByStudent.set(booking.student_id, byMembership)
-      }
+      const commitmentsByMembershipId = normalizeMembershipCommitments(reservedBookingsResult.data)
 
-      return ((studentsResult.data || []) as any[]).map((student) =>
-        mapStudentListRow({
+      return ((studentsResult.data || []) as any[]).map((student) => {
+        const studentCommitments = new Map<string, number>()
+        for (const membership of student.memberships || []) {
+          const count = commitmentsByMembershipId.get(membership.id)
+          if (count !== undefined) studentCommitments.set(membership.id, count)
+        }
+
+        return mapStudentListRow({
           ...student,
           last_attendance_at: lastAttendanceByStudent.get(student.id) || null,
-        }, reservedByStudent.get(student.id)),
-      )
+        }, studentCommitments)
+      })
     },
   })
 }
