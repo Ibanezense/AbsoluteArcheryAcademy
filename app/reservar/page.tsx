@@ -160,8 +160,12 @@ export default function ReservarPage() {
   }
 
   const monthName = month.toLocaleDateString('es', { month: 'long', year: 'numeric' })
+  const isScheduled = dashboard?.membership_status === 'scheduled'
   const isExpired = dashboard?.membership_end ? new Date(dashboard.membership_end) < new Date() : false
-  const hasNoClasses = (dashboard?.classes_remaining ?? 0) <= 0
+  const displayedClassesRemaining = isScheduled
+    ? (classCards[0]?.classes_remaining ?? 0)
+    : (dashboard?.classes_remaining ?? 0)
+  const hasNoClasses = !isScheduled && displayedClassesRemaining <= 0
   const cannotBook = isExpired || hasNoClasses || !bookingProfile?.current_distance_m
 
   const first = startOfMonth(month)
@@ -214,11 +218,19 @@ export default function ReservarPage() {
           </StudentCard>
         )}
 
+        {isScheduled && !cannotBook && (
+          <StudentNotice>
+            La membresÃ­a estÃ¡ programada desde el {dashboard?.membership_start
+              ? new Date(`${dashboard.membership_start}T12:00:00`).toLocaleDateString('es')
+              : 'inicio indicado'}. Solo verÃ¡s turnos incluidos dentro de su vigencia.
+          </StudentNotice>
+        )}
+
         <StudentCard className="p-4">
           <div className="grid grid-cols-[92px_1fr] items-center gap-4">
             <div className="grid h-[88px] w-[88px] place-items-center rounded-full border-[5px] border-accent/80 bg-white text-center shadow-inner">
               <div>
-                <p className="text-3xl font-black leading-none">{dashboard?.classes_remaining ?? 0}</p>
+                <p className="text-3xl font-black leading-none">{displayedClassesRemaining}</p>
                 <p className="mt-1 px-2 text-[0.62rem] font-semibold leading-[1.05] text-textsec">clases disponibles</p>
               </div>
             </div>
@@ -242,7 +254,7 @@ export default function ReservarPage() {
         <section className="space-y-4">
           <div className="flex items-end gap-3">
             <h2 className="text-[1.35rem] font-black tracking-[-0.04em]">Mis clases disponibles</h2>
-            <span className="pb-1 text-sm font-medium text-textsec">{dashboard?.classes_remaining ?? classCards.length} clases</span>
+            <span className="pb-1 text-sm font-medium text-textsec">{displayedClassesRemaining || classCards.length} clases</span>
           </div>
           <ClassCardsBoard
             cards={classCards}

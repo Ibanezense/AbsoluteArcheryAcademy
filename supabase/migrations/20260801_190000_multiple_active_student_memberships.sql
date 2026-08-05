@@ -258,6 +258,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_student_membership_cycles(
   p_discount_type text DEFAULT 'none',
   p_discount_value numeric DEFAULT 0,
   p_notes text DEFAULT NULL,
+  p_billing_date date DEFAULT NULL,
   p_idempotency_key uuid DEFAULT NULL
 )
 RETURNS SETOF public.student_memberships
@@ -479,7 +480,7 @@ BEGIN
       NULLIF(btrim(p_notes), ''),
       v_actor_id,
       COALESCE(p_payment_type, 'manual'),
-      v_start_date,
+      COALESCE(p_billing_date, v_start_date),
       COALESCE(p_discount_type, 'none'),
       COALESCE(p_discount_value, 0),
       v_origin,
@@ -514,7 +515,7 @@ BEGIN
     VALUES (
       p_student_id,
       v_membership_id,
-      v_start_date,
+      COALESCE(p_billing_date, v_start_date),
       now(),
       v_payment_amount,
       v_currency,
@@ -572,9 +573,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) FROM anon;
-GRANT EXECUTE ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, date, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, date, uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_create_student_membership_cycles(uuid, uuid, date, integer, text, integer, date, numeric, numeric, text, text, numeric, text, date, uuid) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.sync_student_membership_operational_status(
   p_student_id uuid DEFAULT NULL
@@ -775,8 +776,11 @@ BEGIN
     RAISE EXCEPTION 'Alumno no encontrado';
   END IF;
 
-  IF COALESCE(v_student.is_active, true) = false
-    OR COALESCE(v_student.operational_status, 'active') <> 'active'
+  IF COALESCE(v_student.operational_status, 'active') IN ('retired', 'withdrawn', 'blocked', 'suspended')
+    OR (
+      COALESCE(v_student.is_active, true) = false
+      AND COALESCE(v_student.operational_status, 'active') <> 'paused'
+    )
   THEN
     RAISE EXCEPTION 'El alumno no esta activo para reservar';
   END IF;
@@ -939,8 +943,11 @@ BEGIN
     RAISE EXCEPTION 'Alumno no encontrado';
   END IF;
 
-  IF COALESCE(v_student.is_active, true) = false
-    OR COALESCE(v_student.operational_status, 'active') <> 'active'
+  IF COALESCE(v_student.operational_status, 'active') IN ('retired', 'withdrawn', 'blocked', 'suspended')
+    OR (
+      COALESCE(v_student.is_active, true) = false
+      AND COALESCE(v_student.operational_status, 'active') <> 'paused'
+    )
   THEN
     RAISE EXCEPTION 'El alumno no esta activo para reservar';
   END IF;
@@ -1055,6 +1062,143 @@ $$;
 REVOKE ALL ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_book_session(uuid, uuid, text, boolean) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.get_available_sessions_for_student(
+  p_student_id uuid,
+  p_date_from date,
+  p_date_to date
+)
+RETURNS TABLE (
+  session_id uuid,
+  start_at timestamptz,
+  end_at timestamptz,
+  status text,
+  already_reserved boolean,
+  distance_m integer,
+  bow_usage_type text,
+  slot_capacity integer,
+  distance_reserved integer,
+  bow_capacity integer,
+  bow_reserved integer,
+  spots_for_student integer
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_student_id uuid;
+  v_student public.students;
+  v_bow_usage_type text;
+BEGIN
+  v_student_id := public.resolve_accessible_student_id(p_student_id);
+
+  SELECT *
+  INTO v_student
+  FROM public.students
+  WHERE id = v_student_id;
+
+  IF v_student IS NULL THEN
+    RAISE EXCEPTION 'Alumno no encontrado';
+  END IF;
+
+  IF COALESCE(v_student.operational_status, 'active') IN ('retired', 'withdrawn', 'blocked', 'suspended')
+    OR (
+      COALESCE(v_student.is_active, true) = false
+      AND COALESCE(v_student.operational_status, 'active') <> 'paused'
+    )
+  THEN
+    RETURN;
+  END IF;
+
+  IF v_student.current_distance_m IS NULL THEN
+    RAISE EXCEPTION 'El alumno no tiene distancia configurada';
+  END IF;
+
+  v_bow_usage_type := CASE
+    WHEN v_student.has_own_bow THEN 'own'
+    WHEN v_student.assigned_bow THEN 'assigned'
+    ELSE 'shared_inventory'
+  END;
+
+  RETURN QUERY
+  WITH distance_caps AS (
+    SELECT
+      s.id AS session_id,
+      s.start_at,
+      s.end_at,
+      s.status,
+      v_student.current_distance_m AS distance_m,
+      COALESCE(sda.slot_capacity, sda.targets * 4, 0) AS slot_capacity
+    FROM public.sessions s
+    INNER JOIN LATERAL public.select_student_membership_for_date(
+      v_student_id,
+      (s.start_at AT TIME ZONE 'America/Lima')::date
+    ) eligible_membership ON eligible_membership.id IS NOT NULL
+    LEFT JOIN public.session_distance_allocations sda
+      ON sda.session_id = s.id
+     AND sda.distance_m = v_student.current_distance_m
+    WHERE (s.start_at AT TIME ZONE 'America/Lima')::date BETWEEN p_date_from AND p_date_to
+  ),
+  student_reservations AS (
+    SELECT b.session_id, true AS already_reserved
+    FROM public.bookings b
+    WHERE b.student_id = v_student_id
+      AND b.status = 'reserved'
+  ),
+  distance_reserved AS (
+    SELECT b.session_id, COUNT(*)::integer AS reserved_count
+    FROM public.bookings b
+    WHERE b.distance_m = v_student.current_distance_m
+      AND b.status = 'reserved'
+    GROUP BY b.session_id
+  ),
+  bow_reserved AS (
+    SELECT b.session_id, COUNT(*)::integer AS reserved_count
+    FROM public.bookings b
+    WHERE b.status = 'reserved'
+      AND b.bow_usage_type = 'shared_inventory'
+      AND b.bow_poundage = v_student.bow_poundage
+    GROUP BY b.session_id
+  )
+  SELECT
+    dc.session_id,
+    dc.start_at,
+    dc.end_at,
+    dc.status::text,
+    COALESCE(sr.already_reserved, false),
+    dc.distance_m,
+    v_bow_usage_type,
+    dc.slot_capacity,
+    COALESCE(dr.reserved_count, 0),
+    CASE WHEN v_bow_usage_type = 'shared_inventory' THEN COALESCE(bi.quantity_active, 0) ELSE NULL END,
+    CASE WHEN v_bow_usage_type = 'shared_inventory' THEN COALESCE(br.reserved_count, 0) ELSE NULL END,
+    CASE
+      WHEN dc.status <> 'scheduled' OR dc.start_at <= now() OR COALESCE(sr.already_reserved, false) THEN 0
+      WHEN dc.slot_capacity <= 0 THEN 0
+      WHEN v_bow_usage_type IN ('own', 'assigned')
+        THEN GREATEST(dc.slot_capacity - COALESCE(dr.reserved_count, 0), 0)
+      ELSE GREATEST(
+        LEAST(
+          dc.slot_capacity - COALESCE(dr.reserved_count, 0),
+          COALESCE(bi.quantity_active, 0) - COALESCE(br.reserved_count, 0)
+        ),
+        0
+      )
+    END::integer
+  FROM distance_caps dc
+  LEFT JOIN student_reservations sr ON sr.session_id = dc.session_id
+  LEFT JOIN distance_reserved dr ON dr.session_id = dc.session_id
+  LEFT JOIN bow_reserved br ON br.session_id = dc.session_id
+  LEFT JOIN public.bow_inventory bi ON bi.draw_weight_lbs = v_student.bow_poundage
+  ORDER BY dc.start_at ASC;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_available_sessions_for_student(uuid, date, date) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_available_sessions_for_student(uuid, date, date) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_available_sessions_for_student(uuid, date, date) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.get_weekly_attendance_review(p_sunday date)
 RETURNS jsonb
@@ -2353,8 +2497,11 @@ BEGIN
   WHERE id = v_student_id;
 
   IF v_student IS NULL
-    OR COALESCE(v_student.is_active, true) = false
-    OR COALESCE(v_student.operational_status, 'active') <> 'active'
+    OR COALESCE(v_student.operational_status, 'active') IN ('retired', 'withdrawn', 'blocked', 'suspended')
+    OR (
+      COALESCE(v_student.is_active, true) = false
+      AND COALESCE(v_student.operational_status, 'active') <> 'paused'
+    )
   THEN
     RETURN;
   END IF;
@@ -2376,7 +2523,7 @@ BEGIN
     WHERE sm.id = p_student_membership_id
       AND sm.student_id = v_student_id
       AND sm.status = 'active'
-      AND sm.start_date <= v_today
+      AND COALESCE(sm.classes_remaining, 0) > commitments.reserved_count
       AND (sm.end_date IS NULL OR sm.end_date >= v_today);
 
     IF v_membership_id IS NULL THEN
@@ -2398,7 +2545,7 @@ BEGIN
     ) commitments
     WHERE sm.student_id = v_student_id
       AND sm.status = 'active'
-      AND sm.start_date <= v_today
+      AND COALESCE(sm.classes_remaining, 0) > commitments.reserved_count
       AND (sm.end_date IS NULL OR sm.end_date >= v_today)
     ORDER BY
       CASE

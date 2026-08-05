@@ -38,6 +38,10 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
 import { membershipPlanKeys, useMembershipPlans, type MembershipPlan } from '@/lib/hooks/useMembershipPlans'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import {
+  createStudentMembershipCycles,
+  type MembershipPaymentType,
+} from '@/lib/services/adminMembershipService'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import {
@@ -687,19 +691,22 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
     try {
       setAssignmentSaving(true)
-      const { error: assignmentError } = await supabase.rpc('admin_assign_membership_from_profile', {
-        p_student_id: data.id,
-        p_membership_plan_id: selectedPlan.id,
-        p_start_date: assignmentForm.start_date || null,
-        p_total_amount: finalAmount,
-        p_payment_amount: assignmentForm.payment_received ? Number(assignmentForm.payment_amount || finalAmount) : null,
-        p_payment_type: assignmentForm.payment_type,
-        p_discount_type: assignmentForm.discount_type,
-        p_discount_value: discountValue,
-        p_billing_date: assignmentForm.billing_date || null,
-        p_notes: assignmentForm.notes.trim() || null,
+      await createStudentMembershipCycles(supabase, {
+        origin: 'paid',
+        studentId: data.id,
+        membershipPlanId: selectedPlan.id,
+        startDate: assignmentForm.start_date,
+        periodCount: 1,
+        totalAmountPerCycle: finalAmount,
+        batchPaymentAmount: assignmentForm.payment_received
+          ? Number(assignmentForm.payment_amount || finalAmount)
+          : 0,
+        paymentType: assignmentForm.payment_type as MembershipPaymentType,
+        discountType: assignmentForm.discount_type,
+        discountValue,
+        billingDate: assignmentForm.billing_date || undefined,
+        notes: assignmentForm.notes.trim() || undefined,
       })
-      if (assignmentError) throw assignmentError
 
       toast.push({ message: 'Membresía asignada correctamente.', type: 'success' })
       setAssignmentOpen(false)

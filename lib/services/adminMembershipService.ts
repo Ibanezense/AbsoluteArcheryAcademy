@@ -12,6 +12,7 @@ interface MembershipCycleInputBase {
   studentId: string
   startDate: string
   notes?: string
+  billingDate?: string
   idempotencyKey?: string
 }
 
@@ -83,6 +84,7 @@ export type RpcPayload = {
   p_discount_type: MembershipDiscountType | null
   p_discount_value: number | null
   p_notes: string | null
+  p_billing_date: string | null
   p_idempotency_key: string
 }
 
@@ -119,6 +121,7 @@ export async function createStudentMembershipCycles(
       p_discount_type: paid ? input.discountType ?? null : null,
       p_discount_value: paid ? input.discountValue ?? null : null,
       p_notes: input.notes ?? null,
+      p_billing_date: input.billingDate ?? null,
       p_idempotency_key: idempotencyKey,
     },
   )

@@ -50,6 +50,9 @@ describe('student mobile redesign', () => {
     expect(board).toContain('cardStatusOrder')
     expect(board).toContain('orderedCards.map')
     expect(board).not.toContain('wizard')
+    expect(reservar).toContain("dashboard?.membership_status === 'scheduled'")
+    expect(reservar).toContain('La membresÃ­a estÃ¡ programada')
+    expect(reservar).not.toContain('const hasNoClasses = (dashboard?.classes_remaining ?? 0) <= 0')
   })
 
   it('adds reservation tabs and membership account filters', () => {

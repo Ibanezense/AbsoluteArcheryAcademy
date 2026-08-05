@@ -29,6 +29,7 @@ describe('createStudentMembershipCycles', () => {
       paymentType: 'yape',
       discountType: 'percentage',
       discountValue: 10,
+      billingDate: '2026-08-05',
       notes: 'Pago anticipado',
       idempotencyKey: '00000000-0000-4000-8000-000000000001',
     })
@@ -49,6 +50,7 @@ describe('createStudentMembershipCycles', () => {
         p_discount_type: 'percentage',
         p_discount_value: 10,
         p_notes: 'Pago anticipado',
+        p_billing_date: '2026-08-05',
         p_idempotency_key: '00000000-0000-4000-8000-000000000001',
       },
     )
@@ -86,6 +88,7 @@ describe('createStudentMembershipCycles', () => {
         p_discount_type: null,
         p_discount_value: null,
         p_notes: null,
+        p_billing_date: null,
         p_idempotency_key: '00000000-0000-4000-8000-000000000002',
       },
     )
