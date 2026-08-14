@@ -53,6 +53,10 @@ describe('student mobile redesign', () => {
     expect(reservar).toContain("dashboard?.membership_status === 'scheduled'")
     expect(reservar).toContain('La membresÃ­a estÃ¡ programada')
     expect(reservar).not.toContain('const hasNoClasses = (dashboard?.classes_remaining ?? 0) <= 0')
+    expect(board).toContain('equipos disponibles')
+    expect(board).toContain('sin equipo disponible')
+    expect(reservar).toContain('equipos disponibles')
+    expect(reservar).toContain('Para este turno ya no tenemos equipo disponible')
   })
 
   it('adds reservation tabs and membership account filters', () => {

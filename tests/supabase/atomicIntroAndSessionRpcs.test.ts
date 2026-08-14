@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -84,5 +84,18 @@ describe('20260601 atomic intro and session RPCs', () => {
     expect(rpc.indexOf('No se puede reducir la capacidad por debajo de las reservas existentes')).toBeLessThan(
       rpc.indexOf('DELETE FROM public.session_distance_allocations'),
     )
+  })
+})
+
+describe('latest intro equipment override', () => {
+  it('replaces historical target capacity with shared equipment availability', () => {
+    const migrationName = readdirSync(join(process.cwd(), 'supabase', 'migrations'))
+      .find((name) => name.endsWith('_equipment_based_booking_capacity.sql'))
+
+    expect(migrationName).toBeTruthy()
+    const latestSql = readFileSync(join(process.cwd(), 'supabase', 'migrations', String(migrationName)), 'utf8')
+    expect(latestSql).toContain('CREATE OR REPLACE FUNCTION public.admin_register_intro_class')
+    expect(latestSql).toContain('get_session_equipment_availability')
+    expect(latestSql).toContain('intro_spots_remaining')
   })
 })

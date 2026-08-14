@@ -167,51 +167,33 @@ describe('IntroClassesService.updateIntroClass', () => {
 })
 
 describe('IntroClassesService.getAvailableSessions', () => {
-  it('looks ahead roughly one month by default so admin can book intro classes beyond the next week', async () => {
-    const order = vi.fn().mockResolvedValue({
-      data: [
-        {
-          id: 'session-1',
-          start_at: '2026-06-14T16:00:00.000Z',
-          end_at: '2026-06-14T17:30:00.000Z',
-          session_distance_allocations: [{ distance_m: 10, slot_capacity: 12, targets: 3 }],
-        },
-      ],
+  it('uses the canonical intro equipment RPC for roughly one month', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{
+        session_id: 'session-1',
+        start_at: '2026-08-20T16:00:00.000Z',
+        end_at: '2026-08-20T17:30:00.000Z',
+        equipment_capacity: 8,
+        equipment_reserved: 3,
+        spots_remaining: 5,
+      }],
       error: null,
+    } as never)
+
+    await expect(IntroClassesService.getAvailableSessions()).resolves.toEqual([{
+      session_id: 'session-1',
+      start_at: '2026-08-20T16:00:00.000Z',
+      end_at: '2026-08-20T17:30:00.000Z',
+      capacity: 8,
+      booked: 3,
+      available: 5,
+    }])
+
+    expect(supabase.rpc).toHaveBeenCalledTimes(1)
+    expect(supabase.rpc).toHaveBeenCalledWith('get_available_intro_sessions', {
+      p_date_from: expect.any(String),
+      p_date_to: expect.any(String),
     })
-    const lte = vi.fn(() => ({ order }))
-    const gte = vi.fn(() => ({ lte }))
-    const eqDistance = vi.fn(() => ({ gte }))
-    const eqStatus = vi.fn(() => ({ eq: eqDistance }))
-    const selectSessions = vi.fn(() => ({ eq: eqStatus }))
-    const bookingsIn = vi.fn(() => ({
-      eq: vi.fn(() => ({
-        in: vi.fn().mockResolvedValue({ data: [], error: null }),
-      })),
-    }))
-    const selectBookings = vi.fn(() => ({ in: bookingsIn }))
-
-    vi.mocked(supabase.from).mockImplementation((table: string) => {
-      if (table === 'sessions') {
-        return { select: selectSessions } as never
-      }
-
-      if (table === 'bookings') {
-        return { select: selectBookings } as never
-      }
-
-      throw new Error(`Unexpected table: ${table}`)
-    })
-
-    await IntroClassesService.getAvailableSessions()
-
-    expect(lte).toHaveBeenCalledTimes(1)
-    const firstCall = lte.mock.calls.at(0) as [string, string] | undefined
-    const upperBound = firstCall?.[1]
-    const diffMs = new Date(String(upperBound)).getTime() - Date.now()
-    const diffDays = diffMs / (1000 * 60 * 60 * 24)
-
-    expect(diffDays).toBeGreaterThan(29)
-    expect(diffDays).toBeLessThan(32)
+    expect(supabase.from).not.toHaveBeenCalled()
   })
 })
