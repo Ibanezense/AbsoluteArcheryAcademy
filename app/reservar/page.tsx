@@ -57,6 +57,13 @@ function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1)
 }
 
+function equipmentAvailabilityLabel(session: AvailableSessionRow) {
+  if (session.bow_usage_type === 'own') return 'Equipo propio · disponibilidad libre'
+  if (session.bow_usage_type === 'assigned') return 'Equipo asignado · disponibilidad libre'
+  if (session.spots_for_student > 0) return `${session.spots_for_student} equipos disponibles`
+  return 'Para este turno ya no tenemos equipo disponible. Por favor, reserva otro turno disponible.'
+}
+
 export default function ReservarPage() {
   const router = useRouter()
   const toast = useToast()
@@ -363,13 +370,11 @@ export default function ReservarPage() {
                               ? 'Reservas cerradas'
                               : session.already_reserved
                                 ? 'Ya reservado'
-                                : spots > 0
-                                  ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
-                                  : 'Completo'}
+                                : equipmentAvailabilityLabel(session)}
                       </p>
                     </div>
                     <span className={`text-sm font-bold ${isAvailable ? 'text-success' : 'text-textsec'}`}>
-                      {isAvailable ? `${spots} cupos` : '-'}
+                      {isAvailable ? equipmentAvailabilityLabel(session) : 'Sin equipo disponible'}
                     </span>
                   </div>
                 )

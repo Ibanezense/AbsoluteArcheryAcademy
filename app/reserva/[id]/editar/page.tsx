@@ -65,6 +65,13 @@ function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1)
 }
 
+function equipmentAvailabilityLabel(session: AvailableSessionRow) {
+  if (session.bow_usage_type === 'own') return 'Equipo propio · disponibilidad libre'
+  if (session.bow_usage_type === 'assigned') return 'Equipo asignado · disponibilidad libre'
+  if (session.spots_for_student > 0) return `${session.spots_for_student} equipos disponibles`
+  return 'Sin equipo disponible'
+}
+
 export default function EditarReservaPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const toast = useToast()
@@ -427,9 +434,7 @@ export default function EditarReservaPage({ params }: { params: { id: string } }
                           ? 'Cambios cerrados para este dia'
                           : session.already_reserved
                             ? 'Ya reservado'
-                            : spots > 0
-                              ? `${spots} ${spots === 1 ? 'cupo' : 'cupos'} disponibles`
-                              : 'Completo'}
+                            : equipmentAvailabilityLabel(session)}
                   </p>
                   <p className="text-xs text-textsec mt-1">
                     {session.distance_m} m · {usageLabel}

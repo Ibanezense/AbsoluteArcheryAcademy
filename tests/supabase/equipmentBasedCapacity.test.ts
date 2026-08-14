@@ -16,11 +16,8 @@ function functionSql(functionName: string) {
   const start = sql.indexOf(marker)
   if (start < 0) return ''
 
-  const remaining = sql.slice(start + marker.length)
-  const nextOffset = remaining.search(/\n\s*CREATE OR REPLACE FUNCTION public\./)
-  return nextOffset < 0
-    ? sql.slice(start)
-    : sql.slice(start, start + marker.length + nextOffset)
+  const end = sql.indexOf('\n$$;', start)
+  return end < 0 ? sql.slice(start) : sql.slice(start, end + 4)
 }
 
 function executableSql(body: string) {
@@ -89,9 +86,10 @@ describe('equipment-based booking capacity migration', () => {
   })
 
   it('exposes intro availability as unused trial bows plus remaining academy bows', () => {
+    const helper = functionSql('get_session_equipment_availability')
     const introSessions = functionSql('get_available_intro_sessions')
-    expect(introSessions).toMatch(/GREATEST\(2 - equipment\.intro_reserved, 0\)/i)
-    expect(introSessions).toMatch(/equipment\.academy_bows_remaining/i)
+    expect(helper).toMatch(/GREATEST\(2 - v_intro_reserved, 0\) \+ v_academy_bows_remaining/i)
+    expect(introSessions).toContain("availability.data->>'intro_spots_remaining'")
     expect(introSessions).toContain('spots_remaining')
   })
 
@@ -100,6 +98,7 @@ describe('equipment-based booking capacity migration', () => {
       'get_session_equipment_availability(uuid, uuid)',
       'check_session_availability_v3(uuid, uuid)',
       'get_available_sessions_for_student(uuid, date, date)',
+      'get_admin_available_sessions_for_student(uuid, date, date)',
       'get_available_intro_sessions(date, date)',
       'admin_register_intro_class(text, integer, text, uuid, numeric, text, text, text, text)',
       'admin_update_intro_class(uuid, uuid, text, integer, text, uuid, numeric, text, text, text, text)',
@@ -107,5 +106,12 @@ describe('equipment-based booking capacity migration', () => {
       expect(sql).toContain(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC;`)
       expect(sql).toContain(`REVOKE ALL ON FUNCTION public.${signature} FROM anon;`)
     }
+
+    expect(sql).toContain(
+      'REVOKE ALL ON FUNCTION public.get_session_equipment_availability(uuid, uuid) FROM authenticated;',
+    )
+    expect(sql).not.toContain(
+      'GRANT EXECUTE ON FUNCTION public.get_session_equipment_availability(uuid, uuid) TO authenticated',
+    )
   })
 })

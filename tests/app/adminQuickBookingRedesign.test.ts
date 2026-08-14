@@ -38,7 +38,7 @@ describe('admin quick booking redesign', () => {
     expect(modal).toContain('Clases disponibles')
     expect(modal).toContain('sessionsByDate')
     expect(modal).toContain('sessionsForSelectedDate.map((session) =>')
-    expect(modal).toContain('Forzar reserva aunque el turno este sin cupo')
+    expect(modal).toContain('Forzar reserva aunque el turno este sin equipo')
   })
 
   it('describes equipment availability without target-derived capacity', () => {
@@ -47,6 +47,8 @@ describe('admin quick booking redesign', () => {
     expect(modal).toContain('equipos disponibles')
     expect(modal).toContain('disponibilidad libre')
     expect(modal).toContain('Para este turno ya no tenemos equipo disponible')
+    expect(modal).toContain('Equipo propio · disponibilidad libre')
+    expect(modal).toContain('Equipo asignado · disponibilidad libre')
     expect(modal).not.toContain('session.distance_reserved}/{session.slot_capacity')
   })
 })

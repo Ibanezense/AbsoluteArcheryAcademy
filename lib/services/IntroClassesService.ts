@@ -3,6 +3,10 @@ import { supabase } from '@/lib/supabaseClient';
 export type IntroClassType = 'paid' | 'free' | 'courtesy';
 export type IntroPaymentStatus = 'pending' | 'paid' | 'not_applicable';
 
+function limaDate(value: Date): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(value);
+}
+
 export type IntroClientRecord = {
     booking_id: string;
     intro_client_id: string;
@@ -287,63 +291,24 @@ export class IntroClassesService {
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);
 
-        const { data: sessionsData, error: sessionsError } = await supabase
-            .from('sessions')
-            .select(`
-                id, 
-                start_at, 
-                end_at,
-                session_distance_allocations!inner (
-                    distance_m,
-                    slot_capacity,
-                    targets
-                )
-            `)
-            .eq('status', 'scheduled')
-            .eq('session_distance_allocations.distance_m', 10)
-            .gte('start_at', now.toISOString())
-            .lte('start_at', future.toISOString())
-            .order('start_at', { ascending: true });
+        const { data: sessionsData, error: sessionsError } = await supabase.rpc(
+            'get_available_intro_sessions',
+            {
+                p_date_from: limaDate(now),
+                p_date_to: limaDate(future),
+            },
+        );
 
         if (sessionsError) throw sessionsError;
 
-        const sessionIds = sessionsData.map(s => s.id);
-
-        if (sessionIds.length === 0) return [];
-
-        const { data: bookingsData, error: bookingsError } = await supabase
-            .from('bookings')
-            .select('session_id')
-            .in('session_id', sessionIds)
-            .eq('distance_m', 10)
-            .in('status', ['reserved', 'attended', 'no_show']);
-
-        if (bookingsError) throw bookingsError;
-
-        const bookingCounts = bookingsData.reduce((acc, b) => {
-            acc[b.session_id] = (acc[b.session_id] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-
-        return sessionsData
-            .map((s: any) => {
-                const booked = bookingCounts[s.id] || 0;
-                const alloc = Array.isArray(s.session_distance_allocations)
-                    ? s.session_distance_allocations[0]
-                    : s.session_distance_allocations;
-                const slotCapacity = alloc?.slot_capacity || (alloc?.targets ? alloc.targets * 4 : 0);
-                const realCapacity = slotCapacity === 0 ? 12 : slotCapacity;
-
-                return {
-                    session_id: s.id,
-                    start_at: s.start_at,
-                    end_at: s.end_at,
-                    capacity: realCapacity,
-                    booked,
-                    available: realCapacity - booked,
-                };
-            })
-            .filter(s => s.available > 0);
+        return (sessionsData || []).map((session: any) => ({
+            session_id: session.session_id,
+            start_at: session.start_at,
+            end_at: session.end_at,
+            capacity: session.equipment_capacity,
+            booked: session.equipment_reserved,
+            available: session.spots_remaining,
+        }));
     }
 
     static async registerIntroClass(payload: {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IntroClassesService } from './IntroClassesService'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -167,7 +167,17 @@ describe('IntroClassesService.updateIntroClass', () => {
 })
 
 describe('IntroClassesService.getAvailableSessions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('uses the canonical intro equipment RPC for roughly one month', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-15T00:30:00.000Z'))
     vi.mocked(supabase.rpc).mockResolvedValueOnce({
       data: [{
         session_id: 'session-1',
@@ -191,8 +201,8 @@ describe('IntroClassesService.getAvailableSessions', () => {
 
     expect(supabase.rpc).toHaveBeenCalledTimes(1)
     expect(supabase.rpc).toHaveBeenCalledWith('get_available_intro_sessions', {
-      p_date_from: expect.any(String),
-      p_date_to: expect.any(String),
+      p_date_from: '2026-08-14',
+      p_date_to: '2026-09-14',
     })
     expect(supabase.from).not.toHaveBeenCalled()
   })

@@ -114,10 +114,19 @@ function equipmentLabel(student: AdminStudent) {
 }
 
 function occupancyLabel(session: AvailableSession) {
+  if (session.bow_usage_type === 'own' || session.bow_usage_type === 'assigned') {
+    return { label: 'Disponibilidad libre', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+  }
   const remaining = session.spots_for_student
-  if (remaining <= 0) return { label: 'Completo', className: 'border-rose-200 bg-rose-50 text-rose-700' }
-  if (remaining <= 2) return { label: 'Ocupacion alta', className: 'border-amber-200 bg-amber-50 text-amber-700' }
+  if (remaining <= 0) return { label: 'Sin equipo', className: 'border-rose-200 bg-rose-50 text-rose-700' }
+  if (remaining <= 2) return { label: 'Pocos equipos', className: 'border-amber-200 bg-amber-50 text-amber-700' }
   return { label: 'Disponible', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
+}
+
+function equipmentAvailabilityText(session: AvailableSession) {
+  if (session.bow_usage_type === 'own') return 'Equipo propio · disponibilidad libre'
+  if (session.bow_usage_type === 'assigned') return 'Equipo asignado · disponibilidad libre'
+  return `${Math.max(session.spots_for_student, 0)} equipos disponibles`
 }
 
 function alertToneClass(tone: AlertItem['tone']) {
@@ -265,11 +274,11 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
     }
 
     if (selectedSessionData.spots_for_student <= 0 && !forceBooking) {
-      items.push({ tone: 'warning', message: 'El turno no tiene cupo operativo. Activa forzar reserva solo si corresponde.' })
+      items.push({ tone: 'warning', message: 'Para este turno ya no tenemos equipo disponible. Por favor, reserva otro turno disponible. Activa forzar reserva solo si corresponde.' })
     }
 
     if (selectedSessionData.spots_for_student <= 0 && forceBooking) {
-      items.push({ tone: 'warning', message: 'Reserva forzada activa: se registrara aunque el turno no tenga cupo libre.' })
+      items.push({ tone: 'warning', message: 'Reserva forzada activa: se registrara aunque el turno no tenga equipo libre.' })
     }
 
     if (selectedSessionData.spots_for_student > 0) {
@@ -494,8 +503,8 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
 
                           <div className="mt-4 space-y-2 text-sm text-slate-600">
                             <div className="flex items-center justify-between">
-                              <span>{session.distance_reserved}/{session.slot_capacity} reservas</span>
-                              <span className="font-semibold text-slate-950">{Math.max(session.spots_for_student, 0)} cupos libres</span>
+                              <span>disponibilidad libre segun el equipo del alumno</span>
+                              <span className="font-semibold text-slate-950">{equipmentAvailabilityText(session)}</span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span>{session.distance_m} m</span>
@@ -552,7 +561,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
                       className="mt-1 h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent"
                     />
                     <label htmlFor="force-booking" className="cursor-pointer">
-                      Forzar reserva aunque el turno este sin cupo
+                      Forzar reserva aunque el turno este sin equipo
                     </label>
                   </div>
                 </section>

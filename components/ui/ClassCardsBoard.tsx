@@ -70,6 +70,13 @@ function sessionUsageLabel(session: AvailableSessionRow) {
   return 'Arco academia'
 }
 
+function sessionAvailabilityLabel(session: AvailableSessionRow) {
+  if (session.bow_usage_type === 'own') return 'Equipo propio · disponibilidad libre'
+  if (session.bow_usage_type === 'assigned') return 'Equipo asignado · disponibilidad libre'
+  if (session.spots_for_student > 0) return `${session.spots_for_student} equipos disponibles`
+  return 'Sin equipo disponible'
+}
+
 function cardKey(card: StudentClassCard) {
   return `${card.student_membership_id}-${card.card_index}`
 }
@@ -436,9 +443,7 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
                                       {dayjs(session.start_at).format('HH:mm')}-{dayjs(session.end_at).format('HH:mm')} · {session.distance_m}m
                                       {session.already_reserved
                                         ? ' · ya reservado'
-                                        : session.spots_for_student > 0
-                                          ? ''
-                                          : ' · sin cupos'}
+                                        : ` · ${sessionAvailabilityLabel(session)}`}
                                     </option>
                                   ))}
                                 </select>
@@ -458,9 +463,7 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
                                 <p className="text-xs font-medium text-textsec">
                                   {selectedSession.already_reserved
                                     ? `Ya existe una reserva para este turno · ${sessionUsageLabel(selectedSession)}`
-                                    : selectedSession.spots_for_student > 0
-                                      ? `${selectedSession.spots_for_student} cupos · ${sessionUsageLabel(selectedSession)} · ${selectedSession.distance_m}m`
-                                      : `Sin cupos disponibles · ${sessionUsageLabel(selectedSession)}`}
+                                    : `${sessionAvailabilityLabel(selectedSession)} · ${sessionUsageLabel(selectedSession)} · ${selectedSession.distance_m}m`}
                                 </p>
                               )}
                             </>
