@@ -20,5 +20,7 @@ export function useMembershipRenewalAlerts(studentIds: readonly string[]) {
     queryKey: membershipRenewalAlertKeys.list(canonicalStudentIds),
     queryFn: () => getMembershipRenewalAlerts(supabase, canonicalStudentIds),
     enabled: canonicalStudentIds.length > 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   })
 }

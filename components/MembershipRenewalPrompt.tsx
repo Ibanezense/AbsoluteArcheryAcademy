@@ -4,10 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/button'
 import { useToast } from '@/components/ui/ToastProvider'
-import {
-  useMembershipRenewalAlerts,
-  type MembershipRenewalAlert,
-} from '@/lib/hooks/useMembershipRenewalAlerts'
+import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import {
   useMembershipRenewalOptions,
@@ -21,6 +18,13 @@ import {
   getRenewalPromptCopy,
   normalizeRenewalOptions,
 } from '@/lib/utils/membershipRenewal'
+import {
+  getDismissedRenewalPrompt,
+  getValidatedRenewalOptions,
+  getVisibleRenewalAlert,
+  setDismissedRenewalPrompt,
+  shouldOpenMembershipRenewalPrompt,
+} from '@/lib/utils/membershipRenewalPrompt'
 
 const PAYMENT_LINES = [
   'Yape: 983883647 (Jose Carlos Ibanez)',
@@ -30,16 +34,6 @@ const PAYMENT_LINES = [
   'Cuenta Corriente Dolares Interbank: 300-3007461466',
   'CCI Dolares Interbank: 003-300-003007461466-17',
 ]
-
-type PromptAlert = MembershipRenewalAlert & {
-  alert_state: 'last_class' | 'expired'
-}
-
-function isPromptAlert(alert: MembershipRenewalAlert | undefined): alert is PromptAlert {
-  return !!alert
-    && (alert.alert_state === 'last_class' || alert.alert_state === 'expired')
-    && !!alert.state_key
-}
 
 function PlanOption({
   option,
@@ -58,6 +52,7 @@ function PlanOption({
     <button
       type="button"
       onClick={onSelect}
+      aria-pressed={selected}
       className={`rounded-xl border p-3 text-left transition ${
         selected ? 'border-accent bg-accent/10' : 'border-line bg-bg/40 hover:border-accent/40'
       }`}
@@ -84,15 +79,17 @@ export default function MembershipRenewalPrompt() {
   const { account, activeStudentId, loading: contextLoading } = useStudentContext()
   const alertsQuery = useMembershipRenewalAlerts(activeStudentId ? [activeStudentId] : [])
   const alert = activeStudentId ? alertsQuery.data?.[activeStudentId] : undefined
-  const hasActiveAlert = isPromptAlert(alert)
-  const dismissalKey = activeStudentId && hasActiveAlert
+  const visibleAlert = getVisibleRenewalAlert(alert)
+  const [renewalClock, setRenewalClock] = useState(() => new Date())
+  const dismissalKey = activeStudentId && visibleAlert
     ? getLimaRenewalDismissalKey(
       activeStudentId,
-      alert.alert_state,
-      alert.state_key,
+      visibleAlert.alert_state,
+      visibleAlert.state_key,
+      renewalClock,
     )
     : null
-  const promptCopy = hasActiveAlert ? getRenewalPromptCopy(alert.alert_state) : null
+  const promptCopy = visibleAlert ? getRenewalPromptCopy(visibleAlert.alert_state) : null
   const [dismissed, setDismissed] = useState(false)
   const [checkedDismissalKey, setCheckedDismissalKey] = useState<string | null>(null)
   const [manualOpen, setManualOpen] = useState(false)
@@ -100,39 +97,27 @@ export default function MembershipRenewalPrompt() {
   const [submitted, setSubmitted] = useState(false)
   const toast = useToast()
 
-  const readyToOpen = !!activeStudentId
-    && account?.role !== 'admin'
-    && !contextLoading
-    && !alertsQuery.isLoading
-    && !alertsQuery.error
-    && !!alert
-    && hasActiveAlert
-    && !!dismissalKey
-    && checkedDismissalKey === dismissalKey
-  const isOpen = readyToOpen && (manualOpen || !dismissed)
+  const isOpen = shouldOpenMembershipRenewalPrompt({
+    contextReady: !!activeStudentId && !contextLoading,
+    queryReady: !alertsQuery.isLoading && !alertsQuery.error,
+    isAdmin: account?.role === 'admin',
+    alert: visibleAlert,
+    dismissalKey,
+    checkedDismissalKey,
+    dismissed,
+    manualOpen,
+  })
   const shouldLoadOptions = isOpen
   const optionsQuery = useMembershipRenewalOptions(activeStudentId, shouldLoadOptions)
   const requestMutation = useRequestMembershipRenewal()
 
-  const rawOptions = useMemo(
-    () => (Array.isArray(optionsQuery.data) ? optionsQuery.data : []),
+  const { options: validatedOptions, malformed: optionsMalformed } = useMemo(
+    () => getValidatedRenewalOptions(optionsQuery.data),
     [optionsQuery.data],
   )
-  const optionsMalformed = optionsQuery.data !== undefined
-    && (
-      !Array.isArray(optionsQuery.data)
-      || rawOptions.some((option) => (
-        !option
-        || typeof option !== 'object'
-        || typeof option.plan_id !== 'string'
-        || typeof option.classes_included !== 'number'
-        || typeof option.regular_price !== 'number'
-        || typeof option.is_country_club_member !== 'boolean'
-      ))
-    )
   const options = useMemo(
-    () => (optionsMalformed ? [] : normalizeRenewalOptions(rawOptions)),
-    [optionsMalformed, rawOptions],
+    () => normalizeRenewalOptions(validatedOptions),
+    [validatedOptions],
   )
   const selectedPlan = useMemo(
     () => options.find((option) => option.plan_id === selectedPlanId) || options[0] || null,
@@ -146,7 +131,7 @@ export default function MembershipRenewalPrompt() {
       return
     }
 
-    setDismissed(window.localStorage.getItem(dismissalKey) === '1')
+    setDismissed(getDismissedRenewalPrompt(() => window.localStorage, dismissalKey))
     setCheckedDismissalKey(dismissalKey)
     setManualOpen(false)
     setSubmitted(false)
@@ -154,17 +139,33 @@ export default function MembershipRenewalPrompt() {
   }, [dismissalKey])
 
   useEffect(() => {
+    function refreshRenewalClock() {
+      if (document.visibilityState === 'hidden') return
+      setRenewalClock(new Date())
+    }
+
+    document.addEventListener('visibilitychange', refreshRenewalClock)
+    window.addEventListener('pageshow', refreshRenewalClock)
+    window.addEventListener('focus', refreshRenewalClock)
+    return () => {
+      document.removeEventListener('visibilitychange', refreshRenewalClock)
+      window.removeEventListener('pageshow', refreshRenewalClock)
+      window.removeEventListener('focus', refreshRenewalClock)
+    }
+  }, [])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
 
     function handleManualOpen() {
-      if (!hasActiveAlert) return
+      if (!visibleAlert) return
       setSubmitted(false)
       setManualOpen(true)
     }
 
     window.addEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
     return () => window.removeEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
-  }, [hasActiveAlert])
+  }, [visibleAlert])
 
   useEffect(() => {
     if (!selectedPlanId && options[0]) {
@@ -174,7 +175,7 @@ export default function MembershipRenewalPrompt() {
 
   function handleClose() {
     if (dismissalKey && typeof window !== 'undefined') {
-      window.localStorage.setItem(dismissalKey, '1')
+      setDismissedRenewalPrompt(() => window.localStorage, dismissalKey)
     }
     setManualOpen(false)
     setDismissed(true)
