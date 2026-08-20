@@ -1,5 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
+import { studentKeys } from '@/lib/queries/studentQueries'
+import { membershipRenewalAlertKeys } from '@/lib/services/membershipRenewalAlertService'
 
 export type MembershipRenewalOption = {
   plan_id: string
@@ -30,6 +32,14 @@ export type MembershipRenewalRequest = {
   plan: {
     name: string
   } | null
+}
+
+export function invalidateMembershipRenewalCaches(
+  queryClient: Pick<QueryClient, 'invalidateQueries'>,
+) {
+  queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all })
+  queryClient.invalidateQueries({ queryKey: studentKeys.all })
+  queryClient.invalidateQueries({ queryKey: ['student-dashboard'] })
 }
 
 export function useMembershipRenewalOptions(studentId: string | null, enabled: boolean) {
@@ -67,6 +77,7 @@ export function useRequestMembershipRenewal() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['membership-renewal-options', variables.studentId] })
       queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] })
+      invalidateMembershipRenewalCaches(queryClient)
     },
   })
 }
@@ -127,8 +138,7 @@ export function useApproveMembershipRenewalRequest() {
       queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] })
       queryClient.invalidateQueries({ queryKey: ['membership-plans'] })
       queryClient.invalidateQueries({ queryKey: ['student-detail'] })
-      queryClient.invalidateQueries({ queryKey: ['student-dashboard'] })
-      queryClient.invalidateQueries({ queryKey: ['students'] })
+      invalidateMembershipRenewalCaches(queryClient)
     },
   })
 }

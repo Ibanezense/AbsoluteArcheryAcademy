@@ -12,8 +12,11 @@ import {
   UserPlus,
 } from 'lucide-react'
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
+import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
+import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
+import type { MembershipRenewalAlertMap } from '@/lib/services/membershipRenewalAlertService'
 import {
   filterAdminStudents,
   getAdminStudentStatus,
@@ -106,7 +109,13 @@ function MembershipCell({ student }: { student: StudentListRow }) {
   )
 }
 
-function DesktopStudentTable({ students }: { students: StudentListRow[] }) {
+function DesktopStudentTable({
+  students,
+  alerts,
+}: {
+  students: StudentListRow[]
+  alerts: MembershipRenewalAlertMap
+}) {
   return (
     <div className="hidden md:block">
       <table className="w-full table-fixed border-collapse text-left">
@@ -156,6 +165,12 @@ function DesktopStudentTable({ students }: { students: StudentListRow[] }) {
                 </td>
                 <td className="px-4 py-4 align-middle text-sm">
                   <MembershipCell student={student} />
+                  <MembershipRenewalAlertAction
+                    studentName={student.full_name}
+                    phone={student.phone}
+                    alert={alerts[student.id]}
+                    className="mt-2"
+                  />
                 </td>
                 <td className="px-4 py-4 align-middle text-sm">
                   <span className={lastAttendance ? 'font-semibold text-slate-700' : 'text-slate-400'}>
@@ -194,7 +209,13 @@ function DesktopStudentTable({ students }: { students: StudentListRow[] }) {
   )
 }
 
-function MobileStudentList({ students }: { students: StudentListRow[] }) {
+function MobileStudentList({
+  students,
+  alerts,
+}: {
+  students: StudentListRow[]
+  alerts: MembershipRenewalAlertMap
+}) {
   return (
     <div className="divide-y divide-slate-100 md:hidden">
       {students.map((student) => {
@@ -226,6 +247,13 @@ function MobileStudentList({ students }: { students: StudentListRow[] }) {
               <MobileDetail label="Última asistencia" value={lastAttendance || 'Sin asistencias'} />
               <MobileDetail label="Fecha de ingreso" value={enrollmentDate || 'Sin fecha'} />
             </dl>
+
+            <MembershipRenewalAlertAction
+              studentName={student.full_name}
+              phone={student.phone}
+              alert={alerts[student.id]}
+              className="mt-3"
+            />
 
             <div className="mt-3 flex items-center justify-end gap-2">
               <Link href={`/admin/alumnos/editar/${student.id}`} className="btn-outline btn-sm">
@@ -276,6 +304,8 @@ export default function AdminAlumnosPage() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<AdminStudentFilter>('all')
   const { data: students = [], isLoading, isError, refetch } = useStudents()
+  const studentIds = useMemo(() => students.map((student) => student.id), [students])
+  const { data: renewalAlerts = {} } = useMembershipRenewalAlerts(studentIds)
 
   const filteredStudents = useMemo(
     () => filterAdminStudents(students, query, statusFilter),
@@ -357,8 +387,8 @@ export default function AdminAlumnosPage() {
           </div>
         ) : (
           <>
-            <DesktopStudentTable students={filteredStudents} />
-            <MobileStudentList students={filteredStudents} />
+            <DesktopStudentTable students={filteredStudents} alerts={renewalAlerts} />
+            <MobileStudentList students={filteredStudents} alerts={renewalAlerts} />
           </>
         )}
       </AdminContentPanel>

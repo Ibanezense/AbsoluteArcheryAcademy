@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { ReactNode } from 'react'
 import StudentBottomNav from '@/components/StudentBottomNav'
 import MembershipRenewalPrompt from '@/components/MembershipRenewalPrompt'
+import MembershipRenewalPromptBoundary from '@/components/MembershipRenewalPromptBoundary'
 
 export default function LayoutWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -24,7 +25,11 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
       <main className="mx-auto min-h-screen w-full max-w-[430px] overflow-x-hidden bg-bg pb-[96px] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
         {children}
       </main>
-      {showStudentNav && <MembershipRenewalPrompt />}
+      {showStudentNav && (
+        <MembershipRenewalPromptBoundary key={pathname}>
+          <MembershipRenewalPrompt />
+        </MembershipRenewalPromptBoundary>
+      )}
       {showStudentNav && <StudentBottomNav />}
     </>
   )

@@ -1,8 +1,4 @@
-export type RenewalPromptState = {
-  membership_status: string | null
-  membership_end?: string | null
-  classes_remaining: number | null
-}
+export type MembershipRenewalAlertState = 'none' | 'last_class' | 'expired'
 
 export type RenewalPriceInput = {
   regular_price: number | null
@@ -32,28 +28,37 @@ export function openMembershipRenewalPrompt() {
   window.dispatchEvent(new CustomEvent(OPEN_MEMBERSHIP_RENEWAL_EVENT))
 }
 
-function isPastDate(dateValue: string | null | undefined, now: Date) {
-  if (!dateValue) return false
+export function getRenewalPromptCopy(
+  state: Exclude<MembershipRenewalAlertState, 'none'>,
+): { title: string; message: string } {
+  if (state === 'last_class') {
+    return {
+      title: 'Te queda una sola clase',
+      message: 'Te queda 1 clase disponible de tu membresía. Puedes renovarla ahora para continuar tus entrenamientos sin interrupciones.',
+    }
+  }
 
-  const [year, month, day] = dateValue.split('-').map(Number)
-  if (!year || !month || !day) return false
-
-  const endDate = new Date(year, month - 1, day)
-  endDate.setHours(0, 0, 0, 0)
-
-  const today = new Date(now)
-  today.setHours(0, 0, 0, 0)
-
-  return endDate < today
+  return {
+    title: 'Renueva tu membresía',
+    message: 'No te quedan clases disponibles. Debes renovar tu membresía para continuar tus clases y realizar nuevas reservas.',
+  }
 }
 
-export function shouldShowRenewalPrompt(state: RenewalPromptState | null, now = new Date()) {
-  if (!state) return false
+export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState) {
+  return state !== 'none'
+}
 
-  const hasNoClasses = (state.classes_remaining ?? 0) <= 0
-  const isExpired = state.membership_status === 'expired' || isPastDate(state.membership_end, now)
+export function getLimaRenewalDismissalKey(
+  studentId: string,
+  state: Exclude<MembershipRenewalAlertState, 'none'>,
+  stateKey: string,
+  now = new Date(),
+) {
+  const limaDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+  }).format(now)
 
-  return isExpired && hasNoClasses
+  return `membership-renewal:${studentId}:${state}:${stateKey}:${limaDate}`
 }
 
 export function getRenewalPrice(plan: RenewalPriceInput, isCountryClubMember: boolean) {

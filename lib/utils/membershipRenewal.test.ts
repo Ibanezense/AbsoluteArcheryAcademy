@@ -1,14 +1,60 @@
 import { describe, expect, it } from 'vitest'
-import { getRenewalPrice, normalizeRenewalOptions, shouldShowRenewalPrompt } from './membershipRenewal'
+import {
+  getLimaRenewalDismissalKey,
+  getRenewalPrice,
+  getRenewalPromptCopy,
+  normalizeRenewalOptions,
+  shouldShowRenewalPrompt,
+} from './membershipRenewal'
 
 describe('membership renewal helpers', () => {
-  it('shows prompt when membership is expired by status or by end date and no classes remain', () => {
-    const now = new Date('2026-04-30T10:00:00-05:00')
+  it('returns the approved copy for the last available class', () => {
+    expect(getRenewalPromptCopy('last_class')).toEqual({
+      title: 'Te queda una sola clase',
+      message: 'Te queda 1 clase disponible de tu membresía. Puedes renovarla ahora para continuar tus entrenamientos sin interrupciones.',
+    })
+  })
 
-    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 0 }, now)).toBe(true)
-    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-04-19', classes_remaining: 0 }, now)).toBe(true)
-    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 2 }, now)).toBe(false)
-    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-05-19', classes_remaining: 0 }, now)).toBe(false)
+  it('returns the approved copy for an expired membership', () => {
+    expect(getRenewalPromptCopy('expired')).toEqual({
+      title: 'Renueva tu membresía',
+      message: 'No te quedan clases disponibles. Debes renovar tu membresía para continuar tus clases y realizar nuevas reservas.',
+    })
+  })
+
+  it('only opens the prompt for canonical renewal alert states', () => {
+    expect(shouldShowRenewalPrompt('none')).toBe(false)
+    expect(shouldShowRenewalPrompt('last_class')).toBe(true)
+    expect(shouldShowRenewalPrompt('expired')).toBe(true)
+  })
+
+  it('builds the same dismissal key for the same Lima day, state, and cycle', () => {
+    const morning = new Date('2026-08-20T09:00:00-05:00')
+    const evening = new Date('2026-08-20T23:30:00-05:00')
+
+    const morningKey = getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', morning)
+    const eveningKey = getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', evening)
+
+    expect(morningKey).toContain('2026-08-20')
+    expect(eveningKey).toBe(morningKey)
+  })
+
+  it('changes the dismissal key on a new Lima day, state, or cycle', () => {
+    const today = new Date('2026-08-20T09:00:00-05:00')
+    const tomorrow = new Date('2026-08-21T09:00:00-05:00')
+    const baseKey = getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', today)
+
+    expect(getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', tomorrow)).not.toBe(baseKey)
+    expect(getLimaRenewalDismissalKey('student-1', 'expired', 'cycle-a', today)).not.toBe(baseKey)
+    expect(getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-b', today)).not.toBe(baseKey)
+  })
+
+  it('changes the dismissal key for a different student', () => {
+    const now = new Date('2026-08-20T09:00:00-05:00')
+
+    expect(getLimaRenewalDismissalKey('student-2', 'last_class', 'cycle-a', now)).not.toBe(
+      getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', now),
+    )
   })
 
   it('uses country club price when available and falls back to regular price', () => {

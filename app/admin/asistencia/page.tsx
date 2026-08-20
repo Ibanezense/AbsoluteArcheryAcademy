@@ -18,6 +18,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
 import {
   getWeeklyAttendanceReview,
   markWeeklyNoShow,
@@ -234,7 +235,12 @@ function AsistenciaContent() {
       }
 
       toast.push({ message: attended ? 'Asistencia registrada.' : 'No-show registrado.', type: 'success' })
-      await Promise.all([loadRoster(selectedDate), loadWeeklyReview(selectedDate)])
+      await Promise.all([
+        loadRoster(selectedDate),
+        loadWeeklyReview(selectedDate),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
+      ])
     } catch (err: any) {
       console.error('Error marking attendance:', err)
       toast.push({ message: err.message || 'Error al marcar asistencia', type: 'error' })
@@ -269,7 +275,12 @@ function AsistenciaContent() {
       }
 
       toast.push({ message: 'Reserva cancelada.', type: 'success' })
-      await Promise.all([loadRoster(selectedDate), loadWeeklyReview(selectedDate)])
+      await Promise.all([
+        loadRoster(selectedDate),
+        loadWeeklyReview(selectedDate),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
+      ])
     } catch (err: any) {
       console.error('Error canceling booking:', err)
       toast.push({ message: err.message || 'Error al cancelar reserva', type: 'error' })
@@ -307,6 +318,7 @@ function AsistenciaContent() {
       await Promise.all([
         loadWeeklyReview(selectedDate),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
       ])
     } catch (err: any) {
       console.error('Error marking weekly no-show:', err)

@@ -32,11 +32,16 @@ import {
 } from 'lucide-react'
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admin/AdminOperationalComponents'
+import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
 import { membershipPlanKeys, useMembershipPlans, type MembershipPlan } from '@/lib/hooks/useMembershipPlans'
+import {
+  membershipRenewalAlertKeys,
+  useMembershipRenewalAlerts,
+} from '@/lib/hooks/useMembershipRenewalAlerts'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import {
   createStudentMembershipCycles,
@@ -432,6 +437,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const membershipDeletionLockRef = useRef(false)
   const detailQuery = useStudentDetail(params.id)
   const plansQuery = useMembershipPlans()
+  const { data: renewalAlerts } = useMembershipRenewalAlerts([params.id])
   const { data, isLoading, error } = detailQuery
   const boundaryClock = useLimaBoundaryClock(data?.bookings)
   const serviceDate = getLimaDateKey(boundaryClock)
@@ -465,6 +471,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
   async function refreshStudentData() {
     await queryClient.invalidateQueries({ queryKey: studentKeys.all })
+    await queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all })
   }
 
   async function uploadAvatar(file?: File) {
@@ -777,6 +784,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-student-search'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
       ])
       await refreshStudentData()
     } catch (membershipError: any) {
@@ -954,6 +962,12 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           </div>
         </div>
       </AdminContentPanel>
+
+      <MembershipRenewalAlertAction
+        studentName={data.full_name}
+        phone={data.phone}
+        alert={renewalAlerts?.[data.id]}
+      />
 
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
