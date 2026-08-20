@@ -32,6 +32,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys, useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
+import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershipStudents'
 import {
   buildMembershipDeletionConfirmation,
@@ -1589,6 +1590,7 @@ export default function AdminMembershipsPage() {
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
@@ -1666,6 +1668,7 @@ export default function AdminMembershipsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
         queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
@@ -1730,6 +1733,7 @@ export default function AdminMembershipsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
         queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),

@@ -13,6 +13,8 @@ describe('admin weekly attendance alert', () => {
     expect(page).toContain('Marcar no asistió esta semana')
     expect(page).toContain('descontará una clase')
     expect(page).toContain('queryClient.invalidateQueries({ queryKey: studentKeys.all })')
+    expect(page).toContain("import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'")
+    expect(page.match(/queryKey: membershipRenewalAlertKeys\.all/g)).toHaveLength(3)
   })
 
   it('renders pending attendance and red candidate cards with championship context', () => {

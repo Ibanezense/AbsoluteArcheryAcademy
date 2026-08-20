@@ -103,8 +103,20 @@ describe('admin multiple membership cycles', () => {
       expect(block).toContain("['weekly-attendance-review']")
       expect(block).toContain('studentKeys.all')
       expect(block).toContain('membershipPlanKeys.all')
+      expect(block).toContain('membershipRenewalAlertKeys.all')
       expect(block).toContain('await refreshAll()')
     }
+  })
+
+  it('invalidates canonical renewal alerts after assigning membership cycles', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const assignmentBlock = page.slice(
+      page.indexOf('async function assignMembership'),
+      page.indexOf('async function saveMembershipEditor'),
+    )
+
+    expect(page).toContain("import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'")
+    expect(assignmentBlock).toContain('membershipRenewalAlertKeys.all')
   })
 
   it('previews corrective deletion before confirmation and prevents duplicate requests', () => {
