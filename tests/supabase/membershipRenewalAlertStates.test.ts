@@ -28,10 +28,21 @@ describe('canonical membership renewal alert states RPC', () => {
     expect(sql).toMatch(/FROM public\.student_memberships sm/i)
     expect(sql).toMatch(/sm\.status\s*=\s*'active'/i)
     expect(sql).toMatch(/COALESCE\(sm\.classes_remaining,\s*0\)\s*>\s*0/i)
-    expect(sql).toMatch(/sm\.end_date IS NULL\s+OR\s+sm\.end_date >= v_today/i)
+    expect(sql).toMatch(/sm\.end_date IS NULL\s+OR\s+sm\.end_date >= GREATEST\(v_today, sm\.start_date\)/i)
     expect(sql).toMatch(/SUM\(COALESCE\(sm\.classes_remaining,\s*0\)\)/i)
     expect(sql).toMatch(/BOOL_OR\(sm\.start_date <= v_today\)/i)
     expect(sql).toMatch(/BOOL_OR\(sm\.start_date > v_today\)/i)
+  })
+
+  it('counts only renewable history and ignores draft or cancelled-only rows', () => {
+    const renewableHistoryFilters = sql.match(
+      /history_membership\.status\s+IN\s*\(\s*'active'\s*,\s*'expired'\s*,\s*'consumed'\s*,\s*'historical'\s*\)/gi,
+    ) ?? []
+
+    expect(renewableHistoryFilters).toHaveLength(2)
+    expect(sql).not.toMatch(
+      /history_membership\.status\s+IN\s*\([^)]*'(?:draft|cancelled)'/i,
+    )
   })
 
   it('requires a current cycle for last-class and preserves valid future balances', () => {
@@ -58,11 +69,17 @@ describe('canonical membership renewal alert states RPC', () => {
     expect(sql).toContain('SECURITY DEFINER')
     expect(sql).toContain('SET search_path = public')
     expect(sql).toContain('auth.uid()')
+    expect(sql).toMatch(/auth\.jwt\(\)\s*->>\s*'role'/i)
+    expect(sql).toMatch(/=\s*'service_role'/i)
     expect(sql).toContain('public.is_admin_user()')
     expect(sql).toContain('public.can_access_student')
     expect(sql).toMatch(/FOREACH\s+v_student_id\s+IN\s+ARRAY/i)
     expect(sql).toMatch(/RAISE EXCEPTION 'No autenticado'/i)
     expect(sql).toMatch(/RAISE EXCEPTION 'No autorizado para consultar este alumno'/i)
+    expect(sql).toMatch(/IF\s+NOT v_is_service_role\s+AND\s+v_actor_id IS NULL\s+THEN/i)
+    expect(sql).toMatch(/WHERE\s+v_is_service_role\s+OR\s+v_is_admin\s+OR\s+public\.can_access_student/i)
+    expect(sql).toMatch(/NOT v_is_service_role\s+AND\s+NOT v_is_admin\s+AND\s+NOT public\.can_access_student/i)
+    expect(sql).not.toMatch(/\bcurrent_user\b/i)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.get_membership_renewal_alert_states\(uuid\[\]\) FROM PUBLIC;/i)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.get_membership_renewal_alert_states\(uuid\[\]\) FROM anon;/i)
     expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.get_membership_renewal_alert_states\(uuid\[\]\) TO authenticated, service_role;/i)

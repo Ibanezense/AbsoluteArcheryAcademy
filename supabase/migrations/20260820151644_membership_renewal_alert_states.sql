@@ -16,22 +16,27 @@ SET search_path = public
 AS $$
 DECLARE
   v_actor_id uuid := auth.uid();
+  v_is_service_role boolean := COALESCE(
+    (auth.jwt() ->> 'role') = 'service_role',
+    false
+  );
   v_is_admin boolean;
   v_student_id uuid;
   v_student_ids uuid[];
   v_today date := (now() AT TIME ZONE 'America/Lima')::date;
 BEGIN
-  IF v_actor_id IS NULL THEN
+  IF NOT v_is_service_role AND v_actor_id IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
   END IF;
 
-  v_is_admin := public.is_admin_user();
+  v_is_admin := NOT v_is_service_role AND public.is_admin_user();
 
   IF p_student_ids IS NULL THEN
     SELECT COALESCE(array_agg(accessible_student.id ORDER BY accessible_student.id), ARRAY[]::uuid[])
     INTO v_student_ids
     FROM public.students accessible_student
-    WHERE v_is_admin
+    WHERE v_is_service_role
+      OR v_is_admin
       OR public.can_access_student(accessible_student.id);
   ELSE
     SELECT COALESCE(array_agg(requested.student_id ORDER BY requested.student_id), ARRAY[]::uuid[])
@@ -49,7 +54,8 @@ BEGIN
         FROM public.students requested_student
         WHERE requested_student.id = v_student_id
       ) OR (
-        NOT v_is_admin
+        NOT v_is_service_role
+        AND NOT v_is_admin
         AND NOT public.can_access_student(v_student_id)
       ) THEN
         RAISE EXCEPTION 'No autorizado para consultar este alumno';
@@ -69,6 +75,7 @@ BEGIN
         SELECT 1
         FROM public.student_memberships history_membership
         WHERE history_membership.student_id = requested.student_id
+          AND history_membership.status IN ('active', 'expired', 'consumed', 'historical')
       ) AS has_membership_history,
       COALESCE(eligible.remaining_unconsumed_classes, 0)::integer AS remaining_unconsumed_classes,
       COALESCE(eligible.has_current_membership, false) AS has_current_membership,
@@ -98,7 +105,7 @@ BEGIN
       WHERE sm.student_id = requested.student_id
         AND sm.status = 'active'
         AND COALESCE(sm.classes_remaining, 0) > 0
-        AND (sm.end_date IS NULL OR sm.end_date >= v_today)
+        AND (sm.end_date IS NULL OR sm.end_date >= GREATEST(v_today, sm.start_date))
     ) eligible ON true
     LEFT JOIN LATERAL (
       SELECT concat_ws(
@@ -111,6 +118,7 @@ BEGIN
       ) AS membership_fingerprint
       FROM public.student_memberships history_membership
       WHERE history_membership.student_id = requested.student_id
+        AND history_membership.status IN ('active', 'expired', 'consumed', 'historical')
       ORDER BY
         history_membership.start_date DESC,
         history_membership.created_at DESC,
