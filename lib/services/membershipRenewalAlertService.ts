@@ -37,36 +37,50 @@ type MembershipRenewalAlertRpcClient = {
   }>
 }
 
-const ALERT_STATES = new Set<MembershipRenewalAlertState>([
-  'none',
-  'last_class',
-  'expired',
-])
-
-function normalizeAlertState(value: unknown): MembershipRenewalAlertState {
-  return typeof value === 'string' && ALERT_STATES.has(value as MembershipRenewalAlertState)
-    ? value as MembershipRenewalAlertState
-    : 'none'
-}
-
-function normalizeRemainingClasses(value: unknown) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
-  return Math.max(0, Math.floor(value))
+function isAlertState(value: unknown): value is MembershipRenewalAlertState {
+  return value === 'none' || value === 'last_class' || value === 'expired'
 }
 
 function normalizeAlertRow(value: unknown): MembershipRenewalAlert | null {
   if (!value || typeof value !== 'object') return null
 
   const row = value as Record<string, unknown>
-  if (typeof row.student_id !== 'string' || row.student_id.length === 0) return null
+  if (typeof row.student_id !== 'string' || row.student_id.trim().length === 0) return null
+  if (!isAlertState(row.alert_state)) return null
+  if (
+    typeof row.remaining_unconsumed_classes !== 'number'
+    || !Number.isFinite(row.remaining_unconsumed_classes)
+    || !Number.isInteger(row.remaining_unconsumed_classes)
+    || row.remaining_unconsumed_classes < 0
+  ) return null
+  if (typeof row.has_current_membership !== 'boolean') return null
+  if (typeof row.has_scheduled_membership !== 'boolean') return null
+  if (typeof row.state_key !== 'string' || row.state_key.trim().length === 0) return null
+
+  if (
+    row.alert_state === 'last_class'
+    && (
+      row.remaining_unconsumed_classes !== 1
+      || !row.has_current_membership
+    )
+  ) return null
+
+  if (
+    row.alert_state === 'expired'
+    && (
+      row.remaining_unconsumed_classes !== 0
+      || row.has_current_membership
+      || row.has_scheduled_membership
+    )
+  ) return null
 
   return {
     student_id: row.student_id,
-    alert_state: normalizeAlertState(row.alert_state),
-    remaining_unconsumed_classes: normalizeRemainingClasses(row.remaining_unconsumed_classes),
-    has_current_membership: row.has_current_membership === true,
-    has_scheduled_membership: row.has_scheduled_membership === true,
-    state_key: typeof row.state_key === 'string' ? row.state_key : '',
+    alert_state: row.alert_state,
+    remaining_unconsumed_classes: row.remaining_unconsumed_classes,
+    has_current_membership: row.has_current_membership,
+    has_scheduled_membership: row.has_scheduled_membership,
+    state_key: row.state_key,
   }
 }
 
@@ -89,7 +103,9 @@ export async function getMembershipRenewalAlerts(
 
   return data.reduce<MembershipRenewalAlertMap>((alerts, value) => {
     const alert = normalizeAlertRow(value)
-    if (alert) alerts[alert.student_id] = alert
+    if (alert && !Object.prototype.hasOwnProperty.call(alerts, alert.student_id)) {
+      alerts[alert.student_id] = alert
+    }
     return alerts
   }, {})
 }
