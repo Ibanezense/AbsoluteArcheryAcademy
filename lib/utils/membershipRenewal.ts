@@ -1,5 +1,12 @@
 export type MembershipRenewalAlertState = 'none' | 'last_class' | 'expired'
 
+/** @deprecated Use MembershipRenewalAlertState from the canonical renewal alert RPC. */
+export type RenewalPromptState = {
+  membership_status: string | null
+  membership_end?: string | null
+  classes_remaining: number | null
+}
+
 export type RenewalPriceInput = {
   regular_price: number | null
   country_club_price: number | null
@@ -44,13 +51,40 @@ export function getRenewalPromptCopy(
   }
 }
 
-export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState) {
-  return state !== 'none'
+function isPastDate(dateValue: string | null | undefined, now: Date) {
+  if (!dateValue) return false
+
+  const [year, month, day] = dateValue.split('-').map(Number)
+  if (!year || !month || !day) return false
+
+  const endDate = new Date(year, month - 1, day)
+  endDate.setHours(0, 0, 0, 0)
+
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+
+  return endDate < today
+}
+
+export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState): boolean
+/** @deprecated Transitional compatibility until MembershipRenewalPrompt uses canonical renewal alerts. */
+export function shouldShowRenewalPrompt(state: RenewalPromptState | null, now?: Date): boolean
+export function shouldShowRenewalPrompt(
+  state: MembershipRenewalAlertState | RenewalPromptState | null,
+  now = new Date(),
+) {
+  if (typeof state === 'string') return state !== 'none'
+  if (!state) return false
+
+  const hasNoClasses = (state.classes_remaining ?? 0) <= 0
+  const isExpired = state.membership_status === 'expired' || isPastDate(state.membership_end, now)
+
+  return isExpired && hasNoClasses
 }
 
 export function getLimaRenewalDismissalKey(
   studentId: string,
-  state: string,
+  state: Exclude<MembershipRenewalAlertState, 'none'>,
   stateKey: string,
   now = new Date(),
 ) {

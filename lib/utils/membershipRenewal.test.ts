@@ -28,6 +28,15 @@ describe('membership renewal helpers', () => {
     expect(shouldShowRenewalPrompt('expired')).toBe(true)
   })
 
+  it('preserves the legacy dashboard decision until the popup migrates to canonical alerts', () => {
+    const now = new Date('2026-04-30T10:00:00-05:00')
+
+    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 0 }, now)).toBe(true)
+    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-04-19', classes_remaining: 0 }, now)).toBe(true)
+    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 2 }, now)).toBe(false)
+    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-05-19', classes_remaining: 0 }, now)).toBe(false)
+  })
+
   it('builds the same dismissal key for the same Lima day, state, and cycle', () => {
     const morning = new Date('2026-08-20T09:00:00-05:00')
     const evening = new Date('2026-08-20T23:30:00-05:00')
@@ -47,6 +56,14 @@ describe('membership renewal helpers', () => {
     expect(getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', tomorrow)).not.toBe(baseKey)
     expect(getLimaRenewalDismissalKey('student-1', 'expired', 'cycle-a', today)).not.toBe(baseKey)
     expect(getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-b', today)).not.toBe(baseKey)
+  })
+
+  it('changes the dismissal key for a different student', () => {
+    const now = new Date('2026-08-20T09:00:00-05:00')
+
+    expect(getLimaRenewalDismissalKey('student-2', 'last_class', 'cycle-a', now)).not.toBe(
+      getLimaRenewalDismissalKey('student-1', 'last_class', 'cycle-a', now),
+    )
   })
 
   it('uses country club price when available and falls back to regular price', () => {
