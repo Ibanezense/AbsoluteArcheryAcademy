@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Spinner } from '@/components/ui/Spinner'
+import { isLikelyNetworkError } from '@/lib/utils/networkError'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -14,19 +15,45 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
+    let isActive = true
+
     const checkAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/login')
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (!isActive) return
+
+        if (sessionError || !session) {
+          setIsAuthenticated(false)
+          setIsLoading(false)
+          router.replace('/login')
           return
         }
+
         setIsAuthenticated(true)
-      } catch (error) {
-        console.error('Error checking auth:', error)
-        router.push('/login')
-      } finally {
         setIsLoading(false)
+
+        try {
+          const { data: { user }, error: userError } = await supabase.auth.getUser()
+          if (!isActive || user) return
+
+          if (userError && isLikelyNetworkError(userError)) return
+
+          setIsAuthenticated(false)
+          router.replace('/login')
+        } catch (error) {
+          if (!isActive || isLikelyNetworkError(error)) return
+
+          console.error('Error validating auth:', error)
+          setIsAuthenticated(false)
+          router.replace('/login')
+        }
+      } catch (error) {
+        if (!isActive) return
+
+        console.error('Error reading auth session:', error)
+        setIsAuthenticated(false)
+        setIsLoading(false)
+        router.replace('/login')
       }
     }
 
@@ -34,12 +61,20 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     // Suscribirse a cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.push('/login')
+      if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false)
+        router.replace('/login')
+        return
+      }
+
+      if (session) {
+        setIsAuthenticated(true)
+        setIsLoading(false)
       }
     })
 
     return () => {
+      isActive = false
       subscription.unsubscribe()
     }
   }, [router])
