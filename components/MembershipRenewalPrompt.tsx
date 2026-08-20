@@ -99,7 +99,7 @@ export default function MembershipRenewalPrompt() {
 
   const isOpen = shouldOpenMembershipRenewalPrompt({
     contextReady: !!activeStudentId && !contextLoading,
-    queryReady: !alertsQuery.isLoading && !alertsQuery.error,
+    queryReady: !alertsQuery.isLoading && !alertsQuery.isFetching && !alertsQuery.error,
     isAdmin: account?.role === 'admin',
     alert: visibleAlert,
     dismissalKey,

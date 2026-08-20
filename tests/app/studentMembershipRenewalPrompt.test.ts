@@ -48,7 +48,9 @@ describe('student membership renewal prompt surface', () => {
   it('does not auto-open before context and alert queries are ready', () => {
     expect(promptSource).toContain('shouldOpenMembershipRenewalPrompt({')
     expect(promptSource).toContain('contextReady: !!activeStudentId && !contextLoading')
-    expect(promptSource).toContain('queryReady: !alertsQuery.isLoading && !alertsQuery.error')
+    expect(promptSource).toContain(
+      'queryReady: !alertsQuery.isLoading && !alertsQuery.isFetching && !alertsQuery.error',
+    )
     expect(promptSource).toContain("isAdmin: account?.role === 'admin'")
     expect(promptSource).toContain('alert: visibleAlert')
     expect(promptSource).toContain('checkedDismissalKey')
