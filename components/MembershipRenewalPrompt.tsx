@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import Button from '@/components/ui/button'
 import { useToast } from '@/components/ui/ToastProvider'
+import {
+  useMembershipRenewalAlerts,
+  type MembershipRenewalAlert,
+} from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
-import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import {
   useMembershipRenewalOptions,
   useRequestMembershipRenewal,
@@ -14,8 +17,9 @@ import {
 import {
   OPEN_MEMBERSHIP_RENEWAL_EVENT,
   formatSoles,
+  getLimaRenewalDismissalKey,
+  getRenewalPromptCopy,
   normalizeRenewalOptions,
-  shouldShowRenewalPrompt,
 } from '@/lib/utils/membershipRenewal'
 
 const PAYMENT_LINES = [
@@ -27,8 +31,14 @@ const PAYMENT_LINES = [
   'CCI Dolares Interbank: 003-300-003007461466-17',
 ]
 
-function storageKey(studentId: string) {
-  return `membership-renewal-prompt-dismissed:${studentId}`
+type PromptAlert = MembershipRenewalAlert & {
+  alert_state: 'last_class' | 'expired'
+}
+
+function isPromptAlert(alert: MembershipRenewalAlert | undefined): alert is PromptAlert {
+  return !!alert
+    && (alert.alert_state === 'last_class' || alert.alert_state === 'expired')
+    && !!alert.state_key
 }
 
 function PlanOption({
@@ -72,50 +82,89 @@ function PlanOption({
 
 export default function MembershipRenewalPrompt() {
   const { account, activeStudentId, loading: contextLoading } = useStudentContext()
-  const { dashboard, loading: dashboardLoading } = useStudentDashboard(activeStudentId)
-  const shouldPrompt = shouldShowRenewalPrompt(dashboard)
+  const alertsQuery = useMembershipRenewalAlerts(activeStudentId ? [activeStudentId] : [])
+  const alert = activeStudentId ? alertsQuery.data?.[activeStudentId] : undefined
+  const hasActiveAlert = isPromptAlert(alert)
+  const dismissalKey = activeStudentId && hasActiveAlert
+    ? getLimaRenewalDismissalKey(
+      activeStudentId,
+      alert.alert_state,
+      alert.state_key,
+    )
+    : null
+  const promptCopy = hasActiveAlert ? getRenewalPromptCopy(alert.alert_state) : null
   const [dismissed, setDismissed] = useState(false)
+  const [checkedDismissalKey, setCheckedDismissalKey] = useState<string | null>(null)
   const [manualOpen, setManualOpen] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [submitted, setSubmitted] = useState(false)
   const toast = useToast()
 
-  const shouldLoadOptions = shouldPrompt && (!dismissed || manualOpen)
+  const readyToOpen = !!activeStudentId
+    && account?.role !== 'admin'
+    && !contextLoading
+    && !alertsQuery.isLoading
+    && !alertsQuery.error
+    && !!alert
+    && hasActiveAlert
+    && !!dismissalKey
+    && checkedDismissalKey === dismissalKey
+  const isOpen = readyToOpen && (manualOpen || !dismissed)
+  const shouldLoadOptions = isOpen
   const optionsQuery = useMembershipRenewalOptions(activeStudentId, shouldLoadOptions)
   const requestMutation = useRequestMembershipRenewal()
 
-  const options = useMemo(() => normalizeRenewalOptions(optionsQuery.data || []), [optionsQuery.data])
+  const rawOptions = useMemo(
+    () => (Array.isArray(optionsQuery.data) ? optionsQuery.data : []),
+    [optionsQuery.data],
+  )
+  const optionsMalformed = optionsQuery.data !== undefined
+    && (
+      !Array.isArray(optionsQuery.data)
+      || rawOptions.some((option) => (
+        !option
+        || typeof option !== 'object'
+        || typeof option.plan_id !== 'string'
+        || typeof option.classes_included !== 'number'
+        || typeof option.regular_price !== 'number'
+        || typeof option.is_country_club_member !== 'boolean'
+      ))
+    )
+  const options = useMemo(
+    () => (optionsMalformed ? [] : normalizeRenewalOptions(rawOptions)),
+    [optionsMalformed, rawOptions],
+  )
   const selectedPlan = useMemo(
     () => options.find((option) => option.plan_id === selectedPlanId) || options[0] || null,
     [options, selectedPlanId]
   )
 
-  const isOpen = !!activeStudentId
-    && account?.role !== 'admin'
-    && !contextLoading
-    && !dashboardLoading
-    && shouldPrompt
-    && (!dismissed || manualOpen)
-
   useEffect(() => {
-    if (!activeStudentId || typeof window === 'undefined') return
-    setDismissed(window.sessionStorage.getItem(storageKey(activeStudentId)) === '1')
+    if (!dismissalKey || typeof window === 'undefined') {
+      setCheckedDismissalKey(null)
+      setDismissed(false)
+      return
+    }
+
+    setDismissed(window.localStorage.getItem(dismissalKey) === '1')
+    setCheckedDismissalKey(dismissalKey)
     setManualOpen(false)
     setSubmitted(false)
     setSelectedPlanId('')
-  }, [activeStudentId])
+  }, [dismissalKey])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     function handleManualOpen() {
+      if (!hasActiveAlert) return
       setSubmitted(false)
       setManualOpen(true)
     }
 
     window.addEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
     return () => window.removeEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
-  }, [])
+  }, [hasActiveAlert])
 
   useEffect(() => {
     if (!selectedPlanId && options[0]) {
@@ -124,14 +173,10 @@ export default function MembershipRenewalPrompt() {
   }, [options, selectedPlanId])
 
   function handleClose() {
-    if (manualOpen) {
-      setManualOpen(false)
-      return
+    if (dismissalKey && typeof window !== 'undefined') {
+      window.localStorage.setItem(dismissalKey, '1')
     }
-
-    if (activeStudentId && typeof window !== 'undefined') {
-      window.sessionStorage.setItem(storageKey(activeStudentId), '1')
-    }
+    setManualOpen(false)
     setDismissed(true)
   }
 
@@ -151,7 +196,11 @@ export default function MembershipRenewalPrompt() {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={submitted ? 'Solicitud enviada' : 'Renueva tu membresia'}>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={submitted ? 'Solicitud enviada' : (promptCopy?.title || 'Renueva tu membresía')}
+    >
       {submitted ? (
         <div className="space-y-4">
           <p className="text-sm text-textsec">
@@ -170,7 +219,7 @@ export default function MembershipRenewalPrompt() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-textsec">
-            Tu membresia ya vencio y no te quedan clases disponibles. Elige una nueva membresia para renovar.
+            {promptCopy?.message}
           </p>
 
           {optionsQuery.isLoading && (
@@ -179,13 +228,13 @@ export default function MembershipRenewalPrompt() {
             </div>
           )}
 
-          {optionsQuery.error && (
+          {(optionsQuery.error || optionsMalformed) && (
             <div className="rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger">
-              No se pudieron cargar los planes de renovacion. Administracion debe verificar que la migracion de renovaciones este aplicada.
+              No se pudieron cargar los planes de renovacion.
             </div>
           )}
 
-          {!optionsQuery.isLoading && !optionsQuery.error && options.length === 0 && (
+          {!optionsQuery.isLoading && !optionsQuery.error && !optionsMalformed && options.length === 0 && (
             <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
               Ya existe una solicitud de renovacion pendiente o no hay planes activos disponibles.
             </div>
@@ -229,7 +278,7 @@ export default function MembershipRenewalPrompt() {
 
           <Button
             onClick={handleSubmit}
-            disabled={!selectedPlan || requestMutation.isPending || optionsQuery.isLoading || !!optionsQuery.error}
+            disabled={!selectedPlan || requestMutation.isPending || optionsQuery.isLoading || !!optionsQuery.error || optionsMalformed}
             className="w-full"
           >
             {requestMutation.isPending ? 'Enviando...' : 'Solicitar renovacion'}

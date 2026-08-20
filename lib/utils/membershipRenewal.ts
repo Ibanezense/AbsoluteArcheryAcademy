@@ -1,12 +1,5 @@
 export type MembershipRenewalAlertState = 'none' | 'last_class' | 'expired'
 
-/** @deprecated Use MembershipRenewalAlertState from the canonical renewal alert RPC. */
-export type RenewalPromptState = {
-  membership_status: string | null
-  membership_end?: string | null
-  classes_remaining: number | null
-}
-
 export type RenewalPriceInput = {
   regular_price: number | null
   country_club_price: number | null
@@ -51,17 +44,8 @@ export function getRenewalPromptCopy(
   }
 }
 
-export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState): boolean
-/**
- * @deprecated Compile-only bridge for the current popup. It never opens from
- * legacy dashboard data and will be removed when Task 4 connects canonical alerts.
- */
-export function shouldShowRenewalPrompt(state: RenewalPromptState | null, now?: Date): boolean
-export function shouldShowRenewalPrompt(
-  state: MembershipRenewalAlertState | RenewalPromptState | null,
-  _now?: Date,
-) {
-  return typeof state === 'string' && state !== 'none'
+export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState) {
+  return state !== 'none'
 }
 
 export function getLimaRenewalDismissalKey(
