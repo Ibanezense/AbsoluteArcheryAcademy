@@ -11,9 +11,7 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  const [isOffline, setIsOffline] = useState(
-    () => typeof navigator !== 'undefined' && !navigator.onLine,
-  )
+  const [isOffline, setIsOffline] = useState(false)
   const isConnectivityError = isOffline || isLikelyNetworkError(error)
 
   useEffect(() => {
@@ -23,6 +21,7 @@ export default function Error({
   useEffect(() => {
     const updateConnection = () => setIsOffline(!navigator.onLine)
 
+    updateConnection()
     window.addEventListener('online', updateConnection)
     window.addEventListener('offline', updateConnection)
 
@@ -36,7 +35,11 @@ export default function Error({
 
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4">
-      <div className="w-full max-w-lg rounded-2xl border border-danger/30 bg-card p-6 text-center shadow-soft">
+      <div
+        role="alert"
+        aria-live="polite"
+        className="w-full max-w-lg rounded-2xl border border-danger/30 bg-card p-6 text-center shadow-soft"
+      >
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-danger/10 text-danger">
           <Icon className="h-6 w-6" aria-hidden="true" />
         </div>
@@ -48,7 +51,7 @@ export default function Error({
             ? 'Revisa tu conexión y vuelve a intentarlo. Tus datos no se han perdido.'
             : 'Vuelve a intentarlo. Si el problema continúa, comunícate con la academia.'}
         </p>
-        <button onClick={() => reset()} className="btn mt-5">
+        <button type="button" onClick={() => reset()} className="btn mt-5">
           Reintentar
         </button>
       </div>

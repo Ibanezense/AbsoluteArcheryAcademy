@@ -20,10 +20,15 @@ describe('student offline access', () => {
   it('shows a specific connectivity state and listens for reconnection', () => {
     const errorPage = source('app/error.tsx')
 
+    expect(errorPage).toContain('useState(false)')
+    expect(errorPage).toMatch(/useEffect\(\(\) => \{[\s\S]*updateConnection\(\)[\s\S]*window\.addEventListener\('online'/)
     expect(errorPage).toContain("window.addEventListener('online'")
     expect(errorPage).toContain("window.addEventListener('offline'")
     expect(errorPage).toContain('Sin conexión a Internet')
     expect(errorPage).toContain('Tus datos no se han perdido')
+    expect(errorPage).toContain('role="alert"')
+    expect(errorPage).toContain('aria-live="polite"')
+    expect(errorPage).toContain('type="button"')
     expect(errorPage).not.toContain('revisa el log del servidor')
   })
 })
