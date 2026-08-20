@@ -28,11 +28,11 @@ describe('membership renewal helpers', () => {
     expect(shouldShowRenewalPrompt('expired')).toBe(true)
   })
 
-  it('preserves the legacy dashboard decision until the popup migrates to canonical alerts', () => {
+  it('does not let the legacy dashboard object trigger a renewal prompt', () => {
     const now = new Date('2026-04-30T10:00:00-05:00')
 
-    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 0 }, now)).toBe(true)
-    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-04-19', classes_remaining: 0 }, now)).toBe(true)
+    expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 0 }, now)).toBe(false)
+    expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-04-19', classes_remaining: 0 }, now)).toBe(false)
     expect(shouldShowRenewalPrompt({ membership_status: 'expired', classes_remaining: 2 }, now)).toBe(false)
     expect(shouldShowRenewalPrompt({ membership_status: 'active', membership_end: '2026-05-19', classes_remaining: 0 }, now)).toBe(false)
   })

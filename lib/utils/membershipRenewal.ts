@@ -51,35 +51,17 @@ export function getRenewalPromptCopy(
   }
 }
 
-function isPastDate(dateValue: string | null | undefined, now: Date) {
-  if (!dateValue) return false
-
-  const [year, month, day] = dateValue.split('-').map(Number)
-  if (!year || !month || !day) return false
-
-  const endDate = new Date(year, month - 1, day)
-  endDate.setHours(0, 0, 0, 0)
-
-  const today = new Date(now)
-  today.setHours(0, 0, 0, 0)
-
-  return endDate < today
-}
-
 export function shouldShowRenewalPrompt(state: MembershipRenewalAlertState): boolean
-/** @deprecated Transitional compatibility until MembershipRenewalPrompt uses canonical renewal alerts. */
+/**
+ * @deprecated Compile-only bridge for the current popup. It never opens from
+ * legacy dashboard data and will be removed when Task 4 connects canonical alerts.
+ */
 export function shouldShowRenewalPrompt(state: RenewalPromptState | null, now?: Date): boolean
 export function shouldShowRenewalPrompt(
   state: MembershipRenewalAlertState | RenewalPromptState | null,
-  now = new Date(),
+  _now?: Date,
 ) {
-  if (typeof state === 'string') return state !== 'none'
-  if (!state) return false
-
-  const hasNoClasses = (state.classes_remaining ?? 0) <= 0
-  const isExpired = state.membership_status === 'expired' || isPastDate(state.membership_end, now)
-
-  return isExpired && hasNoClasses
+  return typeof state === 'string' && state !== 'none'
 }
 
 export function getLimaRenewalDismissalKey(
