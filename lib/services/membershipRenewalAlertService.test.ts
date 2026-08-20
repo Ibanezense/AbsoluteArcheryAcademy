@@ -130,6 +130,17 @@ describe('getMembershipRenewalAlerts', () => {
       },
     },
     {
+      label: 'last_class with a scheduled membership',
+      row: {
+        student_id: 'student-1',
+        alert_state: 'last_class',
+        remaining_unconsumed_classes: 1,
+        has_current_membership: true,
+        has_scheduled_membership: true,
+        state_key: 'last_class:cycle-a',
+      },
+    },
+    {
       label: 'empty state key',
       row: {
         student_id: 'student-1',

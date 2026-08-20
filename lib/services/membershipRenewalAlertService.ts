@@ -62,6 +62,7 @@ function normalizeAlertRow(value: unknown): MembershipRenewalAlert | null {
     && (
       row.remaining_unconsumed_classes !== 1
       || !row.has_current_membership
+      || row.has_scheduled_membership
     )
   ) return null
 
