@@ -1,12 +1,12 @@
 import type { MembershipRenewalAlertState } from './membershipRenewal'
 
 export const LAST_CLASS_WHATSAPP_MESSAGE =
-  'Hola 👋 Te contamos que actualmente te queda **1 clase disponible** de tu membresía.\n'
-  + 'Para que puedas continuar con tus entrenamientos sin interrupciones, te recomendamos renovar antes de utilizar tu última clase. 🏹'
+  'Hola \u{1F44B} Te contamos que actualmente te queda *1 clase disponible* de tu membresía.\n\n'
+  + 'Para que puedas continuar con tus entrenamientos sin interrupciones, te recomendamos renovar antes de utilizar tu última clase. \u{1F3F9}'
 
 export const EXPIRED_MEMBERSHIP_WHATSAPP_MESSAGE =
-  'Hola 👋 Te informamos que tu membresía ya se encuentra **vencida** y actualmente no tienes clases disponibles.\n'
-  + 'Para continuar con tus entrenamientos y poder reservar nuevas clases, es necesario realizar la renovación de tu membresía. 🏹'
+  'Hola \u{1F44B} Te informamos que tu membresía ya se encuentra *vencida* y actualmente no tienes clases disponibles.\n\n'
+  + 'Para continuar con tus entrenamientos y poder reservar nuevas clases, es necesario realizar la renovación de tu membresía. \u{1F3F9}'
 
 export const MEMBERSHIP_RENEWAL_WHATSAPP_MESSAGES = {
   last_class: LAST_CLASS_WHATSAPP_MESSAGE,
