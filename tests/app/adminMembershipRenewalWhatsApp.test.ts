@@ -35,6 +35,7 @@ describe('admin membership renewal WhatsApp action', () => {
       studentName: 'Camila Ramella',
       phone: '999 999 999',
       alert: alert('last_class'),
+      operationalStatus: 'active',
     }))
 
     expect(html).toContain('Última clase')
@@ -54,6 +55,7 @@ describe('admin membership renewal WhatsApp action', () => {
       studentName: 'Camila Ramella',
       phone: null,
       alert: alert('expired'),
+      operationalStatus: 'expired',
     }))
 
     expect(html).toContain('Membresía vencida')
@@ -67,16 +69,35 @@ describe('admin membership renewal WhatsApp action', () => {
       studentName: 'Camila Ramella',
       phone: '999999999',
       alert: undefined,
+      operationalStatus: 'active',
     }))
     const noneHtml = renderToStaticMarkup(createElement(MembershipRenewalAlertAction, {
       studentName: 'Camila Ramella',
       phone: '999999999',
       alert: alert('none'),
+      operationalStatus: 'active',
     }))
 
     expect(absentHtml).toBe('')
     expect(noneHtml).toBe('')
   })
+
+  it.each(['paused', 'inactive'] as const)(
+    'keeps the renewal label but hides communication controls for %s students',
+    (operationalStatus) => {
+      const html = renderToStaticMarkup(createElement(MembershipRenewalAlertAction, {
+        studentName: 'Camila Ramella',
+        phone: operationalStatus === 'paused' ? '999999999' : null,
+        alert: alert('expired'),
+        operationalStatus,
+      }))
+
+      expect(html).toContain('Membresía vencida')
+      expect(html).not.toContain('Enviar WhatsApp')
+      expect(html).not.toContain('Registra un teléfono para enviar el aviso')
+      expect(html).not.toContain('href=')
+    },
+  )
 })
 
 describe('admin renewal alert integration', () => {
@@ -89,6 +110,7 @@ describe('admin renewal alert integration', () => {
     expect(page).toContain('<DesktopStudentTable students={filteredStudents} alerts={renewalAlerts} />')
     expect(page).toContain('<MobileStudentList students={filteredStudents} alerts={renewalAlerts} />')
     expect(page.match(/<MembershipRenewalAlertAction/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(page.match(/operationalStatus=\{getAdminStudentStatus\(student\)\}/g)?.length).toBe(2)
   })
 
   it('loads and displays the shared action in the student detail', () => {
@@ -98,6 +120,7 @@ describe('admin renewal alert integration', () => {
     expect(page).toContain('useMembershipRenewalAlerts([params.id])')
     expect(page).toContain('alert={renewalAlerts?.[data.id]}')
     expect(page).toContain('phone={data.phone}')
+    expect(page).toContain('operationalStatus={operationalStatus}')
   })
 
   it('invalidates renewal alerts after membership updates, assignment, and deletion', () => {

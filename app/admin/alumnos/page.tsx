@@ -169,6 +169,7 @@ function DesktopStudentTable({
                     studentName={student.full_name}
                     phone={student.phone}
                     alert={alerts[student.id]}
+                    operationalStatus={getAdminStudentStatus(student)}
                     className="mt-2"
                   />
                 </td>
@@ -252,6 +253,7 @@ function MobileStudentList({
               studentName={student.full_name}
               phone={student.phone}
               alert={alerts[student.id]}
+              operationalStatus={getAdminStudentStatus(student)}
               className="mt-3"
             />
 

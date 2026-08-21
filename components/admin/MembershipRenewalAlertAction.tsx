@@ -2,11 +2,13 @@ import React from 'react'
 import { MessageCircle } from 'lucide-react'
 import type { MembershipRenewalAlert } from '@/lib/services/membershipRenewalAlertService'
 import { buildMembershipRenewalWhatsAppUrl } from '@/lib/utils/membershipRenewalWhatsApp'
+import type { StudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 
 type MembershipRenewalAlertActionProps = {
   studentName: string
   phone: string | null | undefined
   alert: MembershipRenewalAlert | null | undefined
+  operationalStatus: StudentOperationalStatus
   className?: string
 }
 
@@ -31,19 +33,21 @@ export function MembershipRenewalAlertAction({
   studentName,
   phone,
   alert,
+  operationalStatus,
   className = '',
 }: MembershipRenewalAlertActionProps) {
   if (!alert || alert.alert_state === 'none') return null
 
   const statePresentation = presentation[alert.alert_state]
   const whatsappUrl = buildMembershipRenewalWhatsAppUrl(phone, alert.alert_state)
+  const canSendWhatsApp = operationalStatus !== 'paused' && operationalStatus !== 'inactive'
 
   return (
     <div className={`rounded-2xl border p-3 ${statePresentation.containerClass} ${className}`}>
       <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${statePresentation.labelClass}`}>
         {statePresentation.label}
       </span>
-      {whatsappUrl ? (
+      {canSendWhatsApp && (whatsappUrl ? (
         <a
           href={whatsappUrl}
           target="_blank"
@@ -58,7 +62,7 @@ export function MembershipRenewalAlertAction({
         <p className="mt-2 text-xs font-semibold leading-5 text-slate-600">
           Registra un teléfono para enviar el aviso
         </p>
-      )}
+      ))}
     </div>
   )
 }

@@ -967,6 +967,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         studentName={data.full_name}
         phone={data.phone}
         alert={renewalAlerts?.[data.id]}
+        operationalStatus={operationalStatus}
       />
 
       <section className="space-y-4">
