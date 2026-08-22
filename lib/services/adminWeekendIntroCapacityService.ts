@@ -14,10 +14,8 @@ type AdminWeekendIntroCapacityRpcClient = {
   }>
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function isValidUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value)
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function isValidDateString(value: unknown): value is string {
@@ -39,7 +37,7 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
   }
 
   const row = value as Record<string, unknown>
-  const isValid = isValidUuid(row.session_id)
+  const isValid = isNonEmptyString(row.session_id)
     && isValidDateString(row.start_at)
     && isValidDateString(row.end_at)
     && isNonNegativeInteger(row.equipment_capacity)
@@ -70,7 +68,8 @@ export async function fetchAdminWeekendIntroCapacity(
   })
 
   if (error) {
-    throw new Error(error.message || 'No se pudo cargar la capacidad del fin de semana.')
+    const context = 'No se pudo cargar la disponibilidad del fin de semana'
+    throw new Error(error.message ? `${context}: ${error.message}` : `${context}.`)
   }
 
   if (data === null) return []

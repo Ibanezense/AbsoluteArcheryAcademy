@@ -11,7 +11,7 @@ function rpcClient(result: {
 }
 
 const validRow = {
-  session_id: '123e4567-e89b-42d3-a456-426614174000',
+  session_id: 'session-1',
   start_at: '2026-08-22T14:00:00+00:00',
   end_at: '2026-08-22T15:00:00+00:00',
   equipment_capacity: 8,
@@ -52,14 +52,19 @@ describe('fetchAdminWeekendIntroCapacity', () => {
       .rejects.toThrow('formato')
   })
 
-  it('surfaces the RPC error message and uses a useful Spanish fallback', async () => {
-    const rpcErrorClient = rpcClient({ data: null, error: { message: 'Acceso denegado' } })
+  it('wraps backend errors with useful Spanish operation context', async () => {
+    const rpcErrorClient = rpcClient({
+      data: null,
+      error: { message: 'permission denied for function' },
+    })
     const fallbackClient = rpcClient({ data: null, error: {} })
 
     await expect(fetchAdminWeekendIntroCapacity(rpcErrorClient, '2026-08-21'))
-      .rejects.toThrow('Acceso denegado')
+      .rejects.toThrow(
+        'No se pudo cargar la disponibilidad del fin de semana: permission denied for function',
+      )
     await expect(fetchAdminWeekendIntroCapacity(fallbackClient, '2026-08-21'))
-      .rejects.toThrow('No se pudo cargar la capacidad')
+      .rejects.toThrow('No se pudo cargar la disponibilidad del fin de semana.')
   })
 
   it.each([
@@ -78,8 +83,9 @@ describe('fetchAdminWeekendIntroCapacity', () => {
   })
 
   it.each([
-    ['empty ID', { session_id: '   ' }],
-    ['malformed UUID', { session_id: 'session-1' }],
+    ['empty ID', { session_id: '' }],
+    ['whitespace-only ID', { session_id: '   ' }],
+    ['non-string ID', { session_id: 42 }],
     ['invalid start date', { start_at: 'not-a-date' }],
     ['empty end date', { end_at: '' }],
   ])('rejects a row with an %s', async (_label, override) => {
@@ -120,7 +126,7 @@ describe('fetchAdminWeekendIntroCapacity', () => {
 
   it('fails the whole query when any row is inconsistent', async () => {
     const client = rpcClient({
-      data: [validRow, { ...validRow, session_id: 'invalid' }],
+      data: [validRow, { ...validRow, session_id: null }],
       error: null,
     })
 
