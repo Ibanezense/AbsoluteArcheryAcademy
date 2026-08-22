@@ -96,6 +96,8 @@ DECLARE
   v_today_lima date := (now() AT TIME ZONE 'America/Lima')::date;
   v_target_ids uuid[] := ARRAY[]::uuid[];
   v_affected_count integer := 0;
+  v_existing_actor_profile_id uuid;
+  v_existing_reason text;
   v_result jsonb;
 BEGIN
   IF auth.uid() IS NULL THEN
@@ -133,10 +135,16 @@ BEGIN
   ON CONFLICT (idempotency_key) DO NOTHING;
 
   IF NOT FOUND THEN
-    SELECT batch.result
-    INTO v_result
+    SELECT batch.result, batch.actor_profile_id, batch.reason
+    INTO v_result, v_existing_actor_profile_id, v_existing_reason
     FROM public.membership_expiry_extension_batches batch
     WHERE batch.idempotency_key = p_idempotency_key;
+
+    IF v_existing_actor_profile_id IS DISTINCT FROM auth.uid()
+      OR v_existing_reason IS DISTINCT FROM btrim(p_reason)
+    THEN
+      RAISE EXCEPTION 'Conflicto de idempotencia: la clave ya pertenece a otra solicitud';
+    END IF;
 
     RETURN COALESCE(v_result, jsonb_build_object(
       'affected_count', 0,
@@ -145,6 +153,7 @@ BEGIN
   END IF;
 
   PERFORM pg_advisory_xact_lock(724315117, 7);
+  LOCK TABLE public.student_memberships IN SHARE ROW EXCLUSIVE MODE;
 
   SELECT array_agg(candidate.id ORDER BY candidate.id)
   INTO v_target_ids

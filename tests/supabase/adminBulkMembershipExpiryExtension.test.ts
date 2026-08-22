@@ -90,6 +90,18 @@ describe('bulk membership expiry extension migration', () => {
     )
   })
 
+  it('prevents membership writes before selecting the latest target IDs', () => {
+    const tableLockOffset = applySql.search(
+      /LOCK\s+TABLE\s+public\.student_memberships\s+IN\s+SHARE\s+ROW\s+EXCLUSIVE\s+MODE\s*;/i,
+    )
+    const targetSelectionOffset = applySql.search(
+      /SELECT\s+array_agg\s*\(\s*(?:candidate\.)?id[^)]*\)[\s\S]*?INTO\s+v_target_ids/i,
+    )
+
+    expect(tableLockOffset).toBeGreaterThanOrEqual(0)
+    expect(targetSelectionOffset).toBeGreaterThan(tableLockOffset)
+  })
+
   it('persists the complete UUID-keyed idempotency batch contract', () => {
     const batchTableSql = executableSql.match(
       /CREATE TABLE(?: IF NOT EXISTS)? public\.membership_expiry_extension_batches\s*\(([\s\S]*?)\);/i,
@@ -124,6 +136,23 @@ describe('bulk membership expiry extension migration', () => {
     )
     expect(beforeMembershipUpdate).toMatch(
       /IF\s+NOT\s+FOUND\s+THEN[\s\S]*?SELECT\s+(?:\w+\.)?result[\s\S]*?WHERE\s+(?:\w+\.)?idempotency_key\s*=\s*p_idempotency_key[\s\S]*?RETURN[\s\S]*?already_applied[\s\S]*?true[\s\S]*?END IF;/i,
+    )
+  })
+
+  it('rejects an idempotency key reused by another actor or reason', () => {
+    const membershipSelectionOffset = applySql.search(
+      /SELECT\s+array_agg\s*\(\s*(?:candidate\.)?id[^)]*\)/i,
+    )
+    const beforeMembershipSelection =
+      membershipSelectionOffset === -1
+        ? applySql
+        : applySql.slice(0, membershipSelectionOffset)
+
+    expect(beforeMembershipSelection).toMatch(
+      /IF\s+NOT\s+FOUND\s+THEN[\s\S]*?SELECT\s+(?:\w+\.)?result[\s\S]*?actor_profile_id[\s\S]*?reason[\s\S]*?WHERE\s+(?:\w+\.)?idempotency_key\s*=\s*p_idempotency_key/i,
+    )
+    expect(beforeMembershipSelection).toMatch(
+      /IF[\s\S]*?actor_profile_id[\s\S]*?(?:<>|IS\s+DISTINCT\s+FROM)[\s\S]*?auth\.uid\(\)[\s\S]*?OR[\s\S]*?reason[\s\S]*?(?:<>|IS\s+DISTINCT\s+FROM)[\s\S]*?btrim\s*\(\s*p_reason\s*\)[\s\S]*?THEN[\s\S]*?RAISE EXCEPTION[\s\S]*?(?:idempotencia|idempotency)[\s\S]*?END IF;/i,
     )
   })
 
