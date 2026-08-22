@@ -127,6 +127,34 @@ describe('bulk membership expiry extension migration', () => {
     )
   })
 
+  it('persists the real affected count and result after updating memberships', () => {
+    const membershipUpdateOffset = applySql.search(
+      /UPDATE\s+public\.student_memberships\b/i,
+    )
+    const batchResultUpdateOffset = applySql.search(
+      /UPDATE\s+public\.membership_expiry_extension_batches\b/i,
+    )
+
+    expect(membershipUpdateOffset).toBeGreaterThanOrEqual(0)
+    expect(batchResultUpdateOffset).toBeGreaterThan(membershipUpdateOffset)
+
+    const afterMembershipUpdate = applySql.slice(membershipUpdateOffset)
+    expect(afterMembershipUpdate).toMatch(
+      /GET DIAGNOSTICS\s+v_affected_count\s*=\s*ROW_COUNT\s*;/i,
+    )
+    const persistedBatchResult = afterMembershipUpdate.match(
+      /UPDATE\s+public\.membership_expiry_extension_batches\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?)\s*;/i,
+    )
+    const persistedValues = persistedBatchResult?.[1] ?? ''
+    const persistedBatchWhere = persistedBatchResult?.[2].replace(/\s+/g, ' ').trim() ?? ''
+
+    expect(persistedValues).toMatch(/\baffected_count\s*=\s*v_affected_count\b/i)
+    expect(persistedValues).toMatch(/\bresult\s*=\s*v_result\b/i)
+    expect(persistedBatchWhere).toMatch(
+      /^(?:\w+\.)?idempotency_key\s*=\s*p_idempotency_key$/i,
+    )
+  })
+
   it('requires a reason and records one batch audit action', () => {
     expect(applySql).toMatch(/(?:btrim|trim)\s*\(\s*p_reason\s*\)/i)
     expect(applySql).toMatch(/RAISE EXCEPTION[\s\S]*?(?:motivo|reason)/i)
