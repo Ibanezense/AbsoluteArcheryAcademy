@@ -28,6 +28,7 @@ import {
 import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalRequests'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { AdminDonutChart, AdminMiniBarChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
+import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
 import {
   useAdminDashboardData,
   useAdminStudentSearch,
@@ -656,6 +657,8 @@ export default function AdminDashboard() {
             </div>
           </section>
         )}
+
+        <WeekendIntroCapacity />
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
