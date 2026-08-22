@@ -115,6 +115,16 @@ describe('weekend intro capacity helpers', () => {
     expect(slots[0].status).toBe('full')
   })
 
+  it('treats a session starting exactly now as finished', () => {
+    const now = new Date('2026-08-22T14:00:00Z')
+    const slots = buildWeekendIntroSlots(
+      [session('starts-now', now.toISOString(), 2)],
+      now,
+    )
+
+    expect(slots[0].status).toBe('finished')
+  })
+
   it('uses the current Lima week across the UTC boundary into Monday', () => {
     const rows = [
       session('current-sat', '2026-08-22T14:00:00Z'),
