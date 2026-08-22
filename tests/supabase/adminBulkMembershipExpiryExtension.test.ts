@@ -10,19 +10,26 @@ const sql = readFileSync(
   'utf8',
 )
 
-function functionSql(functionName: string) {
-  const marker = `CREATE OR REPLACE FUNCTION public.${functionName}`
-  const start = sql.indexOf(marker)
-  if (start === -1) return ''
+const executableSql = sql
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/--.*$/gm, '')
 
-  const remaining = sql.slice(start + marker.length)
+function functionSql(functionName: string) {
+  const declaration = new RegExp(
+    `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${functionName}\\b`,
+    'i',
+  ).exec(executableSql)
+  if (!declaration) return ''
+
+  const start = declaration.index
+  const remaining = executableSql.slice(start + declaration[0].length)
   const nextStatementOffset = remaining.search(
-    /\n\s*(?:CREATE OR REPLACE FUNCTION|REVOKE|GRANT)\b/i,
+    /\n\s*(?:CREATE\s+OR\s+REPLACE\s+FUNCTION|REVOKE|GRANT)\b/i,
   )
 
   return nextStatementOffset === -1
-    ? sql.slice(start)
-    : sql.slice(start, start + marker.length + nextStatementOffset)
+    ? executableSql.slice(start)
+    : executableSql.slice(start, start + declaration[0].length + nextStatementOffset)
 }
 
 describe('bulk membership expiry extension migration', () => {
@@ -30,10 +37,10 @@ describe('bulk membership expiry extension migration', () => {
   const applySql = functionSql('admin_apply_bulk_membership_expiry_extension')
 
   it('defines the approved preview and idempotent apply RPC signatures', () => {
-    expect(sql).toMatch(
+    expect(executableSql).toMatch(
       /CREATE OR REPLACE FUNCTION public\.admin_preview_bulk_membership_expiry_extension\(\s*\)/i,
     )
-    expect(sql).toMatch(
+    expect(executableSql).toMatch(
       /CREATE OR REPLACE FUNCTION public\.admin_apply_bulk_membership_expiry_extension\(\s*p_reason\s+text\s*,\s*p_idempotency_key\s+uuid\s*\)/i,
     )
   })
@@ -41,11 +48,13 @@ describe('bulk membership expiry extension migration', () => {
   it('uses the Lima calendar date and extends end_date by exactly seven days', () => {
     for (const rpcSql of [previewSql, applySql]) {
       expect(rpcSql).toMatch(/now\(\)\s+AT TIME ZONE\s+'America\/Lima'/i)
-      expect(rpcSql).toMatch(/end_date\s*\+\s*7\b/i)
+      expect(rpcSql).toMatch(
+        /end_date\s*\+\s*(?:7|INTERVAL\s+'7 days')\s*(?=AS\s+new_end_date|,|\bWHERE\b)/i,
+      )
     }
 
     expect(applySql).toMatch(
-      /UPDATE\s+public\.student_memberships[\s\S]*?SET[\s\S]*?end_date\s*=\s*[^,;]*end_date\s*\+\s*7\b/i,
+      /UPDATE\s+public\.student_memberships[\s\S]*?SET[\s\S]*?end_date\s*=\s*(?:\w+\.)?end_date\s*\+\s*(?:7|INTERVAL\s+'7 days')\s*(?=,|\bWHERE\b)/i,
     )
   })
 
@@ -62,25 +71,105 @@ describe('bulk membership expiry extension migration', () => {
     }
   })
 
-  it('persists a UUID-keyed idempotency batch with a required reason and audit trail', () => {
-    expect(sql).toMatch(
-      /CREATE TABLE(?: IF NOT EXISTS)? public\.membership_expiry_extension_batches\s*\([\s\S]*?(?:id|idempotency_key)\s+uuid\s+(?:NOT NULL\s+)?PRIMARY KEY/i,
+  it('locks the selected candidate IDs and updates exclusively those memberships', () => {
+    expect(applySql).toMatch(
+      /SELECT\s+array_agg\s*\(\s*(?:candidate\.)?id[^)]*\)[\s\S]*?INTO\s+v_target_ids[\s\S]*?DISTINCT\s+ON\s*\(\s*(?:sm\.)?student_id\s*\)/i,
     )
-    expect(applySql).toMatch(/p_idempotency_key/i)
-    expect(applySql).toMatch(/ON CONFLICT\s*\([^)]+\)/i)
-    expect(applySql).toMatch(/already_applied/i)
+    expect(applySql).toMatch(
+      /(?:SELECT|PERFORM)[\s\S]*?FROM\s+public\.student_memberships[\s\S]*?WHERE\s+(?:\w+\.)?id\s*=\s*ANY\s*\(\s*v_target_ids\s*\)\s*(?:ORDER BY\s+(?:\w+\.)?id\s*)?FOR\s+UPDATE/i,
+    )
+
+    const updateWhere = applySql.match(
+      /UPDATE\s+public\.student_memberships[\s\S]*?\bWHERE\s+([\s\S]*?)(?:\bRETURNING\b|;)/i,
+    )?.[1]
+      .replace(/\s+/g, ' ')
+      .trim() ?? ''
+
+    expect(updateWhere).toMatch(
+      /^(?:\w+\.)?id\s*=\s*ANY\s*\(\s*v_target_ids\s*\)$/i,
+    )
+  })
+
+  it('persists the complete UUID-keyed idempotency batch contract', () => {
+    const batchTableSql = executableSql.match(
+      /CREATE TABLE(?: IF NOT EXISTS)? public\.membership_expiry_extension_batches\s*\(([\s\S]*?)\);/i,
+    )?.[1] ?? ''
+
+    expect(batchTableSql).toMatch(
+      /idempotency_key\s+uuid\s+(?:NOT NULL\s+)?PRIMARY KEY/i,
+    )
+    expect(batchTableSql).toMatch(/actor_profile_id\s+uuid\b/i)
+    expect(batchTableSql).toMatch(/reason\s+text\s+NOT NULL/i)
+    expect(batchTableSql).toMatch(
+      /extension_days\s+integer\s+NOT NULL\s+DEFAULT\s+7/i,
+    )
+    expect(batchTableSql).toMatch(/CHECK\s*\(\s*extension_days\s*=\s*7\s*\)/i)
+    expect(batchTableSql).toMatch(/affected_count\s+integer\b/i)
+    expect(batchTableSql).toMatch(/result\s+jsonb\b/i)
+    expect(batchTableSql).toMatch(/created_at\s+timestamptz\b/i)
+  })
+
+  it('returns a stored batch result on retries before touching memberships', () => {
+    const membershipUpdateOffset = applySql.search(
+      /UPDATE\s+public\.student_memberships\b/i,
+    )
+    const beforeMembershipUpdate =
+      membershipUpdateOffset === -1 ? applySql : applySql.slice(0, membershipUpdateOffset)
+
+    expect(beforeMembershipUpdate).toMatch(
+      /INSERT\s+INTO\s+public\.membership_expiry_extension_batches\s*\([\s\S]*?idempotency_key[\s\S]*?VALUES\s*\([\s\S]*?p_idempotency_key/i,
+    )
+    expect(beforeMembershipUpdate).toMatch(
+      /ON CONFLICT\s*\(\s*idempotency_key\s*\)\s+DO NOTHING/i,
+    )
+    expect(beforeMembershipUpdate).toMatch(
+      /IF\s+NOT\s+FOUND\s+THEN[\s\S]*?SELECT\s+(?:\w+\.)?result[\s\S]*?WHERE\s+(?:\w+\.)?idempotency_key\s*=\s*p_idempotency_key[\s\S]*?RETURN[\s\S]*?already_applied[\s\S]*?true[\s\S]*?END IF;/i,
+    )
+  })
+
+  it('requires a reason and records one batch audit action', () => {
     expect(applySql).toMatch(/(?:btrim|trim)\s*\(\s*p_reason\s*\)/i)
     expect(applySql).toMatch(/RAISE EXCEPTION[\s\S]*?(?:motivo|reason)/i)
-    expect(sql).toMatch(/reason\s+text\s+NOT NULL/i)
     expect(applySql).toMatch(/public\.log_admin_action\s*\(/i)
+  })
+
+  it('enables RLS, permits admin reads, and denies direct client writes to batches', () => {
+    expect(executableSql).toMatch(
+      /ALTER TABLE public\.membership_expiry_extension_batches ENABLE ROW LEVEL SECURITY;/i,
+    )
+    const adminSelectPolicy = executableSql.match(
+      /CREATE POLICY[^;]*?ON public\.membership_expiry_extension_batches[^;]*?;/i,
+    )?.[0] ?? ''
+
+    expect(adminSelectPolicy).toMatch(/FOR SELECT/i)
+    expect(adminSelectPolicy).toMatch(/TO authenticated/i)
+    expect(adminSelectPolicy).toMatch(/USING[\s\S]*?public\.is_admin_user\(\)/i)
+    for (const role of ['PUBLIC', 'anon', 'authenticated']) {
+      expect(executableSql).toMatch(
+        new RegExp(
+          `REVOKE ALL ON (?:TABLE )?public\\.membership_expiry_extension_batches FROM [^;]*\\b${role}\\b[^;]*;`,
+          'i',
+        ),
+      )
+    }
+    expect(executableSql).toMatch(
+      /GRANT SELECT ON (?:TABLE )?public\.membership_expiry_extension_batches TO authenticated;/i,
+    )
+    expect(executableSql).not.toMatch(
+      /GRANT\s+(?:INSERT|UPDATE|DELETE|ALL)[^;]*membership_expiry_extension_batches\s+TO\s+(?:anon|authenticated)/i,
+    )
   })
 
   it('keeps both SECURITY DEFINER RPCs admin-only with a fixed search path', () => {
     for (const rpcSql of [previewSql, applySql]) {
       expect(rpcSql).toMatch(/SECURITY DEFINER/i)
       expect(rpcSql).toMatch(/SET search_path\s*(?:=|TO)\s*public/i)
-      expect(rpcSql).toMatch(/(?:auth\.uid\(\)|v_actor_id)\s+IS\s+NULL/i)
-      expect(rpcSql).toMatch(/public\.is_admin_user\(\)/i)
+      expect(rpcSql).toMatch(
+        /IF\s+auth\.uid\(\)\s+IS\s+NULL\s+THEN[\s\S]*?RAISE EXCEPTION[\s\S]*?END IF;/i,
+      )
+      expect(rpcSql).toMatch(
+        /IF\s+NOT\s+public\.is_admin_user\(\)\s+THEN[\s\S]*?RAISE EXCEPTION[\s\S]*?END IF;/i,
+      )
     }
 
     for (const signature of [
@@ -88,22 +177,22 @@ describe('bulk membership expiry extension migration', () => {
       'admin_apply_bulk_membership_expiry_extension(text, uuid)',
     ]) {
       const escapedSignature = signature.replace(/[().]/g, '\\$&')
-      expect(sql).toMatch(
+      expect(executableSql).toMatch(
         new RegExp(
           `REVOKE (?:ALL|EXECUTE) ON FUNCTION public\\.${escapedSignature} FROM PUBLIC;`,
           'i',
         ),
       )
-      expect(sql).toMatch(
+      expect(executableSql).toMatch(
         new RegExp(
           `REVOKE (?:ALL|EXECUTE) ON FUNCTION public\\.${escapedSignature} FROM anon;`,
           'i',
         ),
       )
-      expect(sql).toMatch(
+      expect(executableSql).toMatch(
         new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${escapedSignature} TO authenticated;`, 'i'),
       )
-      expect(sql).toMatch(
+      expect(executableSql).toMatch(
         new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${escapedSignature} TO service_role;`, 'i'),
       )
     }
