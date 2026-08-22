@@ -127,7 +127,7 @@ describe('bulk membership expiry extension migration', () => {
     )
   })
 
-  it('persists the real affected count and result after updating memberships', () => {
+  it('derives and persists the batch result from the memberships actually updated', () => {
     const membershipUpdateOffset = applySql.search(
       /UPDATE\s+public\.student_memberships\b/i,
     )
@@ -139,9 +139,20 @@ describe('bulk membership expiry extension migration', () => {
     expect(batchResultUpdateOffset).toBeGreaterThan(membershipUpdateOffset)
 
     const afterMembershipUpdate = applySql.slice(membershipUpdateOffset)
-    expect(afterMembershipUpdate).toMatch(
-      /GET DIAGNOSTICS\s+v_affected_count\s*=\s*ROW_COUNT\s*;/i,
+    const updatedRowsStatement = applySql.match(
+      /WITH\s+updated_memberships\s+AS\s*\(\s*UPDATE\s+public\.student_memberships\b([\s\S]*?)\bRETURNING\b([\s\S]*?)\)\s*SELECT\s+([\s\S]*?)\s+INTO\s+v_affected_count\s*,\s*v_result\s+FROM\s+updated_memberships\s*;/i,
     )
+    const returnedColumns = updatedRowsStatement?.[2] ?? ''
+    const derivedBatchValues = updatedRowsStatement?.[3] ?? ''
+
+    expect(returnedColumns).toMatch(/\bid\b/i)
+    expect(returnedColumns).toMatch(/\bstudent_id\b/i)
+    expect(returnedColumns).toMatch(/\bend_date\b/i)
+    expect(derivedBatchValues).toMatch(/COUNT\s*\(\s*\*\s*\)/i)
+    expect(derivedBatchValues).toMatch(
+      /jsonb_build_object\s*\([\s\S]*?jsonb_agg\s*\([\s\S]*?jsonb_build_object\s*\(/i,
+    )
+
     const persistedBatchResult = afterMembershipUpdate.match(
       /UPDATE\s+public\.membership_expiry_extension_batches\s+SET\s+([\s\S]*?)\s+WHERE\s+([\s\S]*?)\s*;/i,
     )
