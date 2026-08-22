@@ -18,10 +18,47 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function isValidDateString(value: unknown): value is string {
-  return typeof value === 'string'
-    && value.trim().length > 0
-    && Number.isFinite(Date.parse(value))
+const RFC3339_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  if (month === 2) return isLeapYear(year) ? 29 : 28
+  if (month === 4 || month === 6 || month === 9 || month === 11) return 30
+  return 31
+}
+
+function parseRfc3339Timestamp(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+
+  const match = RFC3339_TIMESTAMP_PATTERN.exec(value)
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = Number(match[6])
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8])
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9])
+
+  if (
+    month < 1
+    || month > 12
+    || day < 1
+    || day > getDaysInMonth(year, month)
+    || hour > 23
+    || minute > 59
+    || second > 59
+    || offsetHour > 23
+    || offsetMinute > 59
+  ) return null
+
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : null
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -37,9 +74,12 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
   }
 
   const row = value as Record<string, unknown>
+  const startTime = parseRfc3339Timestamp(row.start_at)
+  const endTime = parseRfc3339Timestamp(row.end_at)
   const isValid = isNonEmptyString(row.session_id)
-    && isValidDateString(row.start_at)
-    && isValidDateString(row.end_at)
+    && startTime !== null
+    && endTime !== null
+    && endTime > startTime
     && isNonNegativeInteger(row.equipment_capacity)
     && isNonNegativeInteger(row.equipment_reserved)
     && isNonNegativeInteger(row.spots_remaining)

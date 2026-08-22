@@ -95,6 +95,49 @@ describe('fetchAdminWeekendIntroCapacity', () => {
       .rejects.toThrow('inválida')
   })
 
+  it.each([
+    ['numeric-looking input', { start_at: '0' }],
+    ['locale-formatted input', { start_at: '12/25/2026' }],
+    ['impossible calendar date', { start_at: '2026-02-31T14:00:00Z' }],
+  ])('rejects a non-RFC3339 timestamp: %s', async (_label, override) => {
+    const client = rpcClient({ data: [{ ...validRow, ...override }], error: null })
+
+    await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
+      .rejects.toThrow('inválida')
+  })
+
+  it.each([
+    ['equal timestamps', '2026-08-22T14:00:00+00:00'],
+    ['a reversed interval', '2026-08-22T13:59:59+00:00'],
+  ])('rejects %s', async (_label, endAt) => {
+    const client = rpcClient({ data: [{ ...validRow, end_at: endAt }], error: null })
+
+    await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
+      .rejects.toThrow('inválida')
+  })
+
+  it('accepts Z and offset timestamps with optional fractional seconds', async () => {
+    const client = rpcClient({
+      data: [
+        {
+          ...validRow,
+          start_at: '2026-08-22T14:00:00Z',
+          end_at: '2026-08-22T15:00:00.123Z',
+        },
+        {
+          ...validRow,
+          session_id: 'session-2',
+          start_at: '2026-08-22T09:00:00.123-05:00',
+          end_at: '2026-08-22T10:00:00-05:00',
+        },
+      ],
+      error: null,
+    })
+
+    await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
+      .resolves.toHaveLength(2)
+  })
+
   it('rejects remaining spots greater than equipment capacity', async () => {
     const client = rpcClient({
       data: [{ ...validRow, equipment_capacity: 4, spots_remaining: 5 }],
