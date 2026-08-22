@@ -1325,6 +1325,8 @@ export default function AdminMembershipsPage() {
   const expiryExtensionIdempotencyKeyRef = useRef<string | null>(null)
   const expiryExtensionSubmissionLockRef = useRef(false)
   const expiryExtensionPreviewGenerationRef = useRef(0)
+  const expiryExtensionOperationGenerationRef = useRef(0)
+  const expiryExtensionMountedRef = useRef(false)
 
   const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMembershipPlans()
   const {
@@ -1361,6 +1363,16 @@ export default function AdminMembershipsPage() {
   const [expiryExtensionApplying, setExpiryExtensionApplying] = useState(false)
   const [expiryExtensionConfirming, setExpiryExtensionConfirming] = useState(false)
   const [expiryExtensionError, setExpiryExtensionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    expiryExtensionMountedRef.current = true
+
+    return () => {
+      expiryExtensionMountedRef.current = false
+      expiryExtensionPreviewGenerationRef.current += 1
+      expiryExtensionOperationGenerationRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     if (!expiryExtensionConfirming) return
@@ -1554,8 +1566,16 @@ export default function AdminMembershipsPage() {
     await Promise.all([refetchPlans(), refetchMemberships(), refetchStudents()])
   }
 
+  function isExpiryExtensionPreviewCurrent(previewGeneration: number) {
+    return (
+      expiryExtensionMountedRef.current &&
+      expiryExtensionPreviewGenerationRef.current === previewGeneration
+    )
+  }
+
   function resetExpiryExtensionModal() {
     expiryExtensionPreviewGenerationRef.current += 1
+    expiryExtensionOperationGenerationRef.current += 1
     expiryExtensionIdempotencyKeyRef.current = null
     expiryExtensionSubmissionLockRef.current = false
     setExpiryExtensionOpen(false)
@@ -1581,17 +1601,17 @@ export default function AdminMembershipsPage() {
 
     try {
       const preview = await previewBulkMembershipExpiryExtension(supabase)
-      if (expiryExtensionPreviewGenerationRef.current !== previewGeneration) return
+      if (!isExpiryExtensionPreviewCurrent(previewGeneration)) return
       setExpiryExtensionPreview(preview)
     } catch (error) {
-      if (expiryExtensionPreviewGenerationRef.current !== previewGeneration) return
+      if (!isExpiryExtensionPreviewCurrent(previewGeneration)) return
       const message = error instanceof Error
         ? error.message
         : 'No se pudo cargar la vista previa de vencimientos.'
       setExpiryExtensionError(message)
       toast.push({ message, type: 'error' })
     } finally {
-      if (expiryExtensionPreviewGenerationRef.current === previewGeneration) {
+      if (isExpiryExtensionPreviewCurrent(previewGeneration)) {
         setExpiryExtensionLoading(false)
       }
     }
@@ -1604,6 +1624,8 @@ export default function AdminMembershipsPage() {
     const reason = expiryExtensionReason.trim()
     if (!reason || expiryExtensionPreview.affected_count === 0) return
 
+    expiryExtensionOperationGenerationRef.current += 1
+    const operationGeneration = expiryExtensionOperationGenerationRef.current
     expiryExtensionSubmissionLockRef.current = true
     setExpiryExtensionApplying(true)
     setExpiryExtensionConfirming(true)
@@ -1620,6 +1642,11 @@ export default function AdminMembershipsPage() {
           tone: 'warning',
         },
       )
+      if (
+        !expiryExtensionMountedRef.current ||
+        expiryExtensionOperationGenerationRef.current !== operationGeneration
+      ) return
+
       setExpiryExtensionConfirming(false)
 
       if (!accepted) return
@@ -1628,10 +1655,20 @@ export default function AdminMembershipsPage() {
         expiryExtensionIdempotencyKeyRef.current = crypto.randomUUID()
       }
 
+      if (
+        !expiryExtensionMountedRef.current ||
+        expiryExtensionOperationGenerationRef.current !== operationGeneration
+      ) return
+
       const result = await applyBulkMembershipExpiryExtension(supabase, {
         reason: expiryExtensionReason,
         idempotencyKey: expiryExtensionIdempotencyKeyRef.current,
       })
+
+      if (
+        !expiryExtensionMountedRef.current ||
+        expiryExtensionOperationGenerationRef.current !== operationGeneration
+      ) return
 
       toast.push({
         message: result.affected_count === 1
@@ -1647,10 +1684,21 @@ export default function AdminMembershipsPage() {
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
         queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
       ])
       await refreshAll()
+      if (
+        !expiryExtensionMountedRef.current ||
+        expiryExtensionOperationGenerationRef.current !== operationGeneration
+      ) return
+
       resetExpiryExtensionModal()
     } catch (error) {
+      if (
+        !expiryExtensionMountedRef.current ||
+        expiryExtensionOperationGenerationRef.current !== operationGeneration
+      ) return
+
       const message = error instanceof Error
         ? error.message
         : 'No se pudieron retrasar los vencimientos.'
@@ -1658,8 +1706,13 @@ export default function AdminMembershipsPage() {
       toast.push({ message, type: 'error' })
     } finally {
       expiryExtensionSubmissionLockRef.current = false
-      setExpiryExtensionConfirming(false)
-      setExpiryExtensionApplying(false)
+      if (
+        expiryExtensionMountedRef.current &&
+        expiryExtensionOperationGenerationRef.current === operationGeneration
+      ) {
+        setExpiryExtensionConfirming(false)
+        setExpiryExtensionApplying(false)
+      }
     }
   }
 

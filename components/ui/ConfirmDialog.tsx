@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react'
+import React, { createContext, useCallback, useContext, useId, useState } from 'react'
 
 type ConfirmTone = 'default' | 'warning' | 'danger'
 type ConfirmOptions = {
@@ -14,7 +14,13 @@ const ConfirmContext = createContext<{
 } | null>(null)
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const titleId = useId()
+  const messageId = useId()
+  const descriptionId = useId()
   const [state, setState] = useState<{ message: string; opts?: ConfirmOptions; resolve?: (v: boolean) => void } | null>(null)
+  const describedBy = state?.opts?.description
+    ? `${messageId} ${descriptionId}`
+    : messageId
 
   const confirm = useCallback((message: string, opts?: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
@@ -38,15 +44,21 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       {state && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={describedBy}
+          className="fixed inset-0 z-50 flex items-center justify-center"
+        >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => handle(false)} />
           <div className="z-10 mx-4 w-full max-w-lg rounded-2xl border border-line bg-card p-5 shadow-card">
-            <h3 className="text-lg font-semibold text-textpri">{state.opts?.title ?? 'Confirmar'}</h3>
-            <p className="mt-3 whitespace-pre-line rounded-xl border border-line bg-bg/70 p-4 text-sm leading-6 text-textpri">
+            <h3 id={titleId} className="text-lg font-semibold text-textpri">{state.opts?.title ?? 'Confirmar'}</h3>
+            <p id={messageId} className="mt-3 whitespace-pre-line rounded-xl border border-line bg-bg/70 p-4 text-sm leading-6 text-textpri">
               {state.message}
             </p>
             {state.opts?.description && (
-              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-textsec">
+              <p id={descriptionId} className="mt-3 whitespace-pre-line text-sm leading-6 text-textsec">
                 {state.opts.description}
               </p>
             )}

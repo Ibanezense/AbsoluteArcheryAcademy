@@ -40,6 +40,14 @@ export function MembershipExpiryExtensionModal({
   const previousActiveElementRef = useRef<HTMLElement | null>(null)
   const isBusy = isLoading || isApplying
   const canApply = !isBusy && preview.affected_count > 0 && reason.trim().length > 0
+  const dialogAccessibilityProps = confirmOpen
+    ? { 'aria-hidden': true, inert: '' }
+    : {
+        role: 'dialog' as const,
+        'aria-modal': true,
+        'aria-labelledby': titleId,
+        'aria-describedby': descriptionId,
+      }
 
   useEffect(() => {
     if (!isOpen || confirmOpen) return
@@ -111,10 +119,7 @@ export function MembershipExpiryExtensionModal({
       <section
         ref={dialogRef}
         tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        {...dialogAccessibilityProps}
         aria-busy={isBusy}
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[1.75rem] border border-white/10 bg-white shadow-[0_28px_80px_rgba(2,6,23,0.35)] sm:rounded-[1.75rem]"
       >

@@ -109,6 +109,15 @@ describe('bulk membership expiry extension modal', () => {
     expect(modal).toContain('}, [confirmOpen, isOpen])')
     expect(page).toContain('confirmOpen={expiryExtensionConfirming}')
   })
+
+  it('hides and inerts the lower modal while the stacked confirmation is exposed', () => {
+    const html = renderModal({ confirmOpen: true, isApplying: true })
+
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain('inert=""')
+    expect(html).not.toContain('role="dialog"')
+    expect(html).not.toContain('aria-modal="true"')
+  })
 })
 
 describe('bulk membership expiry extension page integration', () => {
@@ -130,7 +139,37 @@ describe('bulk membership expiry extension page integration', () => {
 
     expect(page).toContain('expiryExtensionPreviewGenerationRef.current += 1')
     expect(page).toContain('const previewGeneration = expiryExtensionPreviewGenerationRef.current')
-    expect(page).toContain('expiryExtensionPreviewGenerationRef.current !== previewGeneration')
+    expect(page).toContain('isExpiryExtensionPreviewCurrent(previewGeneration)')
+  })
+
+  it('aborts a confirmed apply after unmount or operation invalidation', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const applyHandler = page.slice(
+      page.indexOf('async function applyExpiryExtension'),
+      page.indexOf('function releaseAssignmentSubmissionLock'),
+    )
+
+    expect(page).toContain('expiryExtensionMountedRef.current = true')
+    expect(page).toContain('expiryExtensionMountedRef.current = false')
+    expect(page).toContain('expiryExtensionOperationGenerationRef.current += 1')
+    expect(applyHandler).toMatch(
+      /if \(\s*!expiryExtensionMountedRef\.current \|\|\s*expiryExtensionOperationGenerationRef\.current !== operationGeneration\s*\) return\s*const result = await applyBulkMembershipExpiryExtension/,
+    )
+  })
+
+  it('does not update preview or reset state after unmount or async invalidation', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const applyHandler = page.slice(
+      page.indexOf('async function applyExpiryExtension'),
+      page.indexOf('function releaseAssignmentSubmissionLock'),
+    )
+
+    expect(page).toContain('expiryExtensionPreviewGenerationRef.current += 1')
+    expect(page).toContain('function isExpiryExtensionPreviewCurrent(previewGeneration: number)')
+    expect(page).toContain('if (!isExpiryExtensionPreviewCurrent(previewGeneration)) return')
+    expect(applyHandler).toMatch(
+      /await refreshAll\(\)\s*if \(\s*!expiryExtensionMountedRef\.current \|\|\s*expiryExtensionOperationGenerationRef\.current !== operationGeneration\s*\) return\s*resetExpiryExtensionModal\(\)/,
+    )
   })
 
   it('confirms before applying, reports the actual count and resets the modal', () => {
@@ -179,6 +218,7 @@ describe('bulk membership expiry extension page integration', () => {
     expect(page).toContain("queryKey: ['admin-students']")
     expect(page).toContain("queryKey: ['admin-bookings']")
     expect(page).toContain("queryKey: ['weekly-attendance-review']")
+    expect(page).toContain("queryKey: ['admin-dashboard-operational']")
     expect(page).toContain('await refreshAll()')
   })
 })
