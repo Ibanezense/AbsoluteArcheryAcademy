@@ -93,6 +93,33 @@ describe('adminMembershipExpiryExtensionService', () => {
     })
   })
 
+  it.each([
+    { affected_count: 2, extensions: [] },
+    {
+      affected_count: 0,
+      extensions: [
+        {
+          student_id: 'student-1',
+          student_name: 'Ana Arquera',
+          membership_id: 'membership-1',
+          membership_name: 'Plan mensual',
+          current_end_date: '2026-08-31',
+          new_end_date: '2026-09-07',
+        },
+      ],
+    },
+  ])(
+    'normalizes an inconsistent count and extension list to an empty result',
+    async (data) => {
+      const client = rpcClient(data)
+
+      await expect(previewBulkMembershipExpiryExtension(client)).resolves.toEqual({
+        affected_count: 0,
+        extensions: [],
+      })
+    },
+  )
+
   it('reports preview RPC errors with a clear Spanish Error', async () => {
     const client = rpcClient(null, { message: 'permission denied' })
 

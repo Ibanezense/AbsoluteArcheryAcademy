@@ -70,6 +70,7 @@ function normalizeResult(data: unknown): MembershipExpiryExtensionPreview {
     !Number.isInteger(data.affected_count) ||
     (data.affected_count as number) < 0 ||
     !Array.isArray(data.extensions) ||
+    data.affected_count !== data.extensions.length ||
     !data.extensions.every(isMembershipExpiryExtension)
   ) {
     return { affected_count: 0, extensions: [] }
