@@ -83,6 +83,20 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain('aria-label={ariaLabel}')
   })
 
+  it('reports normal capacity and forced academy overbooking without changing availability', () => {
+    const component = source('components/admin/WeekendIntroCapacity.tsx')
+
+    expect(component).toContain(
+      'slot.session.equipmentReserved + slot.session.spotsRemaining > slot.session.equipmentCapacity',
+    )
+    expect(component).toContain(
+      '`${slot.session.spotsRemaining} cupos disponibles para prueba · academia sobreocupada`',
+    )
+    expect(component).toContain(
+      '`${slot.session.spotsRemaining} de ${slot.session.equipmentCapacity} cupos libres`',
+    )
+  })
+
   it('keeps loading and errors local to a seven-slot section', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
 
@@ -92,7 +106,13 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain('Reintentar')
     expect(component).toContain('onClick={() => refetch()}')
     expect(component).toContain('role="status"')
-    expect(component).toContain("{isFetching ? 'Actualizando...' : ''}")
+    expect(component).toMatch(
+      /const statusText = isLoading\s*\? 'Cargando disponibilidad\.\.\.'\s*: isFetching\s*\? 'Actualizando\.\.\.'\s*: ''/,
+    )
+    expect(component).toContain(
+      '<SectionHeading isLoading={isLoading} isFetching={isFetching && !isLoading} />',
+    )
+    expect(component).toContain('{statusText}')
     expect(component).not.toContain("isFetching ? 'opacity-100' : 'opacity-0'")
   })
 })

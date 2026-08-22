@@ -1,6 +1,6 @@
 # Disponibilidad semanal para clases de prueba en el dashboard
 
-**Fecha:** 2026-08-21  
+**Fecha:** 2026-08-21
 **Estado:** Aprobado
 
 ## Objetivo

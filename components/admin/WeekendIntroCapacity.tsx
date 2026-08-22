@@ -76,6 +76,12 @@ function formatTime(value: string) {
 
 function getStatusLabel(slot: WeekendIntroCapacitySlot) {
   if (slot.status === 'available' && slot.session) {
+    if (
+      slot.session.equipmentReserved + slot.session.spotsRemaining > slot.session.equipmentCapacity
+    ) {
+      return `${slot.session.spotsRemaining} cupos disponibles para prueba · academia sobreocupada`
+    }
+
     return `${slot.session.spotsRemaining} de ${slot.session.equipmentCapacity} cupos libres`
   }
 
@@ -127,7 +133,19 @@ function SlotCard({ slot, dayLabel }: { slot: WeekendIntroCapacitySlot; dayLabel
   )
 }
 
-function SectionHeading({ isFetching = false }: { isFetching?: boolean }) {
+function SectionHeading({
+  isLoading = false,
+  isFetching = false,
+}: {
+  isLoading?: boolean
+  isFetching?: boolean
+}) {
+  const statusText = isLoading
+    ? 'Cargando disponibilidad...'
+    : isFetching
+      ? 'Actualizando...'
+      : ''
+
   return (
     <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
       <div className="flex items-start gap-3">
@@ -151,7 +169,7 @@ function SectionHeading({ isFetching = false }: { isFetching?: boolean }) {
         aria-live="polite"
         className="min-h-5 shrink-0 text-xs font-semibold text-slate-400"
       >
-        {isFetching ? 'Actualizando...' : ''}
+        {statusText}
       </span>
     </div>
   )
@@ -214,7 +232,7 @@ export default function WeekendIntroCapacity() {
       aria-labelledby="weekend-intro-capacity-title"
       className="overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)]"
     >
-      <SectionHeading isFetching={isFetching && !isLoading} />
+      <SectionHeading isLoading={isLoading} isFetching={isFetching && !isLoading} />
 
       {isLoading ? (
         <LoadingSlots dates={dates} />
