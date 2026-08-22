@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   CreditCard,
@@ -27,6 +28,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { AdminContentPanel, AdminPageHeader, AdminStatCard } from '@/components/admin/AdminVisualSystem'
+import { MembershipExpiryExtensionModal } from '@/components/admin/MembershipExpiryExtensionModal'
 import Avatar from '@/components/ui/Avatar'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -52,6 +54,11 @@ import {
   createStudentMembershipCycles,
   type MembershipPaymentType,
 } from '@/lib/services/adminMembershipService'
+import {
+  applyBulkMembershipExpiryExtension,
+  previewBulkMembershipExpiryExtension,
+  type MembershipExpiryExtensionPreview,
+} from '@/lib/services/adminMembershipExpiryExtensionService'
 import {
   membershipPlanKeys,
   useAdminStudentMemberships,
@@ -1315,6 +1322,9 @@ export default function AdminMembershipsPage() {
   const assignmentIdempotencyKeyRef = useRef<string | null>(null)
   const assignmentSubmissionLockRef = useRef(false)
   const membershipDeletionLockRef = useRef(false)
+  const expiryExtensionIdempotencyKeyRef = useRef<string | null>(null)
+  const expiryExtensionSubmissionLockRef = useRef(false)
+  const expiryExtensionPreviewGenerationRef = useRef(0)
 
   const { data: plans = [], isLoading: plansLoading, error: plansError, refetch: refetchPlans } = useMembershipPlans()
   const {
@@ -1341,6 +1351,62 @@ export default function AdminMembershipsPage() {
   const [planEditor, setPlanEditor] = useState<PlanEditorState | null>(null)
   const [planSaving, setPlanSaving] = useState(false)
   const [planDeletingId, setPlanDeletingId] = useState<string | null>(null)
+  const [expiryExtensionOpen, setExpiryExtensionOpen] = useState(false)
+  const [expiryExtensionPreview, setExpiryExtensionPreview] = useState<MembershipExpiryExtensionPreview>({
+    affected_count: 0,
+    extensions: [],
+  })
+  const [expiryExtensionReason, setExpiryExtensionReason] = useState('')
+  const [expiryExtensionLoading, setExpiryExtensionLoading] = useState(false)
+  const [expiryExtensionApplying, setExpiryExtensionApplying] = useState(false)
+  const [expiryExtensionConfirming, setExpiryExtensionConfirming] = useState(false)
+  const [expiryExtensionError, setExpiryExtensionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!expiryExtensionConfirming) return
+
+    function getConfirmationDialog() {
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')
+      return dialogs[dialogs.length - 1] || null
+    }
+
+    function confirmationControls() {
+      const dialog = getConfirmationDialog()
+      if (!dialog) return []
+      return Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled])'))
+    }
+
+    function focusConfirmationDialog() {
+      confirmationControls()[0]?.focus()
+    }
+
+    function trapConfirmationFocus(event: KeyboardEvent) {
+      if (event.key !== 'Tab') return
+
+      const controls = confirmationControls()
+      if (controls.length === 0) return
+
+      const firstControl = controls[0]
+      const lastControl = controls[controls.length - 1]
+      const activeElement = document.activeElement
+
+      if (event.shiftKey && (activeElement === firstControl || !getConfirmationDialog()?.contains(activeElement))) {
+        event.preventDefault()
+        lastControl.focus()
+      } else if (!event.shiftKey && (activeElement === lastControl || !getConfirmationDialog()?.contains(activeElement))) {
+        event.preventDefault()
+        firstControl.focus()
+      }
+    }
+
+    const animationFrame = requestAnimationFrame(focusConfirmationDialog)
+    document.addEventListener('keydown', trapConfirmationFocus)
+
+    return () => {
+      cancelAnimationFrame(animationFrame)
+      document.removeEventListener('keydown', trapConfirmationFocus)
+    }
+  }, [expiryExtensionConfirming])
 
   const activeStudents = useMemo(() => students.filter(isStudentSelectableForMembershipSale), [students])
   const activePlans = useMemo(() => plans.filter((plan) => plan.is_active), [plans])
@@ -1486,6 +1552,115 @@ export default function AdminMembershipsPage() {
 
   async function refreshAll() {
     await Promise.all([refetchPlans(), refetchMemberships(), refetchStudents()])
+  }
+
+  function resetExpiryExtensionModal() {
+    expiryExtensionPreviewGenerationRef.current += 1
+    expiryExtensionIdempotencyKeyRef.current = null
+    expiryExtensionSubmissionLockRef.current = false
+    setExpiryExtensionOpen(false)
+    setExpiryExtensionPreview({ affected_count: 0, extensions: [] })
+    setExpiryExtensionReason('')
+    setExpiryExtensionLoading(false)
+    setExpiryExtensionApplying(false)
+    setExpiryExtensionConfirming(false)
+    setExpiryExtensionError(null)
+  }
+
+  async function openExpiryExtensionModal() {
+    if (expiryExtensionLoading || expiryExtensionApplying) return
+
+    expiryExtensionPreviewGenerationRef.current += 1
+    const previewGeneration = expiryExtensionPreviewGenerationRef.current
+    expiryExtensionIdempotencyKeyRef.current = crypto.randomUUID()
+    setExpiryExtensionPreview({ affected_count: 0, extensions: [] })
+    setExpiryExtensionReason('')
+    setExpiryExtensionError(null)
+    setExpiryExtensionOpen(true)
+    setExpiryExtensionLoading(true)
+
+    try {
+      const preview = await previewBulkMembershipExpiryExtension(supabase)
+      if (expiryExtensionPreviewGenerationRef.current !== previewGeneration) return
+      setExpiryExtensionPreview(preview)
+    } catch (error) {
+      if (expiryExtensionPreviewGenerationRef.current !== previewGeneration) return
+      const message = error instanceof Error
+        ? error.message
+        : 'No se pudo cargar la vista previa de vencimientos.'
+      setExpiryExtensionError(message)
+      toast.push({ message, type: 'error' })
+    } finally {
+      if (expiryExtensionPreviewGenerationRef.current === previewGeneration) {
+        setExpiryExtensionLoading(false)
+      }
+    }
+  }
+
+  async function applyExpiryExtension() {
+    if (expiryExtensionSubmissionLockRef.current) return
+    if (expiryExtensionApplying || expiryExtensionLoading) return
+
+    const reason = expiryExtensionReason.trim()
+    if (!reason || expiryExtensionPreview.affected_count === 0) return
+
+    expiryExtensionSubmissionLockRef.current = true
+    setExpiryExtensionApplying(true)
+    setExpiryExtensionConfirming(true)
+    setExpiryExtensionError(null)
+
+    try {
+      const accepted = await confirm(
+        `Se retrasarán exactamente 7 días en ${expiryExtensionPreview.affected_count} membresías. ¿Deseas continuar?`,
+        {
+          title: 'Confirmar retraso de vencimientos',
+          description: 'La operación quedará registrada junto con el motivo administrativo.',
+          confirmLabel: 'Sí, aplicar 7 días',
+          cancelLabel: 'Volver',
+          tone: 'warning',
+        },
+      )
+      setExpiryExtensionConfirming(false)
+
+      if (!accepted) return
+
+      if (!expiryExtensionIdempotencyKeyRef.current) {
+        expiryExtensionIdempotencyKeyRef.current = crypto.randomUUID()
+      }
+
+      const result = await applyBulkMembershipExpiryExtension(supabase, {
+        reason: expiryExtensionReason,
+        idempotencyKey: expiryExtensionIdempotencyKeyRef.current,
+      })
+
+      toast.push({
+        message: result.affected_count === 1
+          ? 'Se retrasó 7 días en 1 membresía.'
+          : `Se retrasaron 7 días en ${result.affected_count} membresías.`,
+        type: 'success',
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+      ])
+      await refreshAll()
+      resetExpiryExtensionModal()
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'No se pudieron retrasar los vencimientos.'
+      setExpiryExtensionError(message)
+      toast.push({ message, type: 'error' })
+    } finally {
+      expiryExtensionSubmissionLockRef.current = false
+      setExpiryExtensionConfirming(false)
+      setExpiryExtensionApplying(false)
+    }
   }
 
   function releaseAssignmentSubmissionLock() {
@@ -1868,6 +2043,15 @@ export default function AdminMembershipsPage() {
           <>
             <button
               type="button"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-5 text-sm font-black text-accent transition hover:border-accent/40 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={openExpiryExtensionModal}
+              disabled={expiryExtensionLoading || expiryExtensionApplying}
+            >
+              <CalendarClock className="h-4 w-4" />
+              Retrasar vencimientos 7 días
+            </button>
+            <button
+              type="button"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-accent/30 hover:text-accent"
               onClick={refreshAll}
             >
@@ -2117,6 +2301,18 @@ export default function AdminMembershipsPage() {
           }}
         />
       )}
+
+      <MembershipExpiryExtensionModal
+        isOpen={expiryExtensionOpen}
+        preview={expiryExtensionPreview}
+        reason={expiryExtensionReason}
+        isLoading={expiryExtensionLoading}
+        isApplying={expiryExtensionApplying}
+        error={expiryExtensionError}
+        onReasonChange={setExpiryExtensionReason}
+        onCancel={resetExpiryExtensionModal}
+        onApply={applyExpiryExtension}
+      />
     </div>
   )
 }
