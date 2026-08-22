@@ -97,6 +97,20 @@ describe('admin weekend intro capacity dashboard', () => {
     )
   })
 
+  it('shows occupied over total separately for 20 lb and 18 lb bows', () => {
+    const component = source('components/admin/WeekendIntroCapacity.tsx')
+
+    expect(component).toContain('20 lb')
+    expect(component).toContain('18 lb')
+    expect(component).toContain('slot.session.academyBowsUsed')
+    expect(component).toContain('slot.session.academyCapacity')
+    expect(component).toContain('slot.session.introBowsUsed')
+    expect(component).toContain('slot.session.introBowsCapacity')
+    expect(component).toContain('ocupados de')
+    expect(component).toMatch(/academyBowsUsed[\s\S]*academyCapacity/)
+    expect(component).toMatch(/introBowsUsed[\s\S]*introBowsCapacity/)
+  })
+
   it('keeps loading and errors local to a seven-slot section', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
 

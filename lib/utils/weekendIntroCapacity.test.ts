@@ -22,6 +22,10 @@ function session(
     equipmentCapacity: 8,
     equipmentReserved: 8 - spotsRemaining,
     spotsRemaining,
+    academyCapacity: 6,
+    academyBowsUsed: Math.min(6, 8 - spotsRemaining),
+    introBowsCapacity: 2,
+    introBowsUsed: Math.min(2, 8 - spotsRemaining),
   }
 }
 

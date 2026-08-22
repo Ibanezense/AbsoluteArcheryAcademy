@@ -17,6 +17,10 @@ const validRow = {
   equipment_capacity: 8,
   equipment_reserved: 3,
   spots_remaining: 5,
+  academy_capacity: 6,
+  academy_bows_used: 2,
+  intro_bows_capacity: 2,
+  intro_bows_used: 1,
 }
 
 describe('fetchAdminWeekendIntroCapacity', () => {
@@ -35,6 +39,10 @@ describe('fetchAdminWeekendIntroCapacity', () => {
       equipmentCapacity: 8,
       equipmentReserved: 3,
       spotsRemaining: 5,
+      academyCapacity: 6,
+      academyBowsUsed: 2,
+      introBowsCapacity: 2,
+      introBowsUsed: 1,
     }])
   })
 
@@ -175,5 +183,27 @@ describe('fetchAdminWeekendIntroCapacity', () => {
 
     await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
       .rejects.toThrow('inválida')
+  })
+
+  it.each([
+    ['negative academy capacity', { academy_capacity: -1 }],
+    ['fractional academy usage', { academy_bows_used: 1.5 }],
+    ['wrong intro capacity', { intro_bows_capacity: 3 }],
+    ['intro usage above capacity', { intro_bows_used: 3 }],
+  ])('rejects an invalid bow breakdown: %s', async (_label, override) => {
+    const client = rpcClient({ data: [{ ...validRow, ...override }], error: null })
+
+    await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
+      .rejects.toThrow('inválida')
+  })
+
+  it('allows forced overbooking in the 20 lb academy inventory', async () => {
+    const client = rpcClient({
+      data: [{ ...validRow, academy_capacity: 6, academy_bows_used: 7 }],
+      error: null,
+    })
+
+    await expect(fetchAdminWeekendIntroCapacity(client, '2026-08-21'))
+      .resolves.toEqual([expect.objectContaining({ academyCapacity: 6, academyBowsUsed: 7 })])
   })
 })

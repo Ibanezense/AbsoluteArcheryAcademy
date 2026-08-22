@@ -84,6 +84,12 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
     && isNonNegativeInteger(row.equipment_reserved)
     && isNonNegativeInteger(row.spots_remaining)
     && row.spots_remaining <= row.equipment_capacity
+    && isNonNegativeInteger(row.academy_capacity)
+    && isNonNegativeInteger(row.academy_bows_used)
+    && isNonNegativeInteger(row.intro_bows_capacity)
+    && row.intro_bows_capacity === 2
+    && isNonNegativeInteger(row.intro_bows_used)
+    && row.intro_bows_used <= row.intro_bows_capacity
 
   if (!isValid) {
     throw new Error(`La capacidad de la sesión ${index + 1} es inválida.`)
@@ -96,6 +102,10 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
     equipmentCapacity: row.equipment_capacity as number,
     equipmentReserved: row.equipment_reserved as number,
     spotsRemaining: row.spots_remaining as number,
+    academyCapacity: row.academy_capacity as number,
+    academyBowsUsed: row.academy_bows_used as number,
+    introBowsCapacity: row.intro_bows_capacity as number,
+    introBowsUsed: row.intro_bows_used as number,
   }
 }
 

@@ -14,6 +14,10 @@ export type WeekendIntroCapacitySession = {
   equipmentCapacity: number
   equipmentReserved: number
   spotsRemaining: number
+  academyCapacity: number
+  academyBowsUsed: number
+  introBowsCapacity: number
+  introBowsUsed: number
 }
 
 export type WeekendIntroCapacityDay = 'saturday' | 'sunday'

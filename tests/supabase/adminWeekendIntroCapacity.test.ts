@@ -10,6 +10,12 @@ const migrationPath = migrationName
   ? join(migrationsDirectory, migrationName)
   : join(migrationsDirectory, '__missing_admin_weekend_intro_capacity.sql')
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : ''
+const breakdownMigrationName = readdirSync(migrationsDirectory).find((file) =>
+  file.endsWith('_weekend_bow_breakdown.sql'),
+)
+const breakdownSql = breakdownMigrationName
+  ? readFileSync(join(migrationsDirectory, breakdownMigrationName), 'utf8')
+  : ''
 
 describe('admin weekend intro capacity RPC', () => {
   it('returns the complete administrative weekend capacity contract', () => {
@@ -64,5 +70,19 @@ describe('admin weekend intro capacity RPC', () => {
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.admin_get_weekend_intro_capacity\(date\) FROM anon;/i)
     expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.admin_get_weekend_intro_capacity\(date\) TO authenticated, service_role;/i)
     expect(sql).not.toMatch(/GRANT EXECUTE[\s\S]* TO (?:PUBLIC|anon);/i)
+  })
+
+  it('returns canonical occupied totals for 20 lb and 18 lb bows', () => {
+    expect(breakdownMigrationName).toMatch(/^\d{14}_weekend_bow_breakdown\.sql$/)
+    expect(breakdownSql).toMatch(/academy_capacity integer/i)
+    expect(breakdownSql).toMatch(/academy_bows_used integer/i)
+    expect(breakdownSql).toMatch(/intro_bows_capacity integer/i)
+    expect(breakdownSql).toMatch(/intro_bows_used integer/i)
+    expect(breakdownSql).toMatch(/availability\.data->>'academy_capacity'/i)
+    expect(breakdownSql).toMatch(/availability\.data->>'academy_bows_used'/i)
+    expect(breakdownSql).toMatch(/\b2::integer/i)
+    expect(breakdownSql).toMatch(/availability\.data->>'intro_bows_used'/i)
+    expect(breakdownSql).toContain('SECURITY DEFINER')
+    expect(breakdownSql).toContain('SET search_path = public')
   })
 })

@@ -105,6 +105,33 @@ function SlotContent({ slot }: { slot: WeekendIntroCapacitySlot }) {
         )}
       </div>
       <p className="mt-2 text-xs font-bold leading-4">{status}</p>
+      {slot.session && (
+        <div
+          className="mt-3 flex flex-wrap gap-1.5"
+          aria-label="Ocupación de arcos por peso, ocupados de total"
+        >
+          <span
+            aria-label={`Arcos de 20 libras: ${slot.session.academyBowsUsed} ocupados de ${slot.session.academyCapacity}`}
+            className={`rounded-full border px-2 py-1 text-[0.68rem] font-extrabold leading-none ${
+              slot.session.academyBowsUsed >= slot.session.academyCapacity
+                ? 'border-slate-300 bg-slate-200/70 text-slate-700'
+                : 'border-emerald-200 bg-white/75 text-emerald-800'
+            }`}
+          >
+            20 lb · {slot.session.academyBowsUsed}/{slot.session.academyCapacity}
+          </span>
+          <span
+            aria-label={`Arcos de 18 libras: ${slot.session.introBowsUsed} ocupados de ${slot.session.introBowsCapacity}`}
+            className={`rounded-full border px-2 py-1 text-[0.68rem] font-extrabold leading-none ${
+              slot.session.introBowsUsed >= slot.session.introBowsCapacity
+                ? 'border-slate-300 bg-slate-200/70 text-slate-700'
+                : 'border-emerald-200 bg-white/75 text-emerald-800'
+            }`}
+          >
+            18 lb · {slot.session.introBowsUsed}/{slot.session.introBowsCapacity}
+          </span>
+        </div>
+      )}
     </>
   )
 }
