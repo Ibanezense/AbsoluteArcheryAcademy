@@ -28,6 +28,8 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain("'use client'")
     expect(component).toContain('useAdminWeekendIntroCapacity(now)')
     expect(component).toContain('buildWeekendIntroSlots(sessions, now)')
+    expect(component).toContain("{ key: 'saturday', label: 'Sábado', capacity: 4 }")
+    expect(component).toContain("{ key: 'sunday', label: 'Domingo', capacity: 3 }")
     expect(component).toContain('Disponibilidad para clases de prueba')
     expect(component).toContain('6 arcos de academia de 20 lb')
     expect(component).toContain('2 arcos exclusivos de 18 lb')
@@ -35,10 +37,18 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain('Domingo')
     expect(component).toContain("slots.filter((slot) => slot.day === day.key)")
     expect(component).toContain('daySlots.map((slot) =>')
+    expect(component).toMatch(
+      /const daySlots = slots\.filter\(\(slot\) => slot\.day === day\.key\)[\s\S]*?daySlots\.map\(\(slot\) => \([\s\S]*?<SlotCard/,
+    )
+    expect(component.match(/<SlotCard\b/g) ?? []).toHaveLength(1)
   })
 
   it('covers every state and only links actionable slots to intro management', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
+    const slotCard = component.slice(
+      component.indexOf('function SlotCard'),
+      component.indexOf('function SectionHeading'),
+    )
 
     for (const label of [
       'cupos libres',
@@ -52,7 +62,10 @@ describe('admin weekend intro capacity dashboard', () => {
 
     expect(component).toContain("href='/admin/intro'")
     expect(component).toContain("slot.status === 'available' || slot.status === 'last_spot'")
-    expect(component).toMatch(/actionable\s*\?\s*\([\s\S]*?<Link[\s\S]*?href='\/admin\/intro'[\s\S]*?\)\s*:\s*\(/)
+    expect(slotCard.match(/<Link\b/g) ?? []).toHaveLength(1)
+    expect(slotCard).toMatch(
+      /return actionable \? \(\s*<Link[\s\S]*?href='\/admin\/intro'[\s\S]*?<\/Link>\s*\) : \(\s*<article[\s\S]*?<\/article>\s*\)/,
+    )
     expect(component).toContain('aria-label={ariaLabel}')
   })
 
