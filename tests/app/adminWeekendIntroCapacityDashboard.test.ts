@@ -43,6 +43,20 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component.match(/<SlotCard\b/g) ?? []).toHaveLength(1)
   })
 
+  it('advances and cleans up one live clock shared by the query and slot builder', () => {
+    const component = source('components/admin/WeekendIntroCapacity.tsx')
+
+    expect(component).toContain("import { useEffect, useState } from 'react'")
+    expect(component).toContain('const [now, setNow] = useState(() => new Date())')
+    expect(component).toContain(
+      'const clock = window.setInterval(() => setNow(new Date()), 30_000)',
+    )
+    expect(component).toContain('return () => window.clearInterval(clock)')
+    expect(component).toContain('useAdminWeekendIntroCapacity(now)')
+    expect(component).toContain('buildWeekendIntroSlots(sessions, now)')
+    expect(component).toContain('getWeekendDates(now)')
+  })
+
   it('covers every state and only links actionable slots to intro management', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
     const slotCard = component.slice(
@@ -77,5 +91,8 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain('No se pudo cargar la disponibilidad de clases de prueba.')
     expect(component).toContain('Reintentar')
     expect(component).toContain('onClick={() => refetch()}')
+    expect(component).toContain('role="status"')
+    expect(component).toContain("{isFetching ? 'Actualizando...' : ''}")
+    expect(component).not.toContain("isFetching ? 'opacity-100' : 'opacity-0'")
   })
 })

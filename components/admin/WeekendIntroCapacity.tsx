@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { ArrowRight, CalendarDays, RefreshCcw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAdminWeekendIntroCapacity } from '@/lib/hooks/useAdminDashboardData'
 import {
   buildWeekendIntroSlots,
@@ -147,10 +147,11 @@ function SectionHeading({ isFetching = false }: { isFetching?: boolean }) {
         </div>
       </div>
       <span
+        role="status"
         aria-live="polite"
-        className={`min-h-5 shrink-0 text-xs font-semibold text-slate-400 ${isFetching ? 'opacity-100' : 'opacity-0'}`}
+        className="min-h-5 shrink-0 text-xs font-semibold text-slate-400"
       >
-        Actualizando...
+        {isFetching ? 'Actualizando...' : ''}
       </span>
     </div>
   )
@@ -197,7 +198,13 @@ function DayHeading({ label, date }: { label: string; date: string }) {
 }
 
 export default function WeekendIntroCapacity() {
-  const [now] = useState(() => new Date())
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(new Date()), 30_000)
+    return () => window.clearInterval(clock)
+  }, [])
+
   const { sessions, isLoading, isFetching, error, refetch } = useAdminWeekendIntroCapacity(now)
   const slots = buildWeekendIntroSlots(sessions, now)
   const dates = getWeekendDates(now)
