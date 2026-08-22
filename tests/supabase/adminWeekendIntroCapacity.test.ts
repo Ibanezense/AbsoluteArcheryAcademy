@@ -22,6 +22,9 @@ describe('admin weekend intro capacity RPC', () => {
 
   it('calculates Saturday and Sunday from the current Lima week', () => {
     expect(sql).toContain("AT TIME ZONE 'America/Lima'")
+    expect(sql).toMatch(
+      /v_reference_date date := COALESCE\(\s*p_reference_date,\s*\(now\(\) AT TIME ZONE 'America\/Lima'\)::date\s*\);/i,
+    )
     expect(sql).toMatch(/date_trunc\(\s*'week'\s*,\s*v_reference_date\s*\)::date\s*\+\s*5/i)
     expect(sql).toMatch(/v_sunday\s+date\s*:=\s*v_saturday\s*\+\s*1/i)
   })
@@ -34,6 +37,9 @@ describe('admin weekend intro capacity RPC', () => {
     expect(sql).toMatch(/\(2\s*\+\s*\(availability\.data->>'academy_capacity'\)::integer\)::integer/i)
     expect(sql).toMatch(/availability\.data->>'intro_reserved'[\s\S]*availability\.data->>'academy_students_reserved'/i)
     expect(sql).toMatch(/availability\.data->>'intro_spots_remaining'/i)
+    expect(sql).toMatch(
+      /\(s\.start_at AT TIME ZONE 'America\/Lima'\)::date BETWEEN v_saturday AND v_sunday/i,
+    )
     expect(sql).toMatch(/ORDER BY s\.start_at/i)
   })
 
@@ -41,6 +47,12 @@ describe('admin weekend intro capacity RPC', () => {
     expect(sql).not.toBe('')
     expect(sql).not.toMatch(/intro_spots_remaining'\)::integer\s*>\s*0/i)
     expect(sql).not.toMatch(/spots_remaining\s*>\s*0/i)
+  })
+
+  it('documents the additional intro equipment and complete dashboard result', () => {
+    expect(sql).toMatch(
+      /COMMENT ON FUNCTION public\.admin_get_weekend_intro_capacity\(date\) IS\s*'[^']*two exclusive 18 lb intro bows[^']*additional to the active 20 lb academy inventory[^']*full sessions are intentionally returned[^']*';/i,
+    )
   })
 
   it('requires an authenticated admin and exposes execution only to trusted roles', () => {
