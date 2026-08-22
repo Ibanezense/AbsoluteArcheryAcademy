@@ -10,6 +10,7 @@ interface MembershipExpiryExtensionModalProps {
   reason: string
   isLoading: boolean
   isApplying: boolean
+  confirmOpen: boolean
   error: string | null
   onReasonChange: (reason: string) => void
   onCancel: () => void
@@ -26,6 +27,7 @@ export function MembershipExpiryExtensionModal({
   reason,
   isLoading,
   isApplying,
+  confirmOpen,
   error,
   onReasonChange,
   onCancel,
@@ -40,15 +42,15 @@ export function MembershipExpiryExtensionModal({
   const canApply = !isBusy && preview.affected_count > 0 && reason.trim().length > 0
 
   useEffect(() => {
-    if (!isOpen || isApplying) return
+    if (!isOpen || confirmOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onCancel()
+      if (event.key === 'Escape' && !isApplying) onCancel()
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isApplying, isOpen, onCancel])
+  }, [confirmOpen, isApplying, isOpen, onCancel])
 
   useEffect(() => {
     if (!isOpen) return
@@ -64,7 +66,7 @@ export function MembershipExpiryExtensionModal({
   }, [isOpen])
 
   useEffect(() => {
-    if (!isOpen || isApplying) return
+    if (!isOpen || confirmOpen) return
 
     const dialog = dialogRef.current
     dialogRef.current?.focus()
@@ -95,7 +97,7 @@ export function MembershipExpiryExtensionModal({
 
     document.addEventListener('keydown', trapFocus)
     return () => document.removeEventListener('keydown', trapFocus)
-  }, [isApplying, isOpen])
+  }, [confirmOpen, isOpen])
 
   if (!isOpen) return null
 

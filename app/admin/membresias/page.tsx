@@ -2308,6 +2308,7 @@ export default function AdminMembershipsPage() {
         reason={expiryExtensionReason}
         isLoading={expiryExtensionLoading}
         isApplying={expiryExtensionApplying}
+        confirmOpen={expiryExtensionConfirming}
         error={expiryExtensionError}
         onReasonChange={setExpiryExtensionReason}
         onCancel={resetExpiryExtensionModal}

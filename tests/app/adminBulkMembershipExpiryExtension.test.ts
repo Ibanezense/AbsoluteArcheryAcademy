@@ -33,6 +33,7 @@ function renderModal(
     reason: 'Cierre institucional',
     isLoading: false,
     isApplying: false,
+    confirmOpen: false,
     error: null,
     onReasonChange: vi.fn(),
     onCancel: vi.fn(),
@@ -97,6 +98,17 @@ describe('bulk membership expiry extension modal', () => {
     expect(modal).toContain('previousActiveElementRef.current?.focus()')
     expect(modal).toContain('tabIndex={-1}')
   })
+
+  it('keeps focus containment installed while apply is busy unless the stacked confirm is open', () => {
+    const modal = source('components/admin/MembershipExpiryExtensionModal.tsx')
+    const page = source('app/admin/membresias/page.tsx')
+
+    expect(modal).toContain('confirmOpen: boolean')
+    expect(modal).toContain('if (!isOpen || confirmOpen) return')
+    expect(modal).not.toContain('if (!isOpen || isApplying) return')
+    expect(modal).toContain('}, [confirmOpen, isOpen])')
+    expect(page).toContain('confirmOpen={expiryExtensionConfirming}')
+  })
 })
 
 describe('bulk membership expiry extension page integration', () => {
@@ -154,7 +166,7 @@ describe('bulk membership expiry extension page integration', () => {
     expect(page).toContain('requestAnimationFrame(focusConfirmationDialog)')
     expect(page).toContain("if (event.key !== 'Tab') return")
     expect(page).toContain("querySelectorAll<HTMLElement>('[role=\"dialog\"][aria-modal=\"true\"]')")
-    expect(modal).toContain('}, [isApplying, isOpen])')
+    expect(modal).toContain('}, [confirmOpen, isOpen])')
   })
 
   it('guards pending submissions and refreshes all affected query families', () => {
