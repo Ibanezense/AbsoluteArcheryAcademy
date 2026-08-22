@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabaseClient'
 import { adminBookSession, adminCancelBooking } from '@/lib/services/adminBookingService'
+import { WEEKEND_INTRO_CAPACITY_QUERY_KEY } from '@/lib/utils/weekendIntroCapacity'
 
 // Tipos para las funciones de admin
 export interface AdminBooking {
@@ -244,6 +245,7 @@ export function useAdminBookSession() {
       queryClient.invalidateQueries({ queryKey: ['admin-students'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
       queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] })
+      queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
     },
   })
 }
@@ -262,6 +264,7 @@ export function useAdminCancelBooking() {
       queryClient.invalidateQueries({ queryKey: ['admin-students'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
       queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] })
+      queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
     },
   })
 }

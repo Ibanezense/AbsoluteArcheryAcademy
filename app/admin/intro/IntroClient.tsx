@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import {
@@ -31,6 +32,7 @@ import {
   type IntroPaymentStatus,
   type IntroSessionGroup,
 } from '@/lib/services/IntroClassesService'
+import { WEEKEND_INTRO_CAPACITY_QUERY_KEY } from '@/lib/utils/weekendIntroCapacity'
 import RegisterIntroModal from './components/RegisterIntroModal'
 
 dayjs.locale('es')
@@ -897,6 +899,7 @@ function IntroErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function IntroClient() {
+  const queryClient = useQueryClient()
   const [sessions, setSessions] = useState<IntroSessionGroup[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -983,12 +986,14 @@ export default function IntroClient() {
 
   const handleCreated = () => {
     setIsModalOpen(false)
+    void queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
     void fetchData()
   }
 
   const handleUpdated = () => {
     setSelectedEditClient(null)
     setSelectedClient(null)
+    void queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
     void fetchData()
   }
 
