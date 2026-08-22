@@ -1562,8 +1562,12 @@ export default function AdminMembershipsPage() {
     }, 0)
   }
 
-  async function refreshAll() {
-    await Promise.all([refetchPlans(), refetchMemberships(), refetchStudents()])
+  async function refreshAll(throwOnError = false) {
+    await Promise.all([
+      refetchPlans({ throwOnError }),
+      refetchMemberships({ throwOnError }),
+      refetchStudents({ throwOnError }),
+    ])
   }
 
   function isExpiryExtensionPreviewCurrent(previewGeneration: number) {
@@ -1665,6 +1669,16 @@ export default function AdminMembershipsPage() {
         idempotencyKey: expiryExtensionIdempotencyKeyRef.current,
       })
 
+      const invalidationResults = await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }, { throwOnError: true }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }, { throwOnError: true }),
+      ])
+
       if (
         !expiryExtensionMountedRef.current ||
         expiryExtensionOperationGenerationRef.current !== operationGeneration
@@ -1677,20 +1691,24 @@ export default function AdminMembershipsPage() {
         type: 'success',
       })
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
-        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
-        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
-        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
-        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
-      ])
-      await refreshAll()
+      let refreshFailed = invalidationResults.some((result) => result.status === 'rejected')
+      try {
+        await refreshAll(true)
+      } catch {
+        refreshFailed = true
+      }
+
       if (
         !expiryExtensionMountedRef.current ||
         expiryExtensionOperationGenerationRef.current !== operationGeneration
       ) return
+
+      if (refreshFailed) {
+        toast.push({
+          message: 'Los vencimientos se actualizaron, pero no se pudo refrescar toda la información.',
+          type: 'error',
+        })
+      }
 
       resetExpiryExtensionModal()
     } catch (error) {
@@ -2106,7 +2124,7 @@ export default function AdminMembershipsPage() {
             <button
               type="button"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-accent/30 hover:text-accent"
-              onClick={refreshAll}
+              onClick={() => void refreshAll()}
             >
               <RefreshCw className="h-4 w-4" />
               Actualizar

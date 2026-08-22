@@ -167,9 +167,43 @@ describe('bulk membership expiry extension page integration', () => {
     expect(page).toContain('expiryExtensionPreviewGenerationRef.current += 1')
     expect(page).toContain('function isExpiryExtensionPreviewCurrent(previewGeneration: number)')
     expect(page).toContain('if (!isExpiryExtensionPreviewCurrent(previewGeneration)) return')
-    expect(applyHandler).toMatch(
-      /await refreshAll\(\)\s*if \(\s*!expiryExtensionMountedRef\.current \|\|\s*expiryExtensionOperationGenerationRef\.current !== operationGeneration\s*\) return\s*resetExpiryExtensionModal\(\)/,
+    const refreshIndex = applyHandler.indexOf('await refreshAll(true)')
+    const postRefreshGuardIndex = applyHandler.indexOf(
+      '!expiryExtensionMountedRef.current',
+      refreshIndex,
     )
+    const resetIndex = applyHandler.indexOf('resetExpiryExtensionModal()', refreshIndex)
+    expect(refreshIndex).toBeGreaterThan(-1)
+    expect(postRefreshGuardIndex).toBeGreaterThan(refreshIndex)
+    expect(resetIndex).toBeGreaterThan(postRefreshGuardIndex)
+  })
+
+  it('always invalidates global caches after a successful RPC before checking mounted UI state', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const applyHandler = page.slice(
+      page.indexOf('async function applyExpiryExtension'),
+      page.indexOf('function releaseAssignmentSubmissionLock'),
+    )
+    const rpcIndex = applyHandler.indexOf('const result = await applyBulkMembershipExpiryExtension')
+    const invalidationIndex = applyHandler.indexOf('const invalidationResults = await Promise.allSettled')
+    const postResponseGuardIndex = applyHandler.indexOf('!expiryExtensionMountedRef.current', rpcIndex)
+    const successToastIndex = applyHandler.indexOf("type: 'success'", rpcIndex)
+    const refreshIndex = applyHandler.indexOf('await refreshAll(true)', rpcIndex)
+
+    expect(rpcIndex).toBeGreaterThan(-1)
+    expect(invalidationIndex).toBeGreaterThan(rpcIndex)
+    expect(postResponseGuardIndex).toBeGreaterThan(invalidationIndex)
+    expect(successToastIndex).toBeGreaterThan(postResponseGuardIndex)
+    expect(refreshIndex).toBeGreaterThan(postResponseGuardIndex)
+    expect(applyHandler).toContain(
+      'Los vencimientos se actualizaron, pero no se pudo refrescar toda la información.',
+    )
+    expect(applyHandler.match(/\{ throwOnError: true \}/g)).toHaveLength(7)
+    expect(page).toContain('async function refreshAll(throwOnError = false)')
+    expect(page).toContain('refetchPlans({ throwOnError })')
+    expect(page).toContain('refetchMemberships({ throwOnError })')
+    expect(page).toContain('refetchStudents({ throwOnError })')
+    expect(applyHandler).toContain('await refreshAll(true)')
   })
 
   it('confirms before applying, reports the actual count and resets the modal', () => {
