@@ -18,6 +18,27 @@ describe('mapStudentListRow', () => {
     vi.useRealTimers()
   })
 
+  it('keeps a manually inactive status even when an active membership exists', () => {
+    const result = mapStudentListRow({
+      id: 'student-manual-inactive',
+      full_name: 'Alumno inactivo manual',
+      is_active: true,
+      operational_status: 'inactive',
+      memberships: [{
+        id: 'active-membership',
+        custom_name: 'Plan vigente',
+        classes_total: 8,
+        classes_remaining: 8,
+        start_date: '2026-06-01',
+        end_date: '2026-06-30',
+        status: 'active',
+        created_at: '2026-06-01T00:00:00Z',
+      }],
+    })
+
+    expect(result.effective_operational_status).toBe('inactive')
+  })
+
   it('preserves the CCT affiliation flag on list rows', () => {
     const result = mapStudentListRow({
       id: 'student-1',

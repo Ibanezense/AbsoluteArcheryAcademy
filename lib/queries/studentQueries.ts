@@ -48,7 +48,7 @@ export const studentKeys = {
   detail: (id: string) => [...studentKeys.all, 'detail', id] as const,
 }
 
-const PROTECTED_OPERATIONAL_STATUSES = new Set(['retired', 'withdrawn', 'blocked', 'suspended'])
+const PROTECTED_OPERATIONAL_STATUSES = new Set(['inactive', 'retired', 'withdrawn', 'blocked', 'suspended'])
 
 type AttendedBookingRow = {
   student_id: string | null

@@ -47,6 +47,7 @@ import {
   createStudentMembershipCycles,
   type MembershipPaymentType,
 } from '@/lib/services/adminMembershipService'
+import { setStudentManualInactive } from '@/lib/services/adminStudentOperationalStatusService'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import {
@@ -452,6 +453,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [profileForm, setProfileForm] = useState<ProfileFormState | null>(null)
   const [sportsForm, setSportsForm] = useState<SportsFormState | null>(null)
   const [studentSaving, setStudentSaving] = useState(false)
+  const [studentStatusSaving, setStudentStatusSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [generalActionsOpen, setGeneralActionsOpen] = useState(false)
   const [membershipMenuId, setMembershipMenuId] = useState<string | null>(null)
@@ -657,25 +659,69 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   }
 
   async function handleToggleStudentBlock() {
-    if (!data) return
-    const nextActive = !data.is_active
+    if (!data || (!data.self_account && data.operational_status === 'inactive')) return
+    const accessIsActive = data.self_account?.is_active ?? data.is_active
+    const nextAccessActive = !accessIsActive
+    const nextStudentActive = data.operational_status === 'inactive' ? false : nextAccessActive
     try {
       const { error: studentError } = await supabase
         .from('students')
-        .update({ is_active: nextActive, updated_at: new Date().toISOString() })
+        .update({ is_active: nextStudentActive, updated_at: new Date().toISOString() })
         .eq('id', data.id)
       if (studentError) throw studentError
 
       if (data.self_account?.id) {
-        const { error: profileError } = await supabase.from('profiles').update({ is_active: nextActive }).eq('id', data.self_account.id)
+        const { error: profileError } = await supabase.from('profiles').update({ is_active: nextAccessActive }).eq('id', data.self_account.id)
         if (profileError) throw profileError
       }
 
-      toast.push({ message: nextActive ? 'Alumno reactivado.' : 'Alumno bloqueado.', type: 'success' })
+      toast.push({ message: nextAccessActive ? 'Acceso del alumno reactivado.' : 'Alumno bloqueado.', type: 'success' })
       setGeneralActionsOpen(false)
       await refreshStudentData()
     } catch (blockError: any) {
       toast.push({ message: blockError.message || 'No se pudo cambiar el acceso del alumno.', type: 'error' })
+    }
+  }
+
+  async function handleToggleManualInactive() {
+    if (!data || studentStatusSaving) return
+
+    const manualInactive = data.operational_status === 'inactive'
+    const accepted = await confirm(
+      manualInactive
+        ? 'El sistema volverá a calcular el estado del alumno según sus membresías y clases disponibles.'
+        : 'El alumno quedará marcado como inactivo. Su cuenta seguirá habilitada, pero no se crearán clases ni membresías.',
+      {
+        title: manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo',
+        description: manualInactive
+          ? 'Esta acción no asigna clases ni crea una membresía.'
+          : 'Esta acción no bloquea el acceso a su cuenta.',
+        confirmLabel: manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo',
+        cancelLabel: 'Cancelar',
+        tone: manualInactive ? 'default' : 'danger',
+      },
+    )
+
+    if (!accepted) return
+
+    try {
+      setStudentStatusSaving(true)
+      await setStudentManualInactive(supabase, data.id, !manualInactive)
+      toast.push({
+        message: manualInactive
+          ? 'Se retiró el estado inactivo manual.'
+          : 'Alumno marcado como inactivo.',
+        type: 'success',
+      })
+      setGeneralActionsOpen(false)
+      await refreshStudentData()
+    } catch (statusError: any) {
+      toast.push({
+        message: statusError.message || 'No se pudo cambiar el estado del alumno.',
+        type: 'error',
+      })
+    } finally {
+      setStudentStatusSaving(false)
     }
   }
 
@@ -814,6 +860,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
   const age = calculateAge(data.date_of_birth)
   const operationalStatus = getOperationalStatus(data)
+  const manualInactive = data.operational_status === 'inactive'
+  const accessIsActive = data.self_account?.is_active ?? data.is_active
   const activeMembership = data.active_membership
   const latestMembership = getLatestMembership(data.memberships)
   const membershipEndDelta = daysBetweenToday(activeMembership?.end_date, serviceDate)
@@ -917,7 +965,10 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           <div className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
             <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => { setAssignmentOpen(true); setActiveTab('membership'); setGeneralActionsOpen(false) }}><WalletCards className="h-4 w-4" /> Asignar membresía</button>
             <Link href="/admin/sesiones" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => setGeneralActionsOpen(false)}><CalendarDays className="h-4 w-4" /> Reservar clase</Link>
-            <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={handleToggleStudentBlock}><ShieldAlert className="h-4 w-4" /> {data.is_active ? 'Bloquear alumno' : 'Reactivar alumno'}</button>
+            <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" onClick={handleToggleManualInactive} disabled={studentStatusSaving}><UserRound className="h-4 w-4" /> {studentStatusSaving ? 'Actualizando…' : manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo'}</button>
+            {(data.self_account || !manualInactive) && (
+              <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={handleToggleStudentBlock}><ShieldAlert className="h-4 w-4" /> {accessIsActive ? 'Bloquear alumno' : 'Reactivar acceso'}</button>
+            )}
             <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-rose-600 hover:bg-rose-50" onClick={handleDeleteStudent} disabled={deleting}><Trash2 className="h-4 w-4" /> {deleting ? 'Eliminando…' : 'Eliminar alumno'}</button>
           </div>
         )}
