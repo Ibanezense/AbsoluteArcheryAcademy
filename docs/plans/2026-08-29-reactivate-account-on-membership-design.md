@@ -14,7 +14,8 @@ Al insertar una membresía activa con clases disponibles:
 - Retirar el estado manual `inactive` antes de recalcular el estado académico.
 - Sincronizar `students.operational_status` e `is_active` según la vigencia real de las membresías.
 - No reactivar automáticamente alumnos `retired`, `withdrawn`, `blocked` o `suspended`.
-- No modificar cuentas de tutores; solo el perfil individual vinculado por `self_profile_id`.
+- No modificar cuentas de tutores; solo el perfil individual vinculado por `self_profile_id` cuando su rol sea `student`.
+- No reactivar una cuenta por una membresía cuya fecha de término ya pasó.
 
 ## Diseño técnico
 
@@ -23,6 +24,10 @@ Una migración añadirá un trigger `AFTER INSERT` sobre `student_memberships`. 
 Para un alumno manualmente inactivo, el trigger retirará temporalmente la protección de `inactive` y ejecutará `sync_student_membership_operational_status`. Una membresía vigente lo dejará activo; una membresía futura permitirá el acceso a la app, pero mantendrá su estado académico en pausa hasta la fecha de inicio.
 
 Los estados protegidos de seguridad o baja conservarán tanto su estado académico como el bloqueo de su cuenta.
+
+La acción administrativa **Bloquear alumno** persistirá `students.account_access_blocked` mediante un RPC administrativo transaccional y actualizará en la misma operación la cuenta individual. El bloqueo de acceso queda así separado del estado académico: `inactive` se conserva al bloquear y reactivar, y `retired`, `withdrawn`, `blocked` o `suspended` no pueden habilitarse desde ese botón. El trigger respeta también este bloqueo explícito. Además, la sincronización priorizará una membresía futura utilizable sobre el historial vencido y mantendrá al alumno en `paused` hasta su inicio.
+
+Como la interfaz anterior solo registraba el bloqueo en `profiles.is_active`, la migración marcará conservadoramente como bloqueadas las cuentas individuales que ya estén deshabilitadas. La reparación aprobada quitará el indicador únicamente al caso confirmado que todavía cumpla todas las precondiciones.
 
 ## Reparación de producción
 

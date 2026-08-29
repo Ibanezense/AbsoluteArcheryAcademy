@@ -662,18 +662,12 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     if (!data || (!data.self_account && data.operational_status === 'inactive')) return
     const accessIsActive = data.self_account?.is_active ?? data.is_active
     const nextAccessActive = !accessIsActive
-    const nextStudentActive = data.operational_status === 'inactive' ? false : nextAccessActive
     try {
-      const { error: studentError } = await supabase
-        .from('students')
-        .update({ is_active: nextStudentActive, updated_at: new Date().toISOString() })
-        .eq('id', data.id)
-      if (studentError) throw studentError
-
-      if (data.self_account?.id) {
-        const { error: profileError } = await supabase.from('profiles').update({ is_active: nextAccessActive }).eq('id', data.self_account.id)
-        if (profileError) throw profileError
-      }
+      const { error: accessError } = await supabase.rpc('admin_set_student_account_access', {
+        p_student_id: data.id,
+        p_is_active: nextAccessActive,
+      })
+      if (accessError) throw accessError
 
       toast.push({ message: nextAccessActive ? 'Acceso del alumno reactivado.' : 'Alumno bloqueado.', type: 'success' })
       setGeneralActionsOpen(false)

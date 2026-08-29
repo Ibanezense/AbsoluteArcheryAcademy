@@ -4,7 +4,7 @@
 
 **Goal:** Reactivar atómicamente la cuenta individual de un alumno cuando administración le asigna una membresía utilizable, sin levantar estados protegidos.
 
-**Architecture:** Una función de trigger PostgreSQL observará nuevas membresías activas con saldo. Desprotegerá únicamente `inactive`, sincronizará el estado académico y habilitará solo `students.self_profile_id`; los estados de seguridad o baja se excluyen explícitamente.
+**Architecture:** Una función de trigger PostgreSQL observará nuevas membresías activas, con saldo y fecha final vigente. Desprotegerá únicamente `inactive`, sincronizará el estado académico y habilitará solo `students.self_profile_id` con rol `student`; los estados de seguridad o baja se excluyen explícitamente. Un RPC administrativo actualizará atómicamente el perfil y `account_access_blocked` sin reemplazar el estado académico. La sincronización mantendrá las membresías futuras en `paused` aunque exista historial vencido.
 
 **Tech Stack:** PostgreSQL/Supabase migrations, PL/pgSQL, Vitest, Next.js 14.
 
@@ -19,6 +19,8 @@
 **Step 1: Write the failing test**
 
 Comprobar que la migración crea una función y trigger para inserciones en `student_memberships`, filtra membresías activas con saldo, habilita únicamente `self_profile_id`, retira `inactive`, sincroniza el alumno y excluye `retired`, `withdrawn`, `blocked` y `suspended`.
+
+Comprobar también que una membresía finalizada no reactiva el perfil, que el perfil tenga rol `student`, que una membresía futura tenga prioridad sobre el historial vencido y que el bloqueo administrativo quede persistido separadamente y de forma transaccional.
 
 **Step 2: Run test to verify it fails**
 
