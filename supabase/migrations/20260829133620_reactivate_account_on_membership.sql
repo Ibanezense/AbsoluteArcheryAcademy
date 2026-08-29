@@ -183,6 +183,7 @@ $$;
 
 REVOKE ALL ON FUNCTION public.sync_student_membership_operational_status(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.sync_student_membership_operational_status(uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.sync_student_membership_operational_status(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_student_membership_operational_status(uuid) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.admin_set_student_account_access(

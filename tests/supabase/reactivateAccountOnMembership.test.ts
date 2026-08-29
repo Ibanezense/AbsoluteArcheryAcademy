@@ -60,6 +60,7 @@ describe('reactivate account after membership assignment', () => {
   })
 
   it('installs a restricted after-insert trigger', () => {
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.sync_student_membership_operational_status\(uuid\) FROM authenticated/i)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.reactivate_student_account_after_membership_insert\(\) FROM PUBLIC/i)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.reactivate_student_account_after_membership_insert\(\) FROM anon/i)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.reactivate_student_account_after_membership_insert\(\) FROM authenticated/i)
