@@ -27,6 +27,22 @@ const triggerFunctionEnd = sql.indexOf(
   triggerFunctionStart,
 )
 const triggerFunctionSql = sql.slice(triggerFunctionStart, triggerFunctionEnd)
+const reviewFunctionStart = sql.indexOf(
+  'CREATE OR REPLACE FUNCTION public.get_weekly_attendance_review',
+)
+const reviewFunctionEnd = sql.indexOf(
+  'REVOKE ALL ON FUNCTION public.get_weekly_attendance_review',
+  reviewFunctionStart,
+)
+const reviewFunctionSql = sql.slice(reviewFunctionStart, reviewFunctionEnd)
+const markFunctionStart = sql.indexOf(
+  'CREATE OR REPLACE FUNCTION public.admin_mark_weekly_no_show',
+)
+const markFunctionEnd = sql.indexOf(
+  'REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show',
+  markFunctionStart,
+)
+const markFunctionSql = sql.slice(markFunctionStart, markFunctionEnd)
 const zeroFrequencyBranches = Array.from(
   planClassificationSql.matchAll(/WHEN\s+([\s\S]*?)\s+THEN\s+0\b/gi),
   (match) => match[1],
@@ -145,5 +161,149 @@ describe('weekly attendance quota persistence', () => {
     expect(triggerFunctionSql).toMatch(
       /TG_OP\s*=\s*'INSERT'[\s\S]*NEW\.membership_plan_id IS NULL[\s\S]*NEW\.weekly_class_target\s*:=\s*0/i,
     )
+  })
+})
+
+describe('weekly attendance quota deficits', () => {
+  it('stores multiple auditable weekly absences with one ledger movement each', () => {
+    expect(sql).toMatch(
+      /ALTER TABLE public\.student_weekly_attendance[\s\S]*ADD COLUMN IF NOT EXISTS occurrence_index smallint/i,
+    )
+    expect(sql).toMatch(
+      /UPDATE public\.student_weekly_attendance[\s\S]*occurrence_index\s*=\s*1[\s\S]*occurrence_index IS NULL/i,
+    )
+    expect(sql).toMatch(
+      /UNIQUE\s*\(student_id,\s*week_start,\s*occurrence_index\)/i,
+    )
+    expect(sql).toMatch(
+      /ALTER TABLE public\.student_weekly_attendance[\s\S]*ADD COLUMN IF NOT EXISTS note text/i,
+    )
+    expect(sql).toMatch(/CHECK\s*\(classes_consumed\s*=\s*1\)/i)
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX[\s\S]*ON public\.student_credit_ledger\s*\(weekly_attendance_id\)[\s\S]*weekly_attendance_id IS NOT NULL/i,
+    )
+  })
+
+  it('reviews a closed Lima Thursday-to-Sunday roster with protected statuses excluded', () => {
+    expect(reviewFunctionSql).toContain('SECURITY DEFINER')
+    expect(reviewFunctionSql).toContain('SET search_path = public')
+    expect(reviewFunctionSql).toContain('auth.uid()')
+    expect(reviewFunctionSql).toContain('public.is_admin_user()')
+    expect(reviewFunctionSql).toContain('EXTRACT(DOW FROM p_sunday) <> 0')
+    expect(reviewFunctionSql).toContain("AT TIME ZONE 'America/Lima'")
+    expect(reviewFunctionSql).toContain('v_week_start := p_sunday - 3')
+    expect(reviewFunctionSql).toContain("pending_booking.status = 'reserved'")
+    expect(reviewFunctionSql).toContain('v_pending_count = 0')
+    expect(reviewFunctionSql).toMatch(
+      /'retired'\s*,\s*'withdrawn'\s*,\s*'blocked'\s*,\s*'suspended'/i,
+    )
+  })
+
+  it('derives a positive quota independently from zero-frequency memberships', () => {
+    expect(reviewFunctionSql).toMatch(
+      /FROM public\.student_memberships\s+(?:AS\s+)?quota_membership[\s\S]*quota_membership\.weekly_class_target\s*>\s*0/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /quota_membership\.start_date\s*<=\s*p_sunday[\s\S]*quota_membership\.end_date\s+IS\s+NULL[\s\S]*quota_membership\.end_date\s*>=\s*p_sunday/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /ORDER BY[\s\S]*quota_membership\.start_date ASC[\s\S]*quota_membership\.created_at ASC[\s\S]*quota_membership\.id ASC/i,
+    )
+  })
+
+  it('returns the completion breakdown and only an actionable deficit', () => {
+    for (const field of [
+      'weekly_class_target',
+      'attended_count',
+      'booking_no_show_count',
+      'weekly_no_show_count',
+      'completed_count',
+      'missing_count',
+    ]) {
+      expect(reviewFunctionSql).toContain(`'${field}'`)
+    }
+
+    expect(reviewFunctionSql).toMatch(
+      /attendance_booking\.status\s*=\s*'attended'/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /attendance_booking\.status\s*=\s*'no_show'/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /COUNT\(\*\)[\s\S]*FROM public\.student_weekly_attendance/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /LEAST\([\s\S]*GREATEST\([\s\S]*weekly_class_target[\s\S]*attended_count[\s\S]*booking_no_show_count[\s\S]*weekly_no_show_count[\s\S]*available_classes/i,
+    )
+    expect(reviewFunctionSql).toMatch(/missing_count\s*>\s*0/i)
+  })
+
+  it('exposes the next FIFO membership while preserving reserved commitments', () => {
+    expect(reviewFunctionSql).toMatch(
+      /consumption_membership\.classes_remaining\s*>[\s\S]*reserved_count/i,
+    )
+    expect(reviewFunctionSql).toMatch(
+      /ORDER BY[\s\S]*consumption_membership\.start_date ASC[\s\S]*consumption_membership\.created_at ASC[\s\S]*consumption_membership\.id ASC/i,
+    )
+    expect(reviewFunctionSql).toContain("reserved_booking.status = 'reserved'")
+    expect(reviewFunctionSql).toContain("'membership_id'")
+    expect(reviewFunctionSql).toContain("'classes_remaining'")
+  })
+
+  it('recalculates under locks and consumes one FIFO class without a retry loop', () => {
+    expect(markFunctionSql).toContain('FOR UPDATE')
+    expect(markFunctionSql).not.toMatch(/\bLOOP\b/i)
+    expect(markFunctionSql).toContain("pending_booking.status = 'reserved'")
+    expect(markFunctionSql).toMatch(
+      /ORDER BY[\s\S]*sm\.start_date ASC[\s\S]*sm\.created_at ASC[\s\S]*sm\.id ASC[\s\S]*FOR UPDATE/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /reserved_booking\.active_membership_id\s*=\s*sm\.id[\s\S]*reserved_booking\.status\s*=\s*'reserved'/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /classes_used\s*=\s*classes_used\s*\+\s*1[\s\S]*classes_remaining\s*=\s*classes_remaining\s*-\s*1/i,
+    )
+  })
+
+  it('writes the next occurrence, dynamic note, linked ledger row and remaining deficit', () => {
+    expect(markFunctionSql).toMatch(
+      /MAX\(swa\.occurrence_index\)[\s\S]*\+\s*1/i,
+    )
+    expect(markFunctionSql).toContain('occurrence_index')
+    expect(markFunctionSql).toContain('note')
+    expect(markFunctionSql).toContain(
+      'El alumno asistió %s de las %s clases requeridas esta semana. Esta clase se considera inasistida.',
+    )
+    expect(markFunctionSql).toContain(
+      'El alumno asistió %s de la 1 clase requerida esta semana. Esta clase se considera inasistida.',
+    )
+    expect(markFunctionSql).toContain("'weekly_no_show_consumed'")
+    expect(markFunctionSql).toMatch(
+      /weekly_attendance_id[\s\S]*v_weekly_attendance_id/i,
+    )
+    expect(markFunctionSql).toContain("'remaining_missing_count'")
+    expect(markFunctionSql).toContain("'classes_remaining'")
+  })
+
+  it('keeps no-deficit and no-credit calls idempotent without writes', () => {
+    expect(markFunctionSql).toMatch(
+      /IF\s+v_raw_missing_count\s*<=\s*0[\s\S]*'already_marked'\s*,\s*true[\s\S]*RETURN/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /IF\s+v_membership_id\s+IS\s+NULL[\s\S]*'already_marked'\s*,\s*true[\s\S]*RETURN/i,
+    )
+  })
+
+  it('keeps both RPCs restricted to authenticated administrators', () => {
+    for (const signature of [
+      'get_weekly_attendance_review(date)',
+      'admin_mark_weekly_no_show(uuid, date)',
+    ]) {
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION public.${signature} FROM PUBLIC;`)
+      expect(sql).toContain(`REVOKE ALL ON FUNCTION public.${signature} FROM anon;`)
+      expect(sql).toContain(
+        `GRANT EXECUTE ON FUNCTION public.${signature} TO authenticated, service_role;`,
+      )
+    }
   })
 })
