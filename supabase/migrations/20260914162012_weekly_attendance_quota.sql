@@ -369,6 +369,8 @@ BEGIN
         ) consumption_membership ON true
         WHERE st.is_active = true
           AND COALESCE(st.operational_status, '') NOT IN (
+            'inactive',
+            'paused',
             'retired',
             'withdrawn',
             'blocked',
@@ -498,6 +500,8 @@ BEGIN
   WHERE st.id = p_student_id
     AND st.is_active = true
     AND COALESCE(st.operational_status, '') NOT IN (
+      'inactive',
+      'paused',
       'retired',
       'withdrawn',
       'blocked',

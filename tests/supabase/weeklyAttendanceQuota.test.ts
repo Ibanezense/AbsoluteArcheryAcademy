@@ -213,7 +213,10 @@ describe('weekly attendance quota deficits', () => {
     expect(reviewFunctionSql).toContain("pending_booking.status = 'reserved'")
     expect(reviewFunctionSql).toContain('v_pending_count = 0')
     expect(reviewFunctionSql).toMatch(
-      /'retired'\s*,\s*'withdrawn'\s*,\s*'blocked'\s*,\s*'suspended'/i,
+      /'inactive'\s*,\s*'paused'\s*,\s*'retired'\s*,\s*'withdrawn'\s*,\s*'blocked'\s*,\s*'suspended'/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /COALESCE\(st\.operational_status,\s*''\)\s+NOT IN\s*\(\s*'inactive'\s*,\s*'paused'\s*,\s*'retired'\s*,\s*'withdrawn'\s*,\s*'blocked'\s*,\s*'suspended'/i,
     )
   })
 
