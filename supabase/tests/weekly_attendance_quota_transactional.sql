@@ -160,6 +160,7 @@ BEGIN
   );
 
   INSERT INTO public.bookings (
+    user_id,
     session_id,
     status,
     student_id,
@@ -167,6 +168,7 @@ BEGIN
     active_membership_id
   )
   VALUES (
+    v_admin_id,
     v_future_session_id,
     'reserved',
     v_student_id,

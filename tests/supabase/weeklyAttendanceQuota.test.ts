@@ -391,6 +391,12 @@ describe('weekly attendance quota deficits', () => {
     expect(transactionalTestSql).toMatch(
       /INSERT INTO public\.bookings\s*\([\s\S]*status[\s\S]*active_membership_id[\s\S]*VALUES\s*\([\s\S]*'reserved'[\s\S]*v_first_membership_id/i,
     )
+    expect(transactionalTestSql).toMatch(
+      /INSERT INTO public\.bookings\s*\([\s\S]*user_id[\s\S]*VALUES\s*\([\s\S]*v_admin_id/i,
+    )
+    expect(transactionalTestSql).not.toMatch(
+      /INSERT INTO public\.bookings\s*\([\s\S]*intro_client_id/i,
+    )
     expect(transactionalTestSql).toMatch(/RAISE EXCEPTION/i)
     expect(transactionalTestSql).not.toMatch(/@[a-z0-9.-]+\.(com|pe)\b/i)
   })
