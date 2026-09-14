@@ -10,6 +10,35 @@ const migrationPath = migrationName
   ? join(migrationsDirectory, migrationName)
   : join(migrationsDirectory, '__missing_weekly_attendance_quota.sql')
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : ''
+const planClassificationStart = sql.indexOf('UPDATE public.membership_plans')
+const membershipBackfillStart = sql.indexOf(
+  'UPDATE public.student_memberships',
+  planClassificationStart,
+)
+const planClassificationSql = sql.slice(
+  planClassificationStart,
+  membershipBackfillStart,
+)
+const zeroFrequencyBranches = Array.from(
+  planClassificationSql.matchAll(/WHEN\s+([\s\S]*?)\s+THEN\s+0\b/gi),
+  (match) => match[1],
+)
+
+const zeroFrequencyPlanCases = [
+  { label: 'Obsequio', sqlFragment: "lower(name) LIKE '%obsequio%'" },
+  {
+    label: 'Clase de Introducción',
+    sqlFragment: "lower(name) LIKE '%clase de introducci%n%'",
+  },
+  {
+    label: 'Paquete clases sueltas',
+    sqlFragment: "lower(name) LIKE '%paquete clases sueltas%'",
+  },
+  {
+    label: 'Paquete 8 clases',
+    sqlFragment: "lower(name) LIKE '%paquete 8 clases%'",
+  },
+]
 
 describe('weekly attendance quota persistence', () => {
   it('stores a constrained weekly target on plans and membership snapshots', () => {
@@ -22,16 +51,27 @@ describe('weekly attendance quota persistence', () => {
     )
   })
 
-  it('classifies existing plans and defaults unknown or package plans to zero', () => {
-    expect(sql).toMatch(/UPDATE public\.membership_plans[\s\S]*SET weekly_class_target\s*=\s*CASE/i)
-    expect(sql).toMatch(/Media Beca[\s\S]*THEN 1/i)
-    expect(sql).toMatch(/afiliad[\s\S]*THEN 1/i)
-    expect(sql).toMatch(/1\s+clase[\s\S]*THEN 1/i)
-    expect(sql).toMatch(/2\s+clases[\s\S]*THEN 2/i)
-    expect(sql).toMatch(/3\s+clases[\s\S]*THEN 3/i)
-    expect(sql).toMatch(/4\s+clases[\s\S]*THEN 4/i)
-    expect(sql).toMatch(/Obsequio|Clase de Introducci[oó]n|Paquete clases sueltas|Paquete 8 clases/i)
-    expect(sql).toMatch(/ELSE 0\s+END/i)
+  it('classifies existing weekly plans from one to four classes', () => {
+    expect(planClassificationSql).toMatch(/SET weekly_class_target\s*=\s*CASE/i)
+    expect(planClassificationSql).toMatch(/Media Beca[\s\S]*THEN 1/i)
+    expect(planClassificationSql).toMatch(/afiliad[\s\S]*THEN 1/i)
+    expect(planClassificationSql).toMatch(/1\s+clase[\s\S]*THEN 1/i)
+    expect(planClassificationSql).toMatch(/2\s+clases[\s\S]*THEN 2/i)
+    expect(planClassificationSql).toMatch(/3\s+clases[\s\S]*THEN 3/i)
+    expect(planClassificationSql).toMatch(/4\s+clases[\s\S]*THEN 4/i)
+  })
+
+  it.each(zeroFrequencyPlanCases)(
+    'classifies $label in a CASE branch that resolves to zero',
+    ({ sqlFragment }) => {
+      expect(
+        zeroFrequencyBranches.some((branch) => branch.includes(sqlFragment)),
+      ).toBe(true)
+    },
+  )
+
+  it('classifies every unrecognized plan as zero', () => {
+    expect(planClassificationSql).toMatch(/ELSE\s+0\s+END/i)
   })
 
   it('backfills every existing membership from its plan while keeping unlinked rows compatible', () => {
