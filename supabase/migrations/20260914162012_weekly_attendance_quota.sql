@@ -113,7 +113,8 @@ EXECUTE FUNCTION public.set_student_membership_weekly_class_target();
 
 ALTER TABLE public.student_weekly_attendance
   ADD COLUMN IF NOT EXISTS occurrence_index smallint,
-  ADD COLUMN IF NOT EXISTS note text;
+  ADD COLUMN IF NOT EXISTS note text,
+  ADD COLUMN IF NOT EXISTS idempotency_key uuid;
 
 UPDATE public.student_weekly_attendance
 SET occurrence_index = 1
@@ -152,6 +153,10 @@ DROP INDEX IF EXISTS public.idx_student_credit_ledger_weekly_attendance;
 CREATE UNIQUE INDEX idx_student_credit_ledger_weekly_attendance
   ON public.student_credit_ledger(weekly_attendance_id)
   WHERE weekly_attendance_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_student_weekly_attendance_idempotency_key
+  ON public.student_weekly_attendance(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION public.get_weekly_attendance_review(p_sunday date)
 RETURNS jsonb
@@ -388,7 +393,8 @@ GRANT EXECUTE ON FUNCTION public.get_weekly_attendance_review(date) TO authentic
 
 CREATE OR REPLACE FUNCTION public.admin_mark_weekly_no_show(
   p_student_id uuid,
-  p_sunday date
+  p_sunday date,
+  p_request_id uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -407,10 +413,13 @@ DECLARE
   v_available_classes integer := 0;
   v_remaining_missing_count integer := 0;
   v_membership_id uuid;
-  v_membership_classes_remaining integer;
   v_reserved_count integer := 0;
   v_occurrence_index smallint;
   v_existing_id uuid;
+  v_existing_student_id uuid;
+  v_existing_week_start date;
+  v_existing_occurrence_index smallint;
+  v_existing_membership_id uuid;
   v_weekly_attendance_id uuid;
   v_note text;
   v_balance_after integer;
@@ -431,7 +440,49 @@ BEGIN
     RAISE EXCEPTION 'No se puede registrar una inasistencia para una semana futura';
   END IF;
 
+  IF p_request_id IS NULL THEN
+    RAISE EXCEPTION 'La solicitud requiere una clave de idempotencia';
+  END IF;
+
   v_week_start := p_sunday - 3;
+
+  SELECT
+    swa.id,
+    swa.student_id,
+    swa.week_start,
+    swa.occurrence_index,
+    swa.student_membership_id
+  INTO
+    v_existing_id,
+    v_existing_student_id,
+    v_existing_week_start,
+    v_existing_occurrence_index,
+    v_existing_membership_id
+  FROM public.student_weekly_attendance swa
+  WHERE swa.idempotency_key = p_request_id
+  FOR UPDATE;
+
+  IF v_existing_id IS NOT NULL THEN
+    IF v_existing_student_id <> p_student_id
+      OR v_existing_week_start <> v_week_start
+    THEN
+      RAISE EXCEPTION 'La clave de idempotencia ya pertenece a otra solicitud';
+    END IF;
+
+    SELECT sm.classes_remaining
+    INTO v_balance_after
+    FROM public.student_memberships sm
+    WHERE sm.id = v_existing_membership_id;
+
+    RETURN jsonb_build_object(
+      'success', true,
+      'already_marked', true,
+      'weekly_attendance_id', v_existing_id,
+      'occurrence_index', v_existing_occurrence_index,
+      'remaining_missing_count', 0,
+      'classes_remaining', v_balance_after
+    );
+  END IF;
 
   SELECT st.id
   INTO v_student_id
@@ -448,6 +499,44 @@ BEGIN
 
   IF v_student_id IS NULL THEN
     RAISE EXCEPTION 'Alumno no encontrado o no elegible';
+  END IF;
+
+  SELECT
+    swa.id,
+    swa.student_id,
+    swa.week_start,
+    swa.occurrence_index,
+    swa.student_membership_id
+  INTO
+    v_existing_id,
+    v_existing_student_id,
+    v_existing_week_start,
+    v_existing_occurrence_index,
+    v_existing_membership_id
+  FROM public.student_weekly_attendance swa
+  WHERE swa.idempotency_key = p_request_id
+  FOR UPDATE;
+
+  IF v_existing_id IS NOT NULL THEN
+    IF v_existing_student_id <> p_student_id
+      OR v_existing_week_start <> v_week_start
+    THEN
+      RAISE EXCEPTION 'La clave de idempotencia ya pertenece a otra solicitud';
+    END IF;
+
+    SELECT sm.classes_remaining
+    INTO v_balance_after
+    FROM public.student_memberships sm
+    WHERE sm.id = v_existing_membership_id;
+
+    RETURN jsonb_build_object(
+      'success', true,
+      'already_marked', true,
+      'weekly_attendance_id', v_existing_id,
+      'occurrence_index', v_existing_occurrence_index,
+      'remaining_missing_count', 0,
+      'classes_remaining', v_balance_after
+    );
   END IF;
 
   PERFORM sm.id
@@ -560,11 +649,9 @@ BEGIN
 
   SELECT
     sm.id,
-    sm.classes_remaining,
     reserved.reserved_count
   INTO
     v_membership_id,
-    v_membership_classes_remaining,
     v_reserved_count
   FROM public.student_memberships sm
   CROSS JOIN LATERAL (
@@ -615,6 +702,7 @@ BEGIN
     week_start,
     week_end,
     occurrence_index,
+    idempotency_key,
     status,
     classes_consumed,
     note,
@@ -628,6 +716,7 @@ BEGIN
     v_week_start,
     p_sunday,
     v_occurrence_index,
+    p_request_id,
     'no_show',
     1,
     v_note,
@@ -689,6 +778,28 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.admin_mark_weekly_no_show(
+  p_student_id uuid,
+  p_sunday date
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN public.admin_mark_weekly_no_show(
+    p_student_id,
+    p_sunday,
+    gen_random_uuid()
+  );
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) TO authenticated, service_role;
@@ -697,4 +808,7 @@ COMMENT ON FUNCTION public.get_weekly_attendance_review(date) IS
   'Calcula el déficit dominical por frecuencia contratada y crédito libre no comprometido.';
 
 COMMENT ON FUNCTION public.admin_mark_weekly_no_show(uuid, date) IS
-  'Registra una inasistencia semanal por llamada y consume un crédito FIFO no comprometido.';
+  'Wrapper temporal que genera una clave por llamada para clientes anteriores al contrato idempotente.';
+
+COMMENT ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) IS
+  'Registra una inasistencia por request_id y consume un crédito FIFO no comprometido como máximo una vez.';

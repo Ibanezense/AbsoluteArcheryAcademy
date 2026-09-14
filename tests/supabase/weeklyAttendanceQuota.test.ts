@@ -10,6 +10,15 @@ const migrationPath = migrationName
   ? join(migrationsDirectory, migrationName)
   : join(migrationsDirectory, '__missing_weekly_attendance_quota.sql')
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : ''
+const transactionalTestPath = join(
+  process.cwd(),
+  'supabase',
+  'tests',
+  'weekly_attendance_quota_transactional.sql',
+)
+const transactionalTestSql = existsSync(transactionalTestPath)
+  ? readFileSync(transactionalTestPath, 'utf8')
+  : ''
 const planClassificationStart = sql.indexOf('UPDATE public.membership_plans')
 const membershipBackfillStart = sql.indexOf(
   'UPDATE public.student_memberships',
@@ -184,6 +193,15 @@ describe('weekly attendance quota deficits', () => {
     )
   })
 
+  it('stores a nullable request key with global uniqueness for committed attempts', () => {
+    expect(sql).toMatch(
+      /ALTER TABLE public\.student_weekly_attendance[\s\S]*ADD COLUMN IF NOT EXISTS idempotency_key uuid/i,
+    )
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX[\s\S]*ON public\.student_weekly_attendance\s*\(idempotency_key\)[\s\S]*WHERE idempotency_key IS NOT NULL/i,
+    )
+  })
+
   it('reviews a closed Lima Thursday-to-Sunday roster with protected statuses excluded', () => {
     expect(reviewFunctionSql).toContain('SECURITY DEFINER')
     expect(reviewFunctionSql).toContain('SET search_path = public')
@@ -285,6 +303,57 @@ describe('weekly attendance quota deficits', () => {
     expect(markFunctionSql).toContain("'classes_remaining'")
   })
 
+  it('deduplicates retries by request id before any second debit', () => {
+    expect(markFunctionSql).toMatch(
+      /admin_mark_weekly_no_show\([\s\S]*p_student_id uuid[\s\S]*p_sunday date[\s\S]*p_request_id uuid[\s\S]*\)/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /p_request_id IS NULL[\s\S]*RAISE EXCEPTION/i,
+    )
+    expect(
+      markFunctionSql.match(
+        /WHERE swa\.idempotency_key\s*=\s*p_request_id/gi,
+      ),
+    ).toHaveLength(2)
+    const firstRetryLookup = markFunctionSql.indexOf(
+      'WHERE swa.idempotency_key = p_request_id',
+    )
+    const studentLock = markFunctionSql.indexOf('FROM public.students st')
+    const weeklyInsert = markFunctionSql.indexOf(
+      'INSERT INTO public.student_weekly_attendance',
+    )
+    expect(firstRetryLookup).toBeGreaterThan(-1)
+    expect(firstRetryLookup).toBeLessThan(studentLock)
+    expect(markFunctionSql.lastIndexOf(
+      'WHERE swa.idempotency_key = p_request_id',
+    )).toBeGreaterThan(studentLock)
+    expect(markFunctionSql.lastIndexOf(
+      'WHERE swa.idempotency_key = p_request_id',
+    )).toBeLessThan(weeklyInsert)
+    expect(markFunctionSql).toMatch(
+      /INSERT INTO public\.student_weekly_attendance\s*\([\s\S]*idempotency_key[\s\S]*\)[\s\S]*VALUES\s*\([\s\S]*p_request_id/i,
+    )
+  })
+
+  it('keeps a two-argument compatibility wrapper that creates one key per legacy click', () => {
+    expect(sql).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.admin_mark_weekly_no_show\(\s*p_student_id uuid,\s*p_sunday date\s*\)[\s\S]*RETURN public\.admin_mark_weekly_no_show\(\s*p_student_id,\s*p_sunday,\s*gen_random_uuid\(\)\s*\)/i,
+    )
+    expect(sql).toContain(
+      'REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) FROM PUBLIC;',
+    )
+    expect(sql).toContain(
+      'REVOKE ALL ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) FROM anon;',
+    )
+    expect(sql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.admin_mark_weekly_no_show(uuid, date, uuid) TO authenticated, service_role;',
+    )
+  })
+
+  it('does not retain an unused membership balance variable', () => {
+    expect(markFunctionSql).not.toContain('v_membership_classes_remaining')
+  })
+
   it('keeps no-deficit and no-credit calls idempotent without writes', () => {
     expect(markFunctionSql).toMatch(
       /IF\s+v_raw_missing_count\s*<=\s*0[\s\S]*'already_marked'\s*,\s*true[\s\S]*RETURN/i,
@@ -305,5 +374,24 @@ describe('weekly attendance quota deficits', () => {
         `GRANT EXECUTE ON FUNCTION public.${signature} TO authenticated, service_role;`,
       )
     }
+  })
+
+  it('ships a rollback-only SQL scenario for retry, new click, FIFO and reservations', () => {
+    expect(transactionalTestSql).toMatch(/^BEGIN;/i)
+    expect(transactionalTestSql.trimEnd()).toMatch(/ROLLBACK;$/i)
+    expect(transactionalTestSql).toContain('request_id_retry')
+    expect(transactionalTestSql).toContain('request_id_new_click')
+    expect(transactionalTestSql).toMatch(
+      /admin_mark_weekly_no_show\([\s\S]*request_id_retry[\s\S]*admin_mark_weekly_no_show\([\s\S]*request_id_retry/i,
+    )
+    expect(transactionalTestSql).toMatch(
+      /admin_mark_weekly_no_show\([\s\S]*request_id_new_click/i,
+    )
+    expect(transactionalTestSql).toContain("movement_type = 'weekly_no_show_consumed'")
+    expect(transactionalTestSql).toMatch(
+      /INSERT INTO public\.bookings\s*\([\s\S]*status[\s\S]*active_membership_id[\s\S]*VALUES\s*\([\s\S]*'reserved'[\s\S]*v_first_membership_id/i,
+    )
+    expect(transactionalTestSql).toMatch(/RAISE EXCEPTION/i)
+    expect(transactionalTestSql).not.toMatch(/@[a-z0-9.-]+\.(com|pe)\b/i)
   })
 })
