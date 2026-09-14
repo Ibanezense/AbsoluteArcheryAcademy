@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -19,6 +19,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
+import { membershipPlanKeys } from '@/lib/hooks/useMembershipPlans'
 import {
   getWeeklyAttendanceReview,
   markWeeklyNoShow,
@@ -84,6 +85,7 @@ function AsistenciaContent() {
   const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false)
   const [weeklyReviewError, setWeeklyReviewError] = useState<string | null>(null)
   const [weeklyActionLoading, setWeeklyActionLoading] = useState<string | null>(null)
+  const weeklyActionsInFlight = useRef(new Set<string>())
   const weeklyWindow = useMemo(() => getWeeklyAttendanceWindow(selectedDate), [selectedDate])
   const canReviewWeeklyAttendance = weeklyWindow.isSunday && !dayjs(selectedDate).isAfter(dayjs(), 'day')
 
@@ -290,34 +292,53 @@ function AsistenciaContent() {
   }
 
   const handleMarkWeeklyNoShow = async (candidate: WeeklyAttendanceCandidate) => {
-    const ok = await confirm(
-      `Marcar a ${candidate.student_name} como no asistió esta semana descontará una clase y guardará el registro en su historial. ¿Continuar?`,
-      {
-        title: 'Confirmar inasistencia semanal',
-        description: 'Este registro se usa para controlar la participación en el campeonato nacional.',
-        confirmLabel: 'Marcar no asistió esta semana',
-        tone: 'danger',
-      },
-    )
-    if (!ok) return
-
-    setWeeklyActionLoading(candidate.student_id)
+    if (
+      weeklyActionsInFlight.current.size > 0
+      || weeklyActionsInFlight.current.has(candidate.student_id)
+    ) return
+    weeklyActionsInFlight.current.add(candidate.student_id)
 
     try {
+      const pendingLabel = candidate.missing_count === 1
+        ? '1 clase pendiente'
+        : `${candidate.missing_count} clases pendientes`
+      const remainingAfterMark = Math.max(candidate.missing_count - 1, 0)
+      const remainingLabel = remainingAfterMark === 0
+        ? 'Con este registro completará su control semanal.'
+        : `Después quedarán ${remainingAfterMark} ${remainingAfterMark === 1 ? 'clase pendiente' : 'clases pendientes'}.`
+      const ok = await confirm(
+        `${candidate.student_name} tiene ${pendingLabel}. Se descontará una clase y se guardará una inasistencia en su historial. ${remainingLabel} ¿Continuar?`,
+        {
+          title: 'Confirmar 1 inasistencia',
+          description: 'Este registro se usa para controlar la participación en el campeonato nacional.',
+          confirmLabel: 'Marcar 1 inasistencia',
+          tone: 'danger',
+        },
+      )
+      if (!ok) return
+
+      const requestId = crypto.randomUUID()
+      setWeeklyActionLoading(candidate.student_id)
+
       const result = await markWeeklyNoShow(supabase, {
         studentId: candidate.student_id,
         sunday: selectedDate,
+        requestId,
       })
 
       toast.push({
         message: result.already_marked
           ? 'La inasistencia semanal ya estaba registrada.'
-          : 'Inasistencia semanal registrada y clase descontada.',
+          : result.remaining_missing_count > 0
+            ? `Inasistencia registrada. Quedan ${result.remaining_missing_count} ${result.remaining_missing_count === 1 ? 'clase pendiente' : 'clases pendientes'}.`
+            : 'Inasistencia registrada. El control semanal quedó completo.',
         type: 'success',
       })
       await Promise.all([
+        loadRoster(selectedDate),
         loadWeeklyReview(selectedDate),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: membershipPlanKeys.all }),
         queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
       ])
     } catch (err: any) {
@@ -326,6 +347,7 @@ function AsistenciaContent() {
       await loadWeeklyReview(selectedDate)
     } finally {
       setWeeklyActionLoading(null)
+      weeklyActionsInFlight.current.delete(candidate.student_id)
     }
   }
 

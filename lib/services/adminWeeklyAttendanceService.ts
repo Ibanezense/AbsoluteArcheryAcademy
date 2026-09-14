@@ -14,7 +14,15 @@ export type WeeklyAttendanceCandidate = {
   membership_name: string
   membership_end: string | null
   classes_remaining: number
+  membership_available_classes: number
+  available_classes: number
   membership_display_status: 'active' | 'expiring'
+  weekly_class_target: number
+  attended_count: number
+  booking_no_show_count: number
+  weekly_no_show_count: number
+  completed_count: number
+  missing_count: number
 }
 
 export type WeeklyAttendanceReview = {
@@ -29,6 +37,8 @@ export type MarkWeeklyNoShowResult = {
   success: boolean
   already_marked: boolean
   weekly_attendance_id?: string
+  occurrence_index?: number
+  remaining_missing_count: number
   classes_remaining?: number
   error?: string
 }
@@ -49,11 +59,12 @@ export async function getWeeklyAttendanceReview(
 
 export async function markWeeklyNoShow(
   client: RpcClient,
-  input: { studentId: string; sunday: string },
+  input: { studentId: string; sunday: string; requestId: string },
 ): Promise<MarkWeeklyNoShowResult> {
   const { data, error } = await client.rpc('admin_mark_weekly_no_show', {
     p_student_id: input.studentId,
     p_sunday: input.sunday,
+    p_request_id: input.requestId,
   })
 
   if (error) throw new Error(error.message || 'No se pudo registrar la inasistencia semanal.')

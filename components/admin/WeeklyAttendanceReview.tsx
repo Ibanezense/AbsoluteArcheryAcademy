@@ -18,6 +18,10 @@ function membershipStatusLabel(status: WeeklyAttendanceCandidate['membership_dis
   return status === 'expiring' ? 'Por vencer' : 'Activa'
 }
 
+function classesLabel(count: number) {
+  return count === 1 ? 'clase' : 'clases'
+}
+
 export default function WeeklyAttendanceReview({
   review,
   isLoading,
@@ -30,11 +34,11 @@ export default function WeeklyAttendanceReview({
       <div>
         <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-600">Control semanal</p>
         <h2 className="mt-2 font-heading text-2xl font-black tracking-[-0.045em] text-slate-950">
-          Alumnos sin asistencia esta semana
+          Alumnos con asistencias pendientes esta semana
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          Revisa a quienes no asistieron entre jueves y domingo. El registro es importante para validar su
-          participación en el campeonato nacional.
+          Revisa cuántas clases completó cada alumno entre jueves y domingo. Registra una inasistencia por vez
+          hasta completar su frecuencia semanal para validar su participación en el campeonato nacional.
         </p>
       </div>
 
@@ -89,9 +93,36 @@ export default function WeeklyAttendanceReview({
                   </div>
                 </div>
 
+                <dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+                  <div className="rounded-xl bg-white/80 px-3 py-2">
+                    <dt className="text-xs font-bold text-slate-500">Frecuencia</dt>
+                    <dd className="mt-1 font-black text-slate-900">
+                      {candidate.weekly_class_target} {classesLabel(candidate.weekly_class_target)}/semana
+                    </dd>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-3 py-2">
+                    <dt className="text-xs font-bold text-slate-500">Asistencias</dt>
+                    <dd className="mt-1 font-black text-emerald-700">{candidate.attended_count}</dd>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-3 py-2">
+                    <dt className="text-xs font-bold text-slate-500">Inasistencias registradas</dt>
+                    <dd className="mt-1 font-black text-slate-900">
+                      {candidate.booking_no_show_count + candidate.weekly_no_show_count}
+                    </dd>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-3 py-2">
+                    <dt className="text-xs font-bold text-slate-500">Clases completadas</dt>
+                    <dd className="mt-1 font-black text-slate-900">{candidate.completed_count}</dd>
+                  </div>
+                  <div className="rounded-xl bg-rose-100 px-3 py-2">
+                    <dt className="text-xs font-bold text-rose-700">Faltas pendientes</dt>
+                    <dd className="mt-1 font-black text-rose-800">{candidate.missing_count}</dd>
+                  </div>
+                </dl>
+
                 <p className="mt-4 text-sm leading-6 text-rose-800">
-                  No registra asistencia esta semana. Al confirmar se descontará una clase y quedará guardada la
-                  inasistencia en su historial.
+                  Cada confirmación descuenta una clase y guarda una inasistencia en el historial. El alumno seguirá
+                  en esta lista mientras tenga faltas pendientes.
                 </p>
                 <button
                   type="button"
@@ -99,7 +130,7 @@ export default function WeeklyAttendanceReview({
                   disabled={isProcessing}
                   onClick={() => onMark(candidate)}
                 >
-                  {isProcessing ? 'Registrando…' : 'Marcar no asistió esta semana'}
+                  {isProcessing ? 'Registrando…' : 'Marcar 1 inasistencia'}
                 </button>
               </article>
             )
