@@ -6,6 +6,7 @@ export type MembershipPlan = {
   name: string
   description: string | null
   classes_included: number
+  weekly_class_target: number
   duration_days: number | null
   base_price: number | null
   currency: string

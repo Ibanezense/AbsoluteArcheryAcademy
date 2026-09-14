@@ -103,6 +103,7 @@ type PlanEditorState = {
   name: string
   description: string
   classes_included: string
+  weekly_class_target: string
   duration_days: string
   base_price: string
   currency: string
@@ -175,6 +176,7 @@ function emptyPlanForm(): PlanEditorState {
     name: '',
     description: '',
     classes_included: '',
+    weekly_class_target: '0',
     duration_days: '30',
     base_price: '',
     currency: 'PEN',
@@ -188,6 +190,7 @@ function planFormFromPlan(plan: MembershipPlan): PlanEditorState {
     name: plan.name,
     description: plan.description || '',
     classes_included: String(plan.classes_included),
+    weekly_class_target: String(plan.weekly_class_target ?? 0),
     duration_days: plan.duration_days ? String(plan.duration_days) : '',
     base_price: plan.base_price !== null && plan.base_price !== undefined ? String(plan.base_price) : '',
     currency: plan.currency || 'PEN',
@@ -1115,6 +1118,11 @@ function PlanEditorModal({
                 <input type="number" min={0} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.classes_included} onChange={(event) => onPatch({ classes_included: event.target.value })} />
               </label>
               <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Cuota semanal</span>
+                <input type="number" min={0} max={4} step={1} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.weekly_class_target} onChange={(event) => onPatch({ weekly_class_target: event.target.value })} />
+                <span className="text-xs leading-5 text-slate-500">Clases requeridas por semana. 0 desactiva la revision semanal de inasistencias.</span>
+              </label>
+              <label className="grid gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Duracion en dias</span>
                 <input type="number" min={1} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.duration_days} onChange={(event) => onPatch({ duration_days: event.target.value })} />
               </label>
@@ -1249,8 +1257,9 @@ function PlansCatalogTab({
                 </div>
                 <h3 className="mt-4 text-lg font-black text-slate-950">{plan.name}</h3>
                 <p className="mt-2 min-h-12 text-sm leading-6 text-slate-500">{plan.description || 'Sin descripcion operativa.'}</p>
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.classes_included}</p><p className="text-slate-500">Clases</p></div>
+                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-base font-black text-slate-950">{plan.weekly_class_target === 0 ? 'Sin revision semanal' : `${plan.weekly_class_target} por semana`}</p><p className="text-slate-500">Cuota semanal</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.duration_days || '-'}</p><p className="text-slate-500">Dias</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-lg font-black text-slate-950">{formatMoney(plan.base_price, plan.currency)}</p><p className="text-slate-500">Precio</p></div>
                 </div>
@@ -2006,11 +2015,17 @@ export default function AdminMembershipsPage() {
 
     const name = planEditor.name.trim()
     const classesIncluded = Number(planEditor.classes_included || 0)
+    const weeklyClassTarget = Number(planEditor.weekly_class_target)
     const durationDays = planEditor.duration_days.trim() ? Number(planEditor.duration_days) : null
     const basePrice = planEditor.base_price.trim() ? Number(planEditor.base_price) : null
 
     if (!name || !Number.isFinite(classesIncluded) || classesIncluded < 0) {
       toast.push({ message: 'Completa nombre y clases del plan.', type: 'error' })
+      return
+    }
+
+    if (!Number.isInteger(weeklyClassTarget) || weeklyClassTarget < 0 || weeklyClassTarget > 4) {
+      toast.push({ message: 'La cuota semanal debe ser un entero entre 0 y 4.', type: 'error' })
       return
     }
 
@@ -2023,6 +2038,7 @@ export default function AdminMembershipsPage() {
       name,
       description: planEditor.description.trim() || null,
       classes_included: classesIncluded,
+      weekly_class_target: weeklyClassTarget,
       duration_days: durationDays,
       base_price: basePrice,
       currency: planEditor.currency.trim() || 'PEN',

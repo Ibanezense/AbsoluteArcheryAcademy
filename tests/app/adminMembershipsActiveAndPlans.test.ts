@@ -59,6 +59,23 @@ describe('admin memberships active list and plans catalog', () => {
     expect(page).toContain('Activar plan')
   })
 
+  it('loads, validates, saves and displays the weekly class target from zero to four', () => {
+    const page = source('app/admin/membresias/page.tsx')
+    const hook = source('lib/hooks/useMembershipPlans.ts')
+
+    expect(hook).toContain('weekly_class_target: number')
+    expect(page).toContain('weekly_class_target: string')
+    expect(page).toContain("weekly_class_target: '0'")
+    expect(page).toContain('weekly_class_target: String(plan.weekly_class_target ?? 0)')
+    expect(page).toContain('Cuota semanal')
+    expect(page).toContain('min={0}')
+    expect(page).toContain('max={4}')
+    expect(page).toContain('0 desactiva la revision semanal de inasistencias.')
+    expect(page).toContain('weekly_class_target: weeklyClassTarget')
+    expect(page).toContain('La cuota semanal debe ser un entero entre 0 y 4.')
+    expect(page).toContain("plan.weekly_class_target === 0 ? 'Sin revision semanal' : `${plan.weekly_class_target} por semana`")
+  })
+
   it('opens plan creation and editing in a centered modal instead of a narrow sidebar panel', () => {
     const page = source('app/admin/membresias/page.tsx')
 
