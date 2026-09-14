@@ -9,6 +9,8 @@ describe('student weekly attendance history', () => {
   it('loads weekly attendance events from the student entity', () => {
     expect(hook).toContain(".from('student_weekly_attendance')")
     expect(hook).toContain(".eq('student_id', studentId)")
+    expect(hook).toContain(".select('id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')")
+    expect(hook).toContain(".order('occurrence_index', { ascending: false })")
     expect(hook).toContain('weekly_attendance:')
   })
 
@@ -16,5 +18,6 @@ describe('student weekly attendance history', () => {
     expect(page).toContain('buildStudentAttendanceHistory(data.bookings, data.weekly_attendance)')
     expect(page).toContain('Inasistencia semanal (jueves a domingo)')
     expect(page).toContain("booking.source === 'weekly'")
+    expect(page).toContain("booking.admin_notes || 'Inasistencia semanal (jueves a domingo)'")
   })
 })

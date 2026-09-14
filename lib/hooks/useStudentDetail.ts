@@ -78,6 +78,8 @@ export type StudentBookingSummary = {
   start_at: string | null
   end_at: string | null
   source?: 'booking' | 'weekly'
+  occurrence_index?: number
+  note?: string | null
 }
 
 export type StudentWeeklyAttendanceSummary = {
@@ -87,6 +89,8 @@ export type StudentWeeklyAttendanceSummary = {
   status: 'no_show'
   classes_consumed: number
   marked_at: string
+  occurrence_index: number
+  note: string | null
 }
 
 export type StudentDetailData = {
@@ -274,9 +278,10 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
           supabase
             .from('student_weekly_attendance')
-            .select('id,week_start,week_end,status,classes_consumed,marked_at')
+            .select('id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')
             .eq('student_id', studentId)
             .order('week_end', { ascending: false })
+            .order('occurrence_index', { ascending: false })
             .limit(250),
         ])
 
