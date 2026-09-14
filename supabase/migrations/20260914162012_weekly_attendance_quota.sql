@@ -114,7 +114,9 @@ EXECUTE FUNCTION public.set_student_membership_weekly_class_target();
 ALTER TABLE public.student_weekly_attendance
   ADD COLUMN IF NOT EXISTS occurrence_index smallint,
   ADD COLUMN IF NOT EXISTS note text,
-  ADD COLUMN IF NOT EXISTS idempotency_key uuid;
+  ADD COLUMN IF NOT EXISTS idempotency_key uuid,
+  ADD COLUMN IF NOT EXISTS result_remaining_missing_count smallint,
+  ADD COLUMN IF NOT EXISTS membership_classes_remaining_after integer;
 
 UPDATE public.student_weekly_attendance
 SET occurrence_index = 1
@@ -420,6 +422,8 @@ DECLARE
   v_existing_week_start date;
   v_existing_occurrence_index smallint;
   v_existing_membership_id uuid;
+  v_existing_remaining_missing_count integer;
+  v_existing_balance_after integer;
   v_weekly_attendance_id uuid;
   v_note text;
   v_balance_after integer;
@@ -451,13 +455,17 @@ BEGIN
     swa.student_id,
     swa.week_start,
     swa.occurrence_index,
-    swa.student_membership_id
+    swa.student_membership_id,
+    swa.result_remaining_missing_count,
+    swa.membership_classes_remaining_after
   INTO
     v_existing_id,
     v_existing_student_id,
     v_existing_week_start,
     v_existing_occurrence_index,
-    v_existing_membership_id
+    v_existing_membership_id,
+    v_existing_remaining_missing_count,
+    v_existing_balance_after
   FROM public.student_weekly_attendance swa
   WHERE swa.idempotency_key = p_request_id
   FOR UPDATE;
@@ -479,8 +487,8 @@ BEGIN
       'already_marked', true,
       'weekly_attendance_id', v_existing_id,
       'occurrence_index', v_existing_occurrence_index,
-      'remaining_missing_count', 0,
-      'classes_remaining', v_balance_after
+      'remaining_missing_count', COALESCE(v_existing_remaining_missing_count, 0),
+      'classes_remaining', COALESCE(v_existing_balance_after, v_balance_after)
     );
   END IF;
 
@@ -506,13 +514,17 @@ BEGIN
     swa.student_id,
     swa.week_start,
     swa.occurrence_index,
-    swa.student_membership_id
+    swa.student_membership_id,
+    swa.result_remaining_missing_count,
+    swa.membership_classes_remaining_after
   INTO
     v_existing_id,
     v_existing_student_id,
     v_existing_week_start,
     v_existing_occurrence_index,
-    v_existing_membership_id
+    v_existing_membership_id,
+    v_existing_remaining_missing_count,
+    v_existing_balance_after
   FROM public.student_weekly_attendance swa
   WHERE swa.idempotency_key = p_request_id
   FOR UPDATE;
@@ -534,8 +546,8 @@ BEGIN
       'already_marked', true,
       'weekly_attendance_id', v_existing_id,
       'occurrence_index', v_existing_occurrence_index,
-      'remaining_missing_count', 0,
-      'classes_remaining', v_balance_after
+      'remaining_missing_count', COALESCE(v_existing_remaining_missing_count, 0),
+      'classes_remaining', COALESCE(v_existing_balance_after, v_balance_after)
     );
   END IF;
 
@@ -766,6 +778,12 @@ BEGIN
     GREATEST(v_raw_missing_count - 1, 0),
     GREATEST(v_available_classes - 1, 0)
   );
+
+  UPDATE public.student_weekly_attendance
+  SET
+    result_remaining_missing_count = v_remaining_missing_count,
+    membership_classes_remaining_after = v_balance_after
+  WHERE id = v_weekly_attendance_id;
 
   RETURN jsonb_build_object(
     'success', true,

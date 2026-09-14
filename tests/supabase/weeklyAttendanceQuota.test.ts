@@ -333,6 +333,17 @@ describe('weekly attendance quota deficits', () => {
     expect(markFunctionSql).toMatch(
       /INSERT INTO public\.student_weekly_attendance\s*\([\s\S]*idempotency_key[\s\S]*\)[\s\S]*VALUES\s*\([\s\S]*p_request_id/i,
     )
+    expect(sql).toContain('result_remaining_missing_count')
+    expect(sql).toContain('membership_classes_remaining_after')
+    expect(markFunctionSql).toMatch(
+      /v_existing_remaining_missing_count[\s\S]*'remaining_missing_count',\s*COALESCE\(v_existing_remaining_missing_count,\s*0\)/i,
+    )
+    expect(markFunctionSql).toMatch(
+      /v_existing_balance_after[\s\S]*'classes_remaining',\s*COALESCE\(v_existing_balance_after,\s*v_balance_after\)/i,
+    )
+    expect(transactionalTestSql).toMatch(
+      /v_retry_result\s*->>\s*'remaining_missing_count'[\s\S]*v_first_result\s*->>\s*'remaining_missing_count'/i,
+    )
   })
 
   it('keeps a two-argument compatibility wrapper that creates one key per legacy click', () => {

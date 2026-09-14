@@ -235,6 +235,10 @@ BEGIN
   IF NOT COALESCE((v_retry_result ->> 'already_marked')::boolean, false)
     OR v_retry_result ->> 'weekly_attendance_id'
       <> v_first_result ->> 'weekly_attendance_id'
+    OR v_retry_result ->> 'remaining_missing_count'
+      <> v_first_result ->> 'remaining_missing_count'
+    OR v_retry_result ->> 'classes_remaining'
+      <> v_first_result ->> 'classes_remaining'
     OR v_weekly_count <> 1
     OR v_ledger_count <> 1
   THEN
