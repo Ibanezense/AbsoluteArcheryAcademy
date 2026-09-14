@@ -1,62 +1,83 @@
-ALTER TABLE public.membership_plans
-  ADD COLUMN IF NOT EXISTS weekly_class_target integer NOT NULL DEFAULT 0;
+DO $weekly_attendance_quota$
+DECLARE
+  v_plan_column_created boolean;
+  v_membership_column_created boolean;
+BEGIN
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'membership_plans'
+      AND column_name = 'weekly_class_target'
+  ) INTO v_plan_column_created;
 
-ALTER TABLE public.membership_plans
-  DROP CONSTRAINT IF EXISTS membership_plans_weekly_class_target_check;
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'student_memberships'
+      AND column_name = 'weekly_class_target'
+  ) INTO v_membership_column_created;
 
-ALTER TABLE public.membership_plans
-  ADD CONSTRAINT membership_plans_weekly_class_target_check
-  CHECK (weekly_class_target BETWEEN 0 AND 4);
+  ALTER TABLE public.membership_plans
+    ADD COLUMN IF NOT EXISTS weekly_class_target integer NOT NULL DEFAULT 0;
 
-ALTER TABLE public.student_memberships
-  ADD COLUMN IF NOT EXISTS weekly_class_target integer NOT NULL DEFAULT 0;
+  ALTER TABLE public.membership_plans
+    DROP CONSTRAINT IF EXISTS membership_plans_weekly_class_target_check;
 
-ALTER TABLE public.student_memberships
-  DROP CONSTRAINT IF EXISTS student_memberships_weekly_class_target_check;
+  ALTER TABLE public.membership_plans
+    ADD CONSTRAINT membership_plans_weekly_class_target_check
+    CHECK (weekly_class_target BETWEEN 0 AND 4);
 
-ALTER TABLE public.student_memberships
-  ADD CONSTRAINT student_memberships_weekly_class_target_check
-  CHECK (weekly_class_target BETWEEN 0 AND 4);
+  ALTER TABLE public.student_memberships
+    ADD COLUMN IF NOT EXISTS weekly_class_target integer NOT NULL DEFAULT 0;
 
--- The zero-frequency plans are listed explicitly to document the approved
--- classification: Obsequio, Clase de Introducción, Paquete clases sueltas
--- and Paquete 8 clases. Any other unrecognized plan also remains at zero.
-UPDATE public.membership_plans
-SET weekly_class_target = CASE
-  WHEN lower(name) LIKE '%obsequio%'
-    OR lower(name) LIKE '%clase de introducci%n%'
-    OR lower(name) LIKE '%paquete clases sueltas%'
-    OR lower(name) LIKE '%paquete 8 clases%'
-    THEN 0
-  WHEN lower(name) LIKE '%media beca%'
-    OR lower(name) LIKE '%afiliad%'
-    OR lower(name) LIKE '%1 clase por semana%'
-    OR lower(name) LIKE '%1 clase semanal%'
-    OR lower(name) LIKE '%una clase por semana%'
-    OR lower(name) LIKE '%una clase semanal%'
-    THEN 1
-  WHEN lower(name) LIKE '%2 clases por semana%'
-    OR lower(name) LIKE '%2 clases semanales%'
-    OR lower(name) LIKE '%dos clases por semana%'
-    OR lower(name) LIKE '%dos clases semanales%'
-    THEN 2
-  WHEN lower(name) LIKE '%3 clases por semana%'
-    OR lower(name) LIKE '%3 clases semanales%'
-    OR lower(name) LIKE '%tres clases por semana%'
-    OR lower(name) LIKE '%tres clases semanales%'
-    THEN 3
-  WHEN lower(name) LIKE '%4 clases por semana%'
-    OR lower(name) LIKE '%4 clases semanales%'
-    OR lower(name) LIKE '%cuatro clases por semana%'
-    OR lower(name) LIKE '%cuatro clases semanales%'
-    THEN 4
-  ELSE 0
+  ALTER TABLE public.student_memberships
+    DROP CONSTRAINT IF EXISTS student_memberships_weekly_class_target_check;
+
+  ALTER TABLE public.student_memberships
+    ADD CONSTRAINT student_memberships_weekly_class_target_check
+    CHECK (weekly_class_target BETWEEN 0 AND 4);
+
+  IF v_plan_column_created THEN
+    WITH normalized_plans AS (
+      SELECT
+        id,
+        lower(trim(regexp_replace(name, '[[:space:]]+', ' ', 'g'))) AS normalized_name
+      FROM public.membership_plans
+    )
+    UPDATE public.membership_plans AS mp
+    SET weekly_class_target = CASE
+      WHEN np.normalized_name IN (
+        'obsequio',
+        'clase de introducción',
+        'clase de introduccion',
+        'paquete clases sueltas',
+        'paquete 8 clases'
+      ) THEN 0
+      WHEN np.normalized_name ~ '^(membres[ií]a )?(media beca|afiliad(o|os|a|as))$'
+        OR np.normalized_name ~ '^(membres[ií]a )?(1 clase|una clase) (por semana|semanal)$'
+        THEN 1
+      WHEN np.normalized_name ~ '^(membres[ií]a )?(2 clases|dos clases) (por semana|semanales)$'
+        THEN 2
+      WHEN np.normalized_name ~ '^(membres[ií]a )?(3 clases|tres clases) (por semana|semanales)$'
+        THEN 3
+      WHEN np.normalized_name ~ '^(membres[ií]a )?(4 clases|cuatro clases) (por semana|semanales)$'
+        THEN 4
+      ELSE 0
+    END
+    FROM normalized_plans AS np
+    WHERE mp.id = np.id;
+  END IF;
+
+  IF v_membership_column_created THEN
+    UPDATE public.student_memberships AS sm
+    SET weekly_class_target = COALESCE(mp.weekly_class_target, 0)
+    FROM public.membership_plans AS mp
+    WHERE sm.membership_plan_id = mp.id;
+  END IF;
 END;
-
-UPDATE public.student_memberships AS sm
-SET weekly_class_target = COALESCE(mp.weekly_class_target, 0)
-FROM public.membership_plans AS mp
-WHERE sm.membership_plan_id = mp.id;
+$weekly_attendance_quota$;
 
 CREATE OR REPLACE FUNCTION public.set_student_membership_weekly_class_target()
 RETURNS trigger
@@ -64,9 +85,12 @@ LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  IF TG_OP = 'INSERT'
-    OR NEW.membership_plan_id IS DISTINCT FROM OLD.membership_plan_id
-  THEN
+  IF TG_OP = 'UPDATE' AND NEW.membership_plan_id IS NULL THEN
+    NEW.weekly_class_target := OLD.weekly_class_target;
+  ELSIF TG_OP = 'INSERT' AND NEW.membership_plan_id IS NULL THEN
+    NEW.weekly_class_target := 0;
+  ELSIF TG_OP = 'INSERT'
+    OR NEW.membership_plan_id IS DISTINCT FROM OLD.membership_plan_id THEN
     SELECT mp.weekly_class_target
     INTO NEW.weekly_class_target
     FROM public.membership_plans AS mp

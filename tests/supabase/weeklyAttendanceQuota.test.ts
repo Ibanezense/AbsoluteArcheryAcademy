@@ -19,24 +19,36 @@ const planClassificationSql = sql.slice(
   planClassificationStart,
   membershipBackfillStart,
 )
+const triggerFunctionStart = sql.indexOf(
+  'CREATE OR REPLACE FUNCTION public.set_student_membership_weekly_class_target()',
+)
+const triggerFunctionEnd = sql.indexOf(
+  'DROP TRIGGER IF EXISTS set_student_membership_weekly_class_target',
+  triggerFunctionStart,
+)
+const triggerFunctionSql = sql.slice(triggerFunctionStart, triggerFunctionEnd)
 const zeroFrequencyBranches = Array.from(
   planClassificationSql.matchAll(/WHEN\s+([\s\S]*?)\s+THEN\s+0\b/gi),
   (match) => match[1],
 )
+const recognizedFrequencyPatterns = Array.from(
+  planClassificationSql.matchAll(/normalized_name\s*~\s*'([^']+)'/gi),
+  (match) => new RegExp(match[1], 'i'),
+)
 
 const zeroFrequencyPlanCases = [
-  { label: 'Obsequio', sqlFragment: "lower(name) LIKE '%obsequio%'" },
+  { label: 'Obsequio', sqlFragment: "'obsequio'" },
   {
     label: 'Clase de Introducción',
-    sqlFragment: "lower(name) LIKE '%clase de introducci%n%'",
+    sqlFragment: "'clase de introducción'",
   },
   {
     label: 'Paquete clases sueltas',
-    sqlFragment: "lower(name) LIKE '%paquete clases sueltas%'",
+    sqlFragment: "'paquete clases sueltas'",
   },
   {
     label: 'Paquete 8 clases',
-    sqlFragment: "lower(name) LIKE '%paquete 8 clases%'",
+    sqlFragment: "'paquete 8 clases'",
   },
 ]
 
@@ -74,6 +86,39 @@ describe('weekly attendance quota persistence', () => {
     expect(planClassificationSql).toMatch(/ELSE\s+0\s+END/i)
   })
 
+  it('uses anchored normalized names without matching negative affiliation or larger numbers', () => {
+    expect(planClassificationSql).toMatch(/normalized_name/i)
+    expect(planClassificationSql).not.toContain("LIKE '%afiliad%'")
+    expect(planClassificationSql).not.toContain("LIKE '%1 clase por semana%'")
+    expect(planClassificationSql).toMatch(/normalized_name\s*~\s*'\^[^']*afiliad[^']*\$'/i)
+    expect(planClassificationSql).toMatch(/normalized_name\s*~\s*'\^[^']*1[^']*\$'/i)
+    expect(
+      recognizedFrequencyPatterns.some((pattern) => pattern.test('no afiliado')),
+    ).toBe(false)
+    expect(
+      recognizedFrequencyPatterns.some((pattern) =>
+        pattern.test('12 clases por semana'),
+      ),
+    ).toBe(false)
+  })
+
+  it('runs plan and membership backfills only when their columns are first created', () => {
+    expect(sql).toMatch(
+      /information_schema\.columns[\s\S]*table_name\s*=\s*'membership_plans'[\s\S]*column_name\s*=\s*'weekly_class_target'[\s\S]*INTO v_plan_column_created/i,
+    )
+    expect(sql).toMatch(
+      /information_schema\.columns[\s\S]*table_name\s*=\s*'student_memberships'[\s\S]*column_name\s*=\s*'weekly_class_target'[\s\S]*INTO v_membership_column_created/i,
+    )
+    expect(sql).toMatch(
+      /IF v_plan_column_created THEN[\s\S]*?UPDATE public\.membership_plans[\s\S]*?END IF/i,
+    )
+    expect(sql).toMatch(
+      /IF v_membership_column_created THEN[\s\S]*?UPDATE public\.student_memberships[\s\S]*?END IF/i,
+    )
+    expect(sql.match(/UPDATE public\.membership_plans/gi)).toHaveLength(1)
+    expect(sql.match(/UPDATE public\.student_memberships/gi)).toHaveLength(1)
+  })
+
   it('backfills every existing membership from its plan while keeping unlinked rows compatible', () => {
     expect(sql).toMatch(
       /UPDATE public\.student_memberships(?:\s+(?:AS\s+)?sm)?[\s\S]*SET weekly_class_target\s*=\s*COALESCE\(mp\.weekly_class_target, 0\)[\s\S]*FROM public\.membership_plans(?:\s+(?:AS\s+)?mp)?[\s\S]*sm\.membership_plan_id\s*=\s*mp\.id/i,
@@ -91,5 +136,14 @@ describe('weekly attendance quota persistence', () => {
       /CREATE TRIGGER set_student_membership_weekly_class_target[\s\S]*BEFORE INSERT OR UPDATE OF membership_plan_id ON public\.student_memberships[\s\S]*FOR EACH ROW[\s\S]*EXECUTE FUNCTION public\.set_student_membership_weekly_class_target\(\)/i,
     )
     expect(sql).not.toMatch(/(?:AFTER|BEFORE) UPDATE(?: OF weekly_class_target)? ON public\.membership_plans/i)
+  })
+
+  it('preserves the snapshot when a referenced plan is deleted and defaults planless inserts to zero', () => {
+    expect(triggerFunctionSql).toMatch(
+      /TG_OP\s*=\s*'UPDATE'[\s\S]*NEW\.membership_plan_id IS NULL[\s\S]*NEW\.weekly_class_target\s*:=\s*OLD\.weekly_class_target/i,
+    )
+    expect(triggerFunctionSql).toMatch(
+      /TG_OP\s*=\s*'INSERT'[\s\S]*NEW\.membership_plan_id IS NULL[\s\S]*NEW\.weekly_class_target\s*:=\s*0/i,
+    )
   })
 })
