@@ -12,6 +12,7 @@ type WeeklyAttendanceReviewProps = {
   error: string | null
   processingStudentId: string | null
   onMark: (candidate: WeeklyAttendanceCandidate) => void
+  onResolveCancellation: (candidate: WeeklyAttendanceCandidate, resolution: 'justified' | 'no_show') => void
 }
 
 function membershipStatusLabel(status: WeeklyAttendanceCandidate['membership_display_status']) {
@@ -28,6 +29,7 @@ export default function WeeklyAttendanceReview({
   error,
   processingStudentId,
   onMark,
+  onResolveCancellation,
 }: WeeklyAttendanceReviewProps) {
   return (
     <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.055)]">
@@ -37,7 +39,7 @@ export default function WeeklyAttendanceReview({
           Alumnos con asistencias pendientes esta semana
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          Revisa cuántas clases completó cada alumno entre jueves y domingo. Registra una inasistencia por vez
+          Revisa cuántas clases completó cada alumno entre lunes y domingo. Registra una inasistencia por vez
           hasta completar su frecuencia semanal para validar su participación en el campeonato nacional.
         </p>
       </div>
@@ -74,7 +76,7 @@ export default function WeeklyAttendanceReview({
 
             return (
               <article
-                key={candidate.student_id}
+                key={candidate.cancellation_id || `${candidate.student_id}-${candidate.candidate_type || 'quota'}`}
                 className="rounded-[1.35rem] border-2 border-rose-300 bg-rose-50/60 p-4 shadow-sm"
               >
                 <div className="flex items-start gap-3">
@@ -120,18 +122,32 @@ export default function WeeklyAttendanceReview({
                   </div>
                 </dl>
 
+                {candidate.candidate_type === 'student_cancellation' && (
+                  <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-bold text-amber-800">
+                    Cancelación pendiente{candidate.location_name ? ` · ${candidate.location_name}` : ''}
+                  </p>
+                )}
                 <p className="mt-4 text-sm leading-6 text-rose-800">
                   Cada confirmación descuenta una clase y guarda una inasistencia en el historial. El alumno seguirá
                   en esta lista mientras tenga faltas pendientes.
                 </p>
-                <button
+                {candidate.candidate_type === 'student_cancellation' ? (
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <button type="button" className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50" disabled={isProcessing} onClick={() => onResolveCancellation(candidate, 'no_show')}>
+                      Marcar inasistencia
+                    </button>
+                    <button type="button" className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50" disabled={isProcessing} onClick={() => onResolveCancellation(candidate, 'justified')}>
+                      Justificar cancelación
+                    </button>
+                  </div>
+                ) : <button
                   type="button"
                   className="mt-4 w-full rounded-2xl bg-rose-600 px-4 py-3 text-sm font-black text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={isProcessing}
                   onClick={() => onMark(candidate)}
                 >
                   {isProcessing ? 'Registrando…' : 'Marcar 1 inasistencia'}
-                </button>
+                </button>}
               </article>
             )
           })}

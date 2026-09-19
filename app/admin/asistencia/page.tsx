@@ -23,6 +23,7 @@ import { membershipPlanKeys } from '@/lib/hooks/useMembershipPlans'
 import {
   getWeeklyAttendanceReview,
   markWeeklyNoShow,
+  resolveStudentCancellation,
   type WeeklyAttendanceCandidate,
   type WeeklyAttendanceReview as WeeklyAttendanceReviewData,
 } from '@/lib/services/adminWeeklyAttendanceService'
@@ -252,8 +253,10 @@ function AsistenciaContent() {
   }
 
   const handleCancelBooking = async (bookingId: string) => {
+    const reason = window.prompt('Motivo obligatorio de la cancelación por la academia:')?.trim()
+    if (!reason) return
     const ok = await confirm(
-      'Se cancelara esta reserva. Si la asistencia ya consumio credito, se restaurara una sola vez. Continuar?',
+      'La reserva se cancelará por la academia. Se liberarán sus recursos y no generará inasistencia. Si ya consumió crédito, se restaurará una sola vez. ¿Continuar?',
       {
         title: 'Cancelar reserva',
         description: 'Esta accion usa la RPC admin actual y requiere confirmacion porque cambia el estado de la reserva.',
@@ -268,7 +271,7 @@ function AsistenciaContent() {
     try {
       const { data, error: rpcError } = await supabase.rpc('admin_cancel_booking', {
         p_booking_id: bookingId,
-        p_refund: true,
+        p_reason: reason,
       })
 
       if (rpcError) throw rpcError
@@ -348,6 +351,41 @@ function AsistenciaContent() {
     } finally {
       setWeeklyActionLoading(null)
       weeklyActionsInFlight.current.delete(candidate.student_id)
+    }
+  }
+
+  const handleResolveCancellation = async (candidate: WeeklyAttendanceCandidate, resolution: 'justified' | 'no_show') => {
+    if (!candidate.cancellation_id || weeklyActionLoading) return
+    let adminReason: string | undefined
+    if (resolution === 'justified') {
+      adminReason = window.prompt('Motivo administrativo obligatorio de la cancelación justificada:')?.trim()
+      if (!adminReason) return
+    }
+    const confirmed = await confirm(
+      resolution === 'no_show'
+        ? `Se descontará una clase a ${candidate.student_name} y quedará registrada como inasistencia.`
+        : `La cancelación de ${candidate.student_name} quedará justificada. Si no existe otra oportunidad válida esta semana, se ampliará la membresía 7 días.`,
+      { title: resolution === 'no_show' ? 'Confirmar inasistencia' : 'Confirmar justificación', confirmLabel: 'Confirmar', tone: resolution === 'no_show' ? 'danger' : 'warning' },
+    )
+    if (!confirmed) return
+    setWeeklyActionLoading(candidate.student_id)
+    try {
+      const result = await resolveStudentCancellation(supabase, {
+        cancellationId: candidate.cancellation_id,
+        resolution,
+        adminReason,
+      })
+      toast.push({
+        message: result.extension_applied
+          ? 'Cancelación justificada y membresía ampliada 7 días.'
+          : resolution === 'no_show' ? 'Inasistencia registrada.' : 'Cancelación justificada.',
+        type: 'success',
+      })
+      await loadWeeklyReview(selectedDate)
+    } catch (error: any) {
+      toast.push({ message: error.message || 'No se pudo resolver la cancelación.', type: 'error' })
+    } finally {
+      setWeeklyActionLoading(null)
     }
   }
 
@@ -486,6 +524,7 @@ function AsistenciaContent() {
           error={weeklyReviewError}
           processingStudentId={weeklyActionLoading}
           onMark={handleMarkWeeklyNoShow}
+          onResolveCancellation={handleResolveCancellation}
         />
       )}
     </div>

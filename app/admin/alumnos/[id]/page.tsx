@@ -91,6 +91,10 @@ type MembershipEditorState = {
   discount_type: 'none' | 'amount' | 'percentage'
   discount_value: string
   frozen_until: string
+  purchase_id: string
+  freeze_start: string
+  freeze_reason: string
+  freeze_notes: string
 }
 
 type MembershipAction = 'info' | 'cancel' | 'dates' | 'plan' | 'payment_type' | 'billing_date' | 'discount' | 'freeze'
@@ -315,6 +319,10 @@ function membershipEditorFromSummary(membership: StudentMembershipSummary): Memb
     discount_type: (membership.discount_type || 'none') as MembershipEditorState['discount_type'],
     discount_value: String(membership.discount_value || ''),
     frozen_until: membership.frozen_until || '',
+    purchase_id: membership.purchase_id,
+    freeze_start: getLimaDateKey(),
+    freeze_reason: '',
+    freeze_notes: '',
   }
 }
 
@@ -626,6 +634,35 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       const action = membershipEditor.action === 'freeze' && data?.memberships.find((row) => row.id === membershipEditor.id)?.frozen_at
         ? 'unfreeze'
         : membershipEditor.action
+      if (action === 'freeze') {
+        if (!membershipEditor.freeze_start || !membershipEditor.frozen_until || !membershipEditor.freeze_reason.trim()) {
+          throw new Error('Indica las fechas y el motivo del congelamiento.')
+        }
+        const { error: freezeError } = await supabase.rpc('admin_create_membership_freeze', {
+          p_purchase_id: membershipEditor.purchase_id,
+          p_start_date: membershipEditor.freeze_start,
+          p_end_date: membershipEditor.frozen_until,
+          p_reason: membershipEditor.freeze_reason.trim(),
+          p_notes: membershipEditor.freeze_notes.trim() || null,
+        })
+        if (freezeError) throw freezeError
+        toast.push({ message: 'Congelamiento aplicado y reservas liberadas.', type: 'success' })
+        setMembershipEditor(null)
+        await refreshStudentData()
+        return
+      }
+      if (action === 'unfreeze') {
+        const { error: finishFreezeError } = await supabase.rpc('admin_finish_membership_freeze', {
+          p_purchase_id: membershipEditor.purchase_id,
+          p_reason: 'Reactivación administrativa anticipada',
+        })
+        if (finishFreezeError) throw finishFreezeError
+        toast.push({ message: 'Membresía reactivada y fechas pendientes ajustadas.', type: 'success' })
+        setMembershipEditor(null)
+        await refreshStudentData()
+        return
+      }
+
       const payload = action === 'dates'
         ? { start_date: membershipEditor.start_date, end_date: membershipEditor.end_date }
         : action === 'plan'
@@ -636,9 +673,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
               ? { billing_date: membershipEditor.billing_date }
               : action === 'discount'
                 ? { discount_type: membershipEditor.discount_type, discount_value: membershipEditor.discount_value }
-                : action === 'freeze'
-                  ? { frozen_until: membershipEditor.frozen_until }
-                  : {}
+                : {}
 
       const { error: updateError } = await supabase.rpc('admin_manage_student_membership', {
         p_membership_id: membershipEditor.id,
@@ -1706,7 +1741,15 @@ function MembershipActionDialog({ editor, plans, saving, frozen, onChange, onClo
           {editor.action === 'payment_type' && <PaymentTypeSelect value={editor.payment_type} onChange={(value) => onChange({ ...editor, payment_type: value })} />}
           {editor.action === 'billing_date' && <EditorInput label="Fecha de facturación" type="date" value={editor.billing_date} onChange={(value) => onChange({ ...editor, billing_date: value })} />}
           {editor.action === 'discount' && <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-2 text-sm font-bold text-slate-700">Tipo<select className={formControlClass} value={editor.discount_type} onChange={(event) => onChange({ ...editor, discount_type: event.target.value as MembershipEditorState['discount_type'] })}><option value="none">Sin descuento</option><option value="amount">Monto</option><option value="percentage">Porcentaje</option></select></label><EditorInput label="Valor" type="number" value={editor.discount_value} onChange={(value) => onChange({ ...editor, discount_value: value })} /></div>}
-          {editor.action === 'freeze' && !frozen && <EditorInput label="Congelada hasta (opcional)" type="date" value={editor.frozen_until} onChange={(value) => onChange({ ...editor, frozen_until: value })} />}
+          {editor.action === 'freeze' && !frozen && <div className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <EditorInput label="Desde (inclusive)" type="date" value={editor.freeze_start} onChange={(value) => onChange({ ...editor, freeze_start: value })} />
+              <EditorInput label="Hasta (inclusive)" type="date" value={editor.frozen_until} onChange={(value) => onChange({ ...editor, frozen_until: value })} />
+            </div>
+            <EditorInput label="Motivo obligatorio" value={editor.freeze_reason} onChange={(value) => onChange({ ...editor, freeze_reason: value })} />
+            <EditorInput label="Observación opcional" value={editor.freeze_notes} onChange={(value) => onChange({ ...editor, freeze_notes: value })} />
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-800">Se cancelarán de forma neutral las reservas del rango, se liberarán sus recursos y la cadena de ciclos se desplazará por la cantidad exacta de días.</div>
+          </div>}
           {editor.action === 'freeze' && frozen && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-700">Al reactivar, el alumno podrá volver a crear reservas con el saldo disponible.</div>}
         </div>
         <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700">Cerrar</button>{editor.action !== 'info' && <button type="button" onClick={onSave} disabled={saving} className={`rounded-2xl px-5 py-3 text-sm font-black text-white disabled:opacity-60 ${editor.action === 'cancel' ? 'bg-rose-600' : 'bg-accent'}`}>{saving ? 'Guardando…' : editor.action === 'cancel' ? 'Cancelar membresía' : 'Guardar cambios'}</button>}</div>

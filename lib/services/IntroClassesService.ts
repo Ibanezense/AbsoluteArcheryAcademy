@@ -32,6 +32,9 @@ export type AvailableIntroSession = {
     capacity: number;
     booked: number;
     available: number;
+    location_code?: string;
+    location_name?: string;
+    location_address?: string | null;
 };
 
 export type IntroSessionGroup = {
@@ -308,6 +311,9 @@ export class IntroClassesService {
             capacity: session.equipment_capacity,
             booked: session.equipment_reserved,
             available: session.spots_remaining,
+            location_code: session.location_code,
+            location_name: session.location_name,
+            location_address: session.location_address,
         }));
     }
 

@@ -32,9 +32,10 @@ export async function adminBookSession(
   return data
 }
 
-export async function adminCancelBooking(client: RpcClient, bookingId: string) {
+export async function adminCancelBooking(client: RpcClient, bookingId: string, reason: string) {
   const { data, error } = await client.rpc('admin_cancel_booking', {
     p_booking_id: bookingId,
+    p_reason: reason,
   })
 
   throwIfRpcError(error, 'No se pudo cancelar la reserva.')
@@ -45,12 +46,12 @@ export async function adminCancelSession(
   client: RpcClient,
   input: {
     sessionId: string
-    refund: boolean
+    reason: string
   }
 ) {
   const { data, error } = await client.rpc('admin_cancel_session', {
     p_session: input.sessionId,
-    p_refund: input.refund,
+    p_reason: input.reason,
   })
 
   throwIfRpcError(error, 'No se pudo cancelar el turno.')

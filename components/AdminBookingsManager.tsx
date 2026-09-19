@@ -33,6 +33,8 @@ export default function AdminBookingsManager() {
   const activeBookings = allActiveBookings.slice(startIndex, endIndex)
 
   const handleCancelBooking = async (bookingId: string) => {
+    const reason = window.prompt('Motivo obligatorio de la cancelación por la academia:')?.trim()
+    if (!reason) return
     const confirmed = await confirm(
       '¿Estás seguro de que quieres cancelar esta reserva? Si ya consumió crédito, se restaurará una sola vez.',
       { title: 'Cancelar Reserva' }
@@ -41,7 +43,7 @@ export default function AdminBookingsManager() {
     if (!confirmed) return
 
     try {
-      await cancelBookingMutation.mutateAsync(bookingId)
+      await cancelBookingMutation.mutateAsync({ bookingId, reason })
       toast.push({ message: 'Reserva cancelada.', type: 'success' })
     } catch (error: any) {
       toast.push({ message: error?.message || 'No se pudo cancelar la reserva.', type: 'error' })

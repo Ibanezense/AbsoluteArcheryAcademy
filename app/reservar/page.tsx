@@ -1,412 +1,177 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, CalendarClock, Medal } from 'lucide-react'
-import { ClassCardsBoard } from '@/components/ui/ClassCardsBoard'
-import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
+import dayjs from 'dayjs'
+import 'dayjs/locale/es'
+import { ArrowLeft, ArrowRight, CalendarClock, MapPin, Target } from 'lucide-react'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
+import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { useToast } from '@/components/ui/ToastProvider'
-import { supabase } from '@/lib/supabaseClient'
-import { useStudentClassCards } from '@/lib/hooks/useStudentClassCards'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
-import {
-  buildBookingCutoffByDay,
-  getBookingDayKey,
-  hasBookingDayCutoffPassed,
-} from '@/lib/utils/bookingCutoff'
+import { supabase } from '@/lib/supabaseClient'
 
-type StudentBookingProfile = {
-  has_own_bow: boolean
-  assigned_bow: boolean
-  current_distance_m: number | null
-  bow_poundage: number | null
-}
+dayjs.locale('es')
 
-type AvailableSessionRow = {
+type AvailableSession = {
   session_id: string
   start_at: string
   end_at: string
-  status: 'scheduled' | 'cancelled'
+  status: string
   already_reserved: boolean
   distance_m: number
   bow_usage_type: 'shared_inventory' | 'assigned' | 'own'
-  slot_capacity: number
-  distance_reserved: number
-  bow_capacity: number | null
-  bow_reserved: number | null
   spots_for_student: number
+  location_code: string
+  location_name: string
+  location_address: string | null
+  booking_mode: string
 }
 
-function sameYMD(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+function mondayOf(date: dayjs.Dayjs) {
+  const weekday = date.day() || 7
+  return date.subtract(weekday - 1, 'day').startOf('day')
 }
 
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0)
-}
-
-function addMonths(date: Date, amount: number) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1)
-}
-
-function equipmentAvailabilityLabel(session: AvailableSessionRow) {
-  if (session.bow_usage_type === 'own') return 'Equipo propio · disponibilidad libre'
-  if (session.bow_usage_type === 'assigned') return 'Equipo asignado · disponibilidad libre'
-  if (session.spots_for_student > 0) return `${session.spots_for_student} equipos disponibles`
-  return 'Para este turno ya no tenemos equipo disponible. Por favor, reserva otro turno disponible.'
+function equipmentLabel(type: AvailableSession['bow_usage_type']) {
+  if (type === 'own') return 'Equipo propio'
+  if (type === 'assigned') return 'Arco asignado'
+  return 'Arco de academia'
 }
 
 export default function ReservarPage() {
   const router = useRouter()
   const toast = useToast()
-  const today = new Date()
-  const [month, setMonth] = useState<Date>(startOfMonth(today))
-  const [selected, setSelected] = useState<Date>(today)
-  const [sessions, setSessions] = useState<AvailableSessionRow[]>([])
-  const [bookingProfile, setBookingProfile] = useState<StudentBookingProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const {
-    account,
-    students,
-    activeStudent,
-    activeStudentId,
-    loading: contextLoading,
-  } = useStudentContext()
+  const { account, activeStudent, activeStudentId, loading: contextLoading } = useStudentContext()
   const { dashboard } = useStudentDashboard(activeStudentId)
-  const {
-    cards: classCards,
-    loading: classCardsLoading,
-    error: classCardsError,
-  } = useStudentClassCards(activeStudentId)
+  const [weekStart, setWeekStart] = useState(() => mondayOf(dayjs()))
+  const [sessions, setSessions] = useState<AvailableSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  const loadSessions = useCallback(async () => {
+    if (!activeStudentId) {
+      setSessions([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data, error } = await supabase.rpc('get_available_multisite_sessions_for_student', {
+      p_student_id: activeStudentId,
+      p_date_from: weekStart.format('YYYY-MM-DD'),
+      p_date_to: weekStart.add(6, 'day').format('YYYY-MM-DD'),
+    })
+    setLoading(false)
+    if (error) {
+      toast.push({ message: error.message || 'No se pudo cargar la agenda semanal.', type: 'error' })
+      return
+    }
+    setSessions((data || []) as AvailableSession[])
+  }, [activeStudentId, toast, weekStart])
 
   useEffect(() => {
     if (contextLoading) return
-
     if (account?.role === 'guardian' && !activeStudentId) {
       router.replace('/hub')
+      return
     }
-  }, [account?.role, activeStudentId, contextLoading, router])
+    void loadSessions()
+  }, [account?.role, activeStudentId, contextLoading, loadSessions, router])
 
-  useEffect(() => {
-    const loadBookingPage = async () => {
-      if (!activeStudentId) {
-        setLoading(false)
-        return
-      }
+  const days = useMemo(() => Array.from({ length: 7 }, (_, index) => ({
+    date: weekStart.add(index, 'day'),
+    sessions: sessions.filter((session) => dayjs(session.start_at).isSame(weekStart.add(index, 'day'), 'day')),
+  })).filter((day) => day.sessions.length > 0), [sessions, weekStart])
 
-      try {
-        setLoading(true)
+  const cannotBook = dashboard?.membership_status === 'expired'
+    || dashboard?.membership_status === 'no_membership'
+    || dashboard?.membership_status === 'no_classes'
 
-        const { data: studentData, error: studentError } = await supabase
-          .from('students')
-          .select('has_own_bow, assigned_bow, current_distance_m, bow_poundage')
-          .eq('id', activeStudentId)
-          .single()
-
-        if (studentError) throw studentError
-        setBookingProfile(studentData as StudentBookingProfile)
-
-        const monthStart = startOfMonth(month)
-        const monthEnd = endOfMonth(month)
-
-        const { data: sessionsData, error: sessionsError } = await supabase.rpc(
-          'get_available_sessions_for_student',
-          {
-            p_student_id: activeStudentId,
-            p_date_from: monthStart.toISOString().slice(0, 10),
-            p_date_to: monthEnd.toISOString().slice(0, 10),
-          }
-        )
-
-        if (sessionsError) throw sessionsError
-
-        const filteredSessions = (sessionsData || []).filter((session: AvailableSessionRow) => {
-          const sessionDate = new Date(session.start_at)
-          return sessionDate.getMonth() === month.getMonth() && sessionDate.getFullYear() === month.getFullYear()
-        })
-
-        setSessions(filteredSessions as AvailableSessionRow[])
-      } catch (loadError: any) {
-        toast.push({ message: loadError?.message || 'No se pudo cargar el calendario.', type: 'error' })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadBookingPage()
-  }, [activeStudentId, month, toast])
-
-  const dayInfo = useMemo(() => {
-    const info: Record<string, { scheduled: number; cancelled: number }> = {}
-    sessions.forEach((session) => {
-      const date = new Date(session.start_at)
-      const key = date.toISOString().slice(0, 10)
-      if (!info[key]) info[key] = { scheduled: 0, cancelled: 0 }
-      if (session.status === 'scheduled') info[key].scheduled += 1
-      else info[key].cancelled += 1
+  const reserve = async (session: AvailableSession) => {
+    if (!activeStudentId || savingId) return
+    setSavingId(session.session_id)
+    const { error } = await supabase.rpc('book_session_multisite', {
+      p_session: session.session_id,
+      p_student_id: activeStudentId,
     })
-    return info
-  }, [sessions])
-
-  const sessionsOfSelected = useMemo(() => {
-    return sessions.filter((session) => sameYMD(new Date(session.start_at), selected))
-  }, [sessions, selected])
-  const bookingCutoffByDay = useMemo(() => buildBookingCutoffByDay(sessions), [sessions])
-
-  if (loading || contextLoading) {
-    return <StudentPageSkeleton variant="booking" />
+    setSavingId(null)
+    if (error) {
+      toast.push({ message: error.message, type: 'error' })
+      return
+    }
+    toast.push({ message: 'Reserva confirmada en Tiabaya.', type: 'success' })
+    await loadSessions()
   }
 
-  const monthName = month.toLocaleDateString('es', { month: 'long', year: 'numeric' })
-  const isScheduled = dashboard?.membership_status === 'scheduled'
-  const isExpired = dashboard?.membership_end ? new Date(dashboard.membership_end) < new Date() : false
-  const displayedClassesRemaining = isScheduled
-    ? (classCards[0]?.classes_remaining ?? 0)
-    : (dashboard?.classes_remaining ?? 0)
-  const hasNoClasses = !isScheduled && displayedClassesRemaining <= 0
-  const cannotBook = isExpired || hasNoClasses || !bookingProfile?.current_distance_m
-
-  const first = startOfMonth(month)
-  const last = endOfMonth(month)
-  const firstWeekday = new Date(first).getDay()
-  const grid: Date[] = []
-
-  for (let index = 0; index < firstWeekday; index += 1) {
-    const date = new Date(first)
-    date.setDate(date.getDate() - (firstWeekday - index))
-    grid.push(date)
-  }
-
-  for (let day = 1; day <= last.getDate(); day += 1) {
-    grid.push(new Date(month.getFullYear(), month.getMonth(), day))
-  }
+  if (contextLoading || loading) return <StudentPageSkeleton variant="booking" />
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] text-textpri">
-      <MobileStudentHeader title="Reservar clase" showBack />
-
-      <div className="space-y-5 px-4 py-5">
-        {account?.role === 'guardian' && activeStudent && students.length > 1 && (
-          <StudentCard className="flex items-center justify-between gap-4 p-4">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-textsec">Reservando para</p>
-              <p className="truncate font-semibold">{activeStudent.full_name}</p>
-            </div>
-            <button className="btn-outline btn-sm shrink-0" onClick={() => router.push('/hub')}>
-              Cambiar
-            </button>
+      <MobileStudentHeader title="Reservar clase" subtitle="Agenda flexible de Tiabaya" showBack />
+      <main className="space-y-4 px-4 py-5">
+        {account?.role === 'guardian' && activeStudent && (
+          <StudentCard className="p-4 text-sm">
+            Reservando para <strong>{activeStudent.full_name}</strong>
           </StudentCard>
         )}
-
         {cannotBook && (
-          <StudentCard variant="warning" className="px-5 py-4">
-            <div className="flex items-start gap-3">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-warning/15 text-lg font-black text-warning">!</span>
-              <div>
-                <p className="font-semibold text-warning">No puedes reservar clases</p>
-                <p className="mt-1 text-sm text-textsec">
-                  {isExpired
-                    ? 'La membresía del alumno ha vencido. Contacta al administrador para renovarla.'
-                    : hasNoClasses
-                      ? 'El alumno no tiene clases disponibles. Contacta al administrador para agregar más clases.'
-                      : 'El alumno no tiene distancia configurada. Contacta al administrador para habilitar reservas.'}
-                </p>
-              </div>
-            </div>
-          </StudentCard>
+          <StudentNotice>La membresía no tiene clases normales ni recuperaciones disponibles para reservar.</StudentNotice>
         )}
 
-        {isScheduled && !cannotBook && (
-          <StudentNotice>
-            La membresÃ­a estÃ¡ programada desde el {dashboard?.membership_start
-              ? new Date(`${dashboard.membership_start}T12:00:00`).toLocaleDateString('es')
-              : 'inicio indicado'}. Solo verÃ¡s turnos incluidos dentro de su vigencia.
-          </StudentNotice>
-        )}
-
-        <StudentCard className="p-4">
-          <div className="grid grid-cols-[92px_1fr] items-center gap-4">
-            <div className="grid h-[88px] w-[88px] place-items-center rounded-full border-[5px] border-accent/80 bg-white text-center shadow-inner">
-              <div>
-                <p className="text-3xl font-black leading-none">{displayedClassesRemaining}</p>
-                <p className="mt-1 px-2 text-[0.62rem] font-semibold leading-[1.05] text-textsec">clases disponibles</p>
-              </div>
-            </div>
-            <div className="grid gap-3">
-              <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
-                <SummaryItem icon={<Medal className="h-5 w-5" />} label="Plan" value={dashboard?.membership_name || '-'} />
-                <SummaryItem
-                  icon={<CalendarClock className="h-5 w-5" />}
-                  label="Vence"
-                  value={dashboard?.membership_end ? new Date(dashboard.membership_end).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                  tone="green"
-                />
-              </div>
-              <StudentNotice className="py-2">
-                Puedes cancelar desde la app hasta el inicio de la clase.
-              </StudentNotice>
-            </div>
+        <StudentCard className="overflow-hidden p-0">
+          <div className="bg-[#07111d] p-5 text-white">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-200">Tiabaya</p>
+            <h1 className="mt-2 text-2xl font-black">Agenda semanal</h1>
+            <p className="mt-1 text-sm text-slate-300">
+              Elige el turno. El sistema usará el ciclo elegible más antiguo y el crédito correcto.
+            </p>
+          </div>
+          <div className="flex items-center justify-between gap-3 p-4">
+            <button className="btn-outline btn-sm" onClick={() => setWeekStart((date) => date.subtract(7, 'day'))} aria-label="Semana anterior">
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <p className="text-center text-sm font-black capitalize">
+              {weekStart.format('D MMM')} – {weekStart.add(6, 'day').format('D MMM YYYY')}
+            </p>
+            <button className="btn-outline btn-sm" onClick={() => setWeekStart((date) => date.add(7, 'day'))} aria-label="Semana siguiente">
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </StudentCard>
 
-        <section className="space-y-4">
-          <div className="flex items-end gap-3">
-            <h2 className="text-[1.35rem] font-black tracking-[-0.04em]">Mis clases disponibles</h2>
-            <span className="pb-1 text-sm font-medium text-textsec">{displayedClassesRemaining || classCards.length} clases</span>
-          </div>
-          <ClassCardsBoard
-            cards={classCards}
-            loading={classCardsLoading}
-            error={classCardsError}
-            canReserve={!cannotBook}
-            studentId={activeStudentId}
-          />
-        </section>
+        {days.length === 0 && (
+          <StudentCard className="p-6 text-center text-sm text-textsec">No hay turnos flexibles disponibles esta semana.</StudentCard>
+        )}
 
-        <div className="grid gap-4">
-          <StudentCard className="p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-black">Calendario de turnos</h2>
-                <span className="text-sm font-medium capitalize text-textsec">{monthName}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="btn-outline grid min-h-[44px] min-w-[44px] place-items-center !p-0"
-                  onClick={() => setMonth(addMonths(month, -1))}
-                  aria-label="Mes anterior"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <button
-                  className="btn-outline grid min-h-[44px] min-w-[44px] place-items-center !p-0"
-                  onClick={() => setMonth(addMonths(month, 1))}
-                  aria-label="Mes siguiente"
-                >
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-2 grid grid-cols-7 text-center text-xs text-textsec">
-              <div>D</div><div>L</div><div>M</div><div>M</div><div>J</div><div>V</div><div>S</div>
-            </div>
-
-            <div className="grid grid-cols-7 gap-1.5">
-              {grid.map((date, index) => {
-                const inMonth = date.getMonth() === month.getMonth()
-                if (!inMonth) return <div key={index} className="h-10" />
-
-                const key = date.toISOString().slice(0, 10)
-                const info = dayInfo[key]
-                const isToday = sameYMD(date, today)
-                const isSelected = sameYMD(date, selected)
-
-                let bg = 'bg-white'
-                let ring = ''
-                if (info?.cancelled && !info?.scheduled) bg = 'bg-danger/10'
-                else if (info?.scheduled) bg = 'bg-accent/8'
-                if (isToday) ring = 'ring-2 ring-accent'
-                if (isSelected) ring = 'ring-2 ring-accent/60 bg-accent/10'
-
-                return (
-                  <button
-                    key={index}
-                    onClick={() => setSelected(date)}
-                    className={`grid h-10 place-items-center rounded-xl ${bg} ${ring} transition-all`}
-                  >
-                    <span className="text-sm font-semibold">{date.getDate()}</span>
-                    {info?.scheduled ? <span className="block h-1.5 w-1.5 rounded-full bg-accent" /> : <span className="block h-1.5 w-1.5" />}
-                  </button>
-                )
-              })}
-            </div>
-          </StudentCard>
-
-          <StudentCard className="p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-green-50 text-success">
-                <CalendarClock className="h-5 w-5" />
-              </span>
-              <h2 className="font-black">Horarios disponibles</h2>
-            </div>
-            <div className="grid gap-2">
-              {sessionsOfSelected.length === 0 && (
-                <div className="text-sm text-textsec">No hay turnos para este día.</div>
-              )}
-
-              {sessionsOfSelected.map((session) => {
-                const start = new Date(session.start_at)
-                const end = new Date(session.end_at)
-                const spots = session.spots_for_student
-                const isPast = start.getTime() <= Date.now()
-                const bookingDayCutoffAt = bookingCutoffByDay[getBookingDayKey(session.start_at)]
-                const isDayClosed = hasBookingDayCutoffPassed(bookingDayCutoffAt)
-                const isAvailable = session.status === 'scheduled' && !session.already_reserved && spots > 0 && !isPast && !isDayClosed
-
-                return (
-                  <div key={session.session_id} className="flex items-center justify-between rounded-xl border border-line bg-white px-3 py-2.5">
-                    <div>
-                      <p className="font-semibold">
-                        {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {' - '}
-                        {end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                      <p className={`text-xs font-medium ${isAvailable ? 'text-success' : 'text-textsec'}`}>
-                        {session.status === 'cancelled'
-                          ? 'Cancelado'
-                          : isPast
-                            ? 'Turno iniciado'
-                            : isDayClosed
-                              ? 'Reservas cerradas'
-                              : session.already_reserved
-                                ? 'Ya reservado'
-                                : equipmentAvailabilityLabel(session)}
+        {days.map(({ date, sessions: daySessions }) => (
+          <section key={date.format('YYYY-MM-DD')} className="space-y-2">
+            <h2 className="px-1 text-sm font-black capitalize text-slate-700">{date.format('dddd D [de] MMMM')}</h2>
+            {daySessions.map((session) => {
+              const soldOut = session.spots_for_student <= 0
+              return (
+                <StudentCard key={session.session_id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-orange-50 text-accent"><CalendarClock className="h-6 w-6" /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-lg font-black">{dayjs(session.start_at).format('HH:mm')} – {dayjs(session.end_at).format('HH:mm')}</p>
+                      <p className="mt-1 flex items-center gap-1 text-sm text-textsec"><MapPin className="h-4 w-4" /> {session.location_name}{session.location_address ? ` · ${session.location_address}` : ''}</p>
+                      <p className="mt-1 flex items-center gap-1 text-sm text-textsec"><Target className="h-4 w-4" /> {session.distance_m} m · {equipmentLabel(session.bow_usage_type)}</p>
+                      <p className={`mt-2 text-xs font-bold ${soldOut ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {soldOut ? 'Sin cupos compatibles' : `${session.spots_for_student} cupo${session.spots_for_student === 1 ? '' : 's'} disponible${session.spots_for_student === 1 ? '' : 's'}`}
                       </p>
                     </div>
-                    <span className={`text-sm font-bold ${isAvailable ? 'text-success' : 'text-textsec'}`}>
-                      {isAvailable ? equipmentAvailabilityLabel(session) : 'Sin equipo disponible'}
-                    </span>
                   </div>
-                )
-              })}
-            </div>
-          </StudentCard>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SummaryItem({
-  icon,
-  label,
-  value,
-  tone = 'orange',
-}: {
-  icon: ReactNode
-  label: string
-  value: string
-  tone?: 'orange' | 'green'
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 border-r border-line last:border-r-0">
-      <span className={tone === 'green' ? 'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-green-50 text-success' : 'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-orange-50 text-accent'}>
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-textsec">{label}</p>
-        <p className="text-sm font-black leading-tight">{value}</p>
-      </div>
+                  <button type="button" className="btn mt-4 w-full" disabled={cannotBook || soldOut || session.already_reserved || savingId !== null} onClick={() => void reserve(session)}>
+                    {session.already_reserved ? 'Ya reservaste este turno' : savingId === session.session_id ? 'Reservando…' : 'Reservar este turno'}
+                  </button>
+                </StudentCard>
+              )
+            })}
+          </section>
+        ))}
+      </main>
     </div>
   )
 }

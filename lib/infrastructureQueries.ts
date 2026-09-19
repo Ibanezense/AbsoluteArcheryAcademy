@@ -1,6 +1,47 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabaseClient'
 
+export interface AcademyLocation {
+  id: string
+  code: string
+  name: string
+  address: string | null
+  maps_url: string | null
+  timezone: string
+  opens_on: string | null
+  is_active: boolean
+  capacity_policy: 'resource_based' | 'fixed_operational'
+}
+
+export function useAcademyLocations() {
+  return useQuery({
+    queryKey: ['academy-locations'],
+    queryFn: async (): Promise<AcademyLocation[]> => {
+      const { data, error } = await supabase.from('academy_locations').select('*').order('name')
+      if (error) throw new Error(`Error cargando sedes: ${error.message}`)
+      return (data || []) as AcademyLocation[]
+    },
+  })
+}
+
+export function useUpdateAcademyLocation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: Pick<AcademyLocation, 'id' | 'name' | 'address' | 'maps_url' | 'is_active'>) => {
+      const { data, error } = await supabase.from('academy_locations').update({
+        name: payload.name,
+        address: payload.address || null,
+        maps_url: payload.maps_url || null,
+        is_active: payload.is_active,
+        updated_at: new Date().toISOString(),
+      }).eq('id', payload.id).select().single()
+      if (error) throw new Error(`Error actualizando sede: ${error.message}`)
+      return data as AcademyLocation
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['academy-locations'] }),
+  })
+}
+
 export interface BowInventoryItem {
   id: string
   draw_weight_lbs: number
@@ -28,6 +69,12 @@ export interface WeeklySessionTemplate {
   created_at: string
   updated_at: string
   distances: WeeklyTemplateDistance[]
+  location_id: string
+  physical_capacity: number | null
+  regular_capacity: number | null
+  regular_distance_m: number | null
+  booking_mode: 'flexible' | 'fixed'
+  location: { code: string; name: string; address: string | null } | null
 }
 
 export interface CreateBowInventoryData {
@@ -169,6 +216,16 @@ export function useWeeklySessionTemplates() {
           is_active,
           created_at,
           updated_at,
+          location_id,
+          physical_capacity,
+          regular_capacity,
+          regular_distance_m,
+          booking_mode,
+          location:academy_locations!weekly_session_templates_location_id_fkey (
+            code,
+            name,
+            address
+          ),
           distances:weekly_session_template_distances (
             id,
             distance_m,
@@ -181,9 +238,16 @@ export function useWeeklySessionTemplates() {
         throw new Error(`Error fetching weekly templates: ${error.message}`)
       }
 
-      return ((data || []) as WeeklySessionTemplate[])
+      const rows = (data || []) as unknown as Array<
+        Omit<WeeklySessionTemplate, 'location'> & {
+          location: WeeklySessionTemplate['location'] | Array<NonNullable<WeeklySessionTemplate['location']>>
+        }
+      >
+
+      return rows
         .map((template) => ({
           ...template,
+          location: Array.isArray(template.location) ? template.location[0] || null : template.location,
           distances: [...(template.distances || [])].sort((a, b) => a.distance_m - b.distance_m),
         }))
         .sort((a, b) => {

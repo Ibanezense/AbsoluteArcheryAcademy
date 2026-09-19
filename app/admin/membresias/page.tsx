@@ -66,6 +66,7 @@ import {
   type AdminStudentMembership,
   type MembershipPlan,
 } from '@/lib/hooks/useMembershipPlans'
+import { useWeeklySessionTemplates, type WeeklySessionTemplate } from '@/lib/infrastructureQueries'
 
 type MembershipTab = 'summary' | 'active' | 'plans'
 
@@ -81,6 +82,10 @@ type AssignmentFormState = {
   discount_type: 'none' | 'amount' | 'percentage'
   discount_value: string
   payment_amount: string
+  fixed_template_ids: string[]
+  recovery_classes: string
+  recovery_reason: string
+  source_membership_id: string
   notes: string
 }
 
@@ -127,6 +132,10 @@ function emptyAssignmentForm(): AssignmentFormState {
     discount_type: 'none',
     discount_value: '',
     payment_amount: '',
+    fixed_template_ids: [],
+    recovery_classes: '0',
+    recovery_reason: '',
+    source_membership_id: '',
     notes: '',
   }
 }
@@ -165,6 +174,16 @@ function validateAssignmentForm(
   }
   if (finalAmount === null || !Number.isFinite(finalAmount) || finalAmount < 0) {
     return 'El precio final debe ser un numero mayor o igual a cero.'
+  }
+  const recoveryClasses = Number(form.recovery_classes || 0)
+  if (!Number.isInteger(recoveryClasses) || recoveryClasses < 0) {
+    return 'Las recuperaciones deben ser un entero mayor o igual a cero.'
+  }
+  if (recoveryClasses > 0 && !form.recovery_reason.trim()) {
+    return 'Debes registrar el motivo de las clases de recuperación.'
+  }
+  if (form.fixed_template_ids.length > 2) {
+    return 'Puedes seleccionar como máximo dos horarios fijos de Umacollo.'
   }
 
   return null
@@ -406,6 +425,7 @@ function MembershipSaleForm({
   currentMembership,
   activeStudents,
   activePlans,
+  umacolloTemplates,
   basePrice,
   computedDiscountAmount,
   finalAmount,
@@ -421,6 +441,7 @@ function MembershipSaleForm({
   currentMembership: AdminStudentMembership | null
   activeStudents: StudentListRow[]
   activePlans: MembershipPlan[]
+  umacolloTemplates: WeeklySessionTemplate[]
   basePrice: number | null
   computedDiscountAmount: number
   finalAmount: number | null
@@ -614,6 +635,57 @@ function MembershipSaleForm({
           </label>
         </div>
 
+        {form.origin === 'paid' && (
+          <div className="grid gap-4 rounded-[1.35rem] border border-blue-100 bg-blue-50/50 p-4 xl:grid-cols-2">
+            <div>
+              <p className="text-sm font-black text-slate-950">Horarios fijos de Umacollo</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Selecciona hasta dos. Se aplican a todos los ciclos y consumen clases normales.</p>
+              <div className="mt-3 grid gap-2">
+                {umacolloTemplates.length === 0 && <p className="text-sm text-slate-500">No hay horarios activos configurados.</p>}
+                {umacolloTemplates.map((template) => {
+                  const checked = form.fixed_template_ids.includes(template.id)
+                  return (
+                    <label key={template.id} className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-bold">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!checked && form.fixed_template_ids.length >= 2}
+                        onChange={() => onPatch({
+                          fixed_template_ids: checked
+                            ? form.fixed_template_ids.filter((id) => id !== template.id)
+                            : [...form.fixed_template_ids, template.id],
+                        })}
+                      />
+                      <span>{template.label} · {template.start_time.slice(0, 5)}–{template.end_time.slice(0, 5)}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="grid content-start gap-3">
+              <label className="grid gap-2">
+                <span className="text-sm font-black text-slate-950">Clases de recuperación del ciclo anterior</span>
+                <input type="number" min={0} step={1} value={form.recovery_classes} onChange={(event) => onPatch({ recovery_classes: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm" />
+              </label>
+              {Number(form.recovery_classes || 0) > 0 && (
+                <>
+                  <label className="grid gap-2">
+                    <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Ciclo anterior de referencia</span>
+                    <select value={form.source_membership_id} onChange={(event) => onPatch({ source_membership_id: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm">
+                      <option value="">Sin ciclo específico</option>
+                      {currentMembership && <option value={currentMembership.id}>{currentMembership.custom_name} · vence {formatDate(currentMembership.end_date)}</option>}
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Motivo obligatorio</span>
+                    <textarea value={form.recovery_reason} onChange={(event) => onPatch({ recovery_reason: event.target.value })} className="min-h-20 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" placeholder="Ej.: clase pendiente del ciclo anterior" />
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
           <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -630,7 +702,9 @@ function MembershipSaleForm({
                   <article key={cycle.cycleNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-black text-slate-950">Ciclo {cycle.cycleNumber} · {cycle.origin === 'gift' ? 'Obsequio' : 'Membresia pagada'}</p>
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-accent">{cycle.classes} clases</span>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-accent">
+                        {cycle.classes} normales{cycle.cycleNumber === 1 && Number(form.recovery_classes || 0) > 0 ? ` + ${form.recovery_classes} recuperación` : ''}
+                      </span>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">{formatDate(cycle.startDate)} — {formatDate(cycle.endDate)} · {formatMoney(cycle.amount, selectedPlan?.currency)}</p>
                   </article>
@@ -1345,6 +1419,11 @@ export default function AdminMembershipsPage() {
     refetch: refetchMemberships,
   } = useAdminStudentMemberships()
   const { data: students = [], isLoading: studentsLoading, error: studentsError, refetch: refetchStudents } = useStudents()
+  const { data: weeklyTemplates = [] } = useWeeklySessionTemplates()
+  const umacolloTemplates = useMemo(
+    () => weeklyTemplates.filter((template) => template.is_active && template.booking_mode === 'fixed' && template.location?.code === 'umacollo'),
+    [weeklyTemplates],
+  )
 
   const [activeTab, setActiveTab] = useState<MembershipTab>('summary')
   const [attentionFilter, setAttentionFilter] = useState<'all' | 'expiring' | 'empty' | 'oneClass'>('all')
@@ -1839,6 +1918,10 @@ export default function AdminMembershipsPage() {
           paymentType: assignmentForm.payment_type,
           discountType: assignmentForm.discount_type,
           discountValue: normalizedDiscountValue,
+          fixedTemplateIds: assignmentForm.fixed_template_ids,
+          recoveryClasses: Number(assignmentForm.recovery_classes || 0),
+          recoveryReason: assignmentForm.recovery_reason.trim() || undefined,
+          sourceMembershipId: assignmentForm.source_membership_id || undefined,
         })
 
       toast.push({ message: 'Membresia creada correctamente.', type: 'success' })
@@ -2189,6 +2272,7 @@ export default function AdminMembershipsPage() {
                 currentMembership={currentMembership}
                 activeStudents={activeStudents}
                 activePlans={activePlans}
+                umacolloTemplates={umacolloTemplates}
                 basePrice={basePrice}
                 computedDiscountAmount={computedDiscountAmount}
                 finalAmount={finalAmount}

@@ -6,8 +6,10 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import {
   type BowInventoryItem,
+  type AcademyLocation,
   type WeeklySessionTemplate,
   useBowInventory,
+  useAcademyLocations,
   useCreateBowInventory,
   useCreateWeeklySessionTemplate,
   useDeleteBowInventory,
@@ -15,6 +17,7 @@ import {
   useGenerateWeeklySessions,
   useUpdateBowInventory,
   useUpdateWeeklySessionTemplate,
+  useUpdateAcademyLocation,
   useWeeklySessionTemplates,
 } from '@/lib/infrastructureQueries'
 
@@ -67,6 +70,24 @@ function renderDistanceSummary(template: WeeklySessionTemplate) {
   )
 }
 
+function LocationEditor({ location, saving, onSave }: { location: AcademyLocation; saving: boolean; onSave: (location: AcademyLocation) => void }) {
+  const [draft, setDraft] = useState(location)
+  return (
+    <article className="rounded-2xl border border-white/10 bg-bg/40 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="font-semibold text-textpri">{location.name}</p><p className="text-xs uppercase tracking-wider text-textsec">{location.code}</p></div>
+        <label className="flex items-center gap-2 text-sm font-bold text-textsec"><input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft({ ...draft, is_active: event.target.checked })} /> Activa</label>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="grid gap-1 text-sm font-bold text-textsec">Nombre<input className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <label className="grid gap-1 text-sm font-bold text-textsec">Dirección<input className="input" value={draft.address || ''} onChange={(event) => setDraft({ ...draft, address: event.target.value })} /></label>
+        <label className="grid gap-1 text-sm font-bold text-textsec md:col-span-2">Enlace de ubicación<input className="input" value={draft.maps_url || ''} onChange={(event) => setDraft({ ...draft, maps_url: event.target.value })} /></label>
+      </div>
+      <button type="button" className="btn mt-4" disabled={saving || !draft.name.trim()} onClick={() => onSave(draft)}>{saving ? 'Guardando…' : 'Guardar sede'}</button>
+    </article>
+  )
+}
+
 export default function InfraestructuraClientPage() {
   const toast = useToast()
   const confirm = useConfirm()
@@ -86,6 +107,7 @@ export default function InfraestructuraClientPage() {
     isLoading: templatesLoading,
     error: templatesError,
   } = useWeeklySessionTemplates()
+  const { data: locations = [], isLoading: locationsLoading, error: locationsError } = useAcademyLocations()
 
   const createBowMutation = useCreateBowInventory()
   const updateBowMutation = useUpdateBowInventory()
@@ -95,9 +117,10 @@ export default function InfraestructuraClientPage() {
   const updateTemplateMutation = useUpdateWeeklySessionTemplate()
   const deleteTemplateMutation = useDeleteWeeklySessionTemplate()
   const generateSessionsMutation = useGenerateWeeklySessions()
+  const updateLocationMutation = useUpdateAcademyLocation()
 
-  const loading = inventoryLoading || templatesLoading
-  const error = inventoryError || templatesError
+  const loading = inventoryLoading || templatesLoading || locationsLoading
+  const error = inventoryError || templatesError || locationsError
 
   const totalActiveBows = useMemo(
     () => bowInventory.reduce((sum, item) => sum + item.quantity_active, 0),
@@ -274,6 +297,20 @@ export default function InfraestructuraClientPage() {
 
   return (
     <div className="space-y-6">
+      <div className="card p-6">
+        <div className="mb-5"><h2 className="text-xl font-semibold text-textpri">Sedes</h2><p className="mt-1 text-sm text-textsec">Edita la dirección, el enlace y la disponibilidad operativa de Tiabaya y Umacollo.</p></div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {locations.map((location) => <LocationEditor key={location.id} location={location} saving={updateLocationMutation.isPending} onSave={async (next) => {
+            try {
+              await updateLocationMutation.mutateAsync(next)
+              toast.push({ message: 'Sede actualizada.', type: 'success' })
+            } catch (locationError: any) {
+              toast.push({ message: locationError.message || 'No se pudo actualizar la sede.', type: 'error' })
+            }
+          }} />)}
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="card p-5">
           <p className="text-sm text-textsec">Inventario activo</p>

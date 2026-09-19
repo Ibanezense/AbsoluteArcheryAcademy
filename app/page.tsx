@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
+import { StudentWeekOverview } from '@/components/student/StudentWeekOverview'
 import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
@@ -226,6 +227,8 @@ function StudentHomeContent() {
         <StudentNotice>
           Puedes cancelar desde la app hasta el inicio de la clase.
         </StudentNotice>
+
+        {activeStudentId && <StudentWeekOverview studentId={activeStudentId} />}
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">

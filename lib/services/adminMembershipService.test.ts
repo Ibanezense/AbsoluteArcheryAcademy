@@ -94,6 +94,35 @@ describe('createStudentMembershipCycles', () => {
     )
   })
 
+  it('sends fixed schedules and recovery credits for a paid purchase', async () => {
+    const rows = [{ id: 'membership-1' }] as CreatedMembershipCycle[]
+    const client = rpcClient({ data: rows, error: null })
+
+    await createStudentMembershipCycles(client, {
+      origin: 'paid',
+      studentId: 'student-1',
+      membershipPlanId: 'plan-1',
+      startDate: '2026-09-23',
+      periodCount: 2,
+      totalAmountPerCycle: 200,
+      batchPaymentAmount: 400,
+      fixedTemplateIds: ['template-wed-17', 'template-fri-18'],
+      recoveryClasses: 1,
+      recoveryReason: 'Clase pendiente del ciclo anterior',
+      sourceMembershipId: 'membership-old',
+    })
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      'admin_create_student_membership_cycles',
+      expect.objectContaining({
+        p_fixed_template_ids: ['template-wed-17', 'template-fri-18'],
+        p_recovery_classes: 1,
+        p_recovery_reason: 'Clase pendiente del ciclo anterior',
+        p_source_membership_id: 'membership-old',
+      }),
+    )
+  })
+
   it('generates one idempotency key per invocation when omitted', async () => {
     const client = rpcClient({
       data: [{ id: 'generated-membership' }] as CreatedMembershipCycle[],

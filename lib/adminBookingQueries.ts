@@ -255,8 +255,8 @@ export function useAdminCancelBooking() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (bookingId: string) => {
-      return adminCancelBooking(supabase as any, bookingId)
+    mutationFn: async (input: { bookingId: string; reason: string }) => {
+      return adminCancelBooking(supabase as any, input.bookingId, input.reason)
     },
     onSuccess: () => {
       // Invalidar múltiples queries para actualizar la UI

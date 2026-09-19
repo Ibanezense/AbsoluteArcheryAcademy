@@ -25,6 +25,9 @@ type Row = {
   start_at: string
   end_at: string
   booking_day_cutoff_at: string | null
+  cancellation_source?: 'student' | 'academy' | 'membership_freeze' | null
+  cancellation_resolution?: 'justified' | 'no_show' | null
+  cancellation_review_status?: 'pending' | 'resolved' | 'not_required' | null
 }
 
 function labelBowUsage(row: Row) {
@@ -32,6 +35,15 @@ function labelBowUsage(row: Row) {
   if (row.bow_usage_type === 'assigned' || row.group_type === 'assigned') return 'Arco asignado'
   if (row.bow_poundage) return `Arco academia ${row.bow_poundage} lb`
   return 'Arco academia'
+}
+
+function cancellationLabel(row: Row) {
+  if (row.cancellation_review_status === 'pending') return 'Cancelación pendiente de revisión'
+  if (row.cancellation_resolution === 'justified') return 'Cancelación justificada'
+  if (row.cancellation_resolution === 'no_show') return 'Inasistencia'
+  if (row.cancellation_source === 'academy') return 'Cancelación de academia'
+  if (row.cancellation_source === 'membership_freeze') return 'Cancelación por congelamiento'
+  return null
 }
 
 export default function MisReservasPage() {
@@ -57,7 +69,24 @@ export default function MisReservasPage() {
         })
 
         if (error) throw error
-        setRows((data || []) as Row[])
+        const baseRows = (data || []) as Row[]
+        const bookingIds = baseRows.map((row) => row.booking_id)
+        const { data: cancellations } = bookingIds.length
+          ? await supabase
+            .from('booking_cancellations')
+            .select('booking_id, cancellation_source, resolution, review_status')
+            .in('booking_id', bookingIds)
+          : { data: [] }
+        const cancellationByBooking = new Map((cancellations || []).map((item: any) => [item.booking_id, item]))
+        setRows(baseRows.map((row) => {
+          const cancellation: any = cancellationByBooking.get(row.booking_id)
+          return cancellation ? {
+            ...row,
+            cancellation_source: cancellation.cancellation_source,
+            cancellation_resolution: cancellation.resolution,
+            cancellation_review_status: cancellation.review_status,
+          } : row
+        }))
       } catch (loadError: any) {
         toast.push({ message: loadError?.message || 'No se pudo cargar las reservas.', type: 'error' })
       } finally {
@@ -77,7 +106,7 @@ export default function MisReservasPage() {
   }, [rows])
 
   const cancelar = async (id: string) => {
-    if (!(await confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.'))) return
+    if (!(await confirm('La cancelación liberará el cupo inmediatamente y quedará pendiente de revisión. No se descontará ninguna clase en este momento.'))) return
 
     const { error } = await supabase.rpc('cancel_booking', { p_booking: id })
     if (error) {
@@ -85,8 +114,13 @@ export default function MisReservasPage() {
       return
     }
 
-    setRows((prev) => prev.map((row) => row.booking_id === id ? { ...row, status: 'cancelled' } : row))
-    toast.push({ message: 'Reserva cancelada.', type: 'success' })
+    setRows((prev) => prev.map((row) => row.booking_id === id ? {
+      ...row,
+      status: 'cancelled',
+      cancellation_source: 'student',
+      cancellation_review_status: 'pending',
+    } : row))
+    toast.push({ message: 'Cancelación pendiente de revisión.', type: 'success' })
   }
 
   if (contextLoading || loading) {
@@ -166,6 +200,7 @@ function ReservationCard({ row, onCancel }: { row: Row; onCancel: (id: string) =
   const start = dayjs(row.start_at)
   const end = dayjs(row.end_at)
   const cancelable = canStudentCancelBooking(row)
+  const cancellation = cancellationLabel(row)
 
   return (
     <StudentCard className="p-4">
@@ -195,6 +230,7 @@ function ReservationCard({ row, onCancel }: { row: Row; onCancel: (id: string) =
               </button>
             )}
           </div>
+          {cancellation && <p className="mt-3 text-xs font-bold text-amber-700">{cancellation}</p>}
         </div>
         <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-textsec" />
       </div>

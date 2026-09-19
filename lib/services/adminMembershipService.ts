@@ -14,6 +14,10 @@ interface MembershipCycleInputBase {
   notes?: string
   billingDate?: string
   idempotencyKey?: string
+  fixedTemplateIds?: string[]
+  recoveryClasses?: number
+  recoveryReason?: string
+  sourceMembershipId?: string
 }
 
 export interface PaidMembershipCycleInput extends MembershipCycleInputBase {
@@ -86,6 +90,10 @@ export type RpcPayload = {
   p_notes: string | null
   p_billing_date: string | null
   p_idempotency_key: string
+  p_fixed_template_ids?: string[]
+  p_recovery_classes?: number
+  p_recovery_reason?: string | null
+  p_source_membership_id?: string | null
 }
 
 type RpcClient = {
@@ -123,6 +131,17 @@ export async function createStudentMembershipCycles(
       p_notes: input.notes ?? null,
       p_billing_date: input.billingDate ?? null,
       p_idempotency_key: idempotencyKey,
+      ...(paid && (
+        input.fixedTemplateIds !== undefined
+        || input.recoveryClasses !== undefined
+        || input.recoveryReason !== undefined
+        || input.sourceMembershipId !== undefined
+      ) ? {
+        p_fixed_template_ids: input.fixedTemplateIds ?? [],
+        p_recovery_classes: input.recoveryClasses ?? 0,
+        p_recovery_reason: input.recoveryReason?.trim() || null,
+        p_source_membership_id: input.sourceMembershipId ?? null,
+      } : {}),
     },
   )
 

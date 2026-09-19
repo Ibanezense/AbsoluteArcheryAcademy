@@ -26,8 +26,8 @@ describe('admin productivity phase 3A', () => {
     expect(sessionUi).toContain('occupancyStatus')
     expect(sessionUi).toContain('Pasar asistencia')
     expect(sessionUi).toContain('/admin/asistencia?date=')
-    expect(sessionUi).toContain('Cancelar con reembolso')
-    expect(sessionUi).toContain('Cancelar sin reembolso')
+    expect(sessionUi).toContain('Cancelar por la academia')
+    expect(sessionUi).not.toContain('Cancelar sin reembolso')
     expect(sessionUi).not.toContain('<table')
   })
 

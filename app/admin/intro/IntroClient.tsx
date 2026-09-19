@@ -764,7 +764,7 @@ function EditIntroModal({
                   <select value={formData.sessionId} onChange={(event) => setFormData((prev) => ({ ...prev, sessionId: event.target.value }))} disabled={isLoadingSessions} className="input pl-10">
                     {sessions.map((session) => (
                       <option key={session.session_id} value={session.session_id}>
-                        {dayjs(session.start_at).format('ddd DD MMM - HH:mm')} ({session.available} cupos libres)
+                        {dayjs(session.start_at).format('ddd DD MMM - HH:mm')} · {session.location_name || 'Tiabaya'} ({session.available} cupos libres)
                       </option>
                     ))}
                   </select>

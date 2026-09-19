@@ -20,6 +20,7 @@ export type StudentMembershipSummary = {
   membership_plan_id: string | null
   membership_origin: 'paid' | 'gift'
   assignment_batch_id: string | null
+  purchase_id: string
   custom_name: string
   classes_total: number
   classes_used: number
@@ -227,6 +228,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
                 membership_plan_id,
                 membership_origin,
                 assignment_batch_id,
+                purchase_id,
                 custom_name,
                 classes_total,
                 classes_used,

@@ -49,7 +49,8 @@ describe('phase 1 UX and operational safeguards', () => {
 
     expect(sesiones).toContain('buildSessionCancellationImpact')
     expect(sesiones).toContain('Reservas afectadas')
-    expect(sesiones).toContain('Devolucion de creditos')
+    expect(sesiones).toContain('Créditos: no se consumirá ninguna clase reservada.')
+    expect(sesiones).toContain('Las reservas se cancelarán de forma neutral')
     expect(sesiones).toContain('Esta accion cancelara el turno completo')
     expect(confirmDialog).toContain('confirmLabel')
     expect(confirmDialog).toContain('tone')

@@ -30,14 +30,15 @@ describe('adminBookingService', () => {
       error: null,
     })
 
-    await adminCancelBooking({ rpc }, 'booking-22')
+    await adminCancelBooking({ rpc }, 'booking-22', 'Cierre del campo')
 
     expect(rpc).toHaveBeenCalledWith('admin_cancel_booking', {
       p_booking_id: 'booking-22',
+      p_reason: 'Cierre del campo',
     })
   })
 
-  it('cancelSession sends refund flag correctly', async () => {
+  it('cancelSession sends the required academy reason', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: 4,
       error: null,
@@ -45,12 +46,12 @@ describe('adminBookingService', () => {
 
     const result = await adminCancelSession({ rpc }, {
       sessionId: 'session-3',
-      refund: false,
+      reason: 'Campo cerrado por mantenimiento',
     })
 
     expect(rpc).toHaveBeenCalledWith('admin_cancel_session', {
       p_session: 'session-3',
-      p_refund: false,
+      p_reason: 'Campo cerrado por mantenimiento',
     })
     expect(result).toBe(4)
   })

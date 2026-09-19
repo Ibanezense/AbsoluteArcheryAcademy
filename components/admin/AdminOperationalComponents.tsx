@@ -82,6 +82,7 @@ export function AdminSessionAccordion({
   sessionId,
   startAt,
   endAt,
+  locationName,
   sessionStatusLabel,
   sessionStatusTone,
   occupancyLabel,
@@ -94,12 +95,12 @@ export function AdminSessionAccordion({
   bookings,
   attendanceHref,
   editHref,
-  onCancelWithoutRefund,
-  onCancelWithRefund,
+  onCancelByAcademy,
 }: {
   sessionId: string
   startAt: string
   endAt: string
+  locationName: string
   sessionStatusLabel: string
   sessionStatusTone: BadgeTone
   occupancyLabel: string
@@ -112,8 +113,7 @@ export function AdminSessionAccordion({
   bookings: SessionRosterRow[]
   attendanceHref: string
   editHref: string
-  onCancelWithoutRefund: () => void
-  onCancelWithRefund: () => void
+  onCancelByAcademy: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const distanceLabel = distanceRows.length
@@ -141,6 +141,7 @@ export function AdminSessionAccordion({
             <div className="flex flex-wrap items-center gap-2">
               <OperationalStatusBadge label={sessionStatusLabel} tone={sessionStatusTone} />
               <OperationalStatusBadge label={occupancyLabel} tone={occupancyTone} />
+              <OperationalStatusBadge label={locationName} tone="info" />
             </div>
             <p className="mt-2 truncate text-sm font-bold text-slate-600">{distanceLabel}</p>
             <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
@@ -240,11 +241,8 @@ export function AdminSessionAccordion({
               <Link href={editHref} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700">
                 Editar turno
               </Link>
-              <button type="button" onClick={onCancelWithRefund} className="min-h-11 rounded-2xl border border-amber-300 bg-amber-50 px-4 text-sm font-black text-amber-800">
-                Cancelar con reembolso
-              </button>
-              <button type="button" onClick={onCancelWithoutRefund} className="min-h-11 rounded-2xl border border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-700">
-                Cancelar sin reembolso
+              <button type="button" onClick={onCancelByAcademy} className="min-h-11 rounded-2xl border border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-700">
+                Cancelar por la academia
               </button>
             </section>
           </div>

@@ -20,6 +20,7 @@ type SessionRow = {
   notes: string | null
   weekly_template_id: string | null
   is_manual_override: boolean
+  location: { id: string; code: string; name: string } | null
 }
 
 type DistanceAllocation = {
@@ -106,27 +107,21 @@ function buildAttendanceHref(session: SessionRow) {
   return `/admin/asistencia?date=${date}&sessionId=${session.id}`
 }
 
-function buildSessionCancellationImpact(session: SessionRow, affectedBookings: number, refund: boolean) {
+function buildSessionCancellationImpact(session: SessionRow, affectedBookings: number) {
   const dateLabel = dayjs(session.start_at).format('dddd, D [de] MMMM [de] YYYY')
   const timeLabel = `${dayjs(session.start_at).format('HH:mm')} - ${dayjs(session.end_at).format('HH:mm')}`
-  const refundLabel = refund
-    ? 'si, solo para reservas con credito ya consumido por asistencia o inasistencia'
-    : 'no'
-
   return {
-    title: refund ? 'Cancelar turno con devolucion' : 'Cancelar turno sin devolucion',
-    confirmLabel: refund ? 'Cancelar con devolucion' : 'Cancelar sin devolucion',
-    tone: refund ? 'warning' as const : 'danger' as const,
+    title: 'Cancelar turno por la academia',
+    confirmLabel: 'Cancelar turno',
+    tone: 'danger' as const,
     message: [
       `Fecha: ${dateLabel}`,
       `Hora: ${timeLabel}`,
       `Reservas afectadas: ${affectedBookings}`,
-      `Devolucion de creditos: ${refundLabel}`,
+      'Créditos: no se consumirá ninguna clase reservada.',
       'Esta accion cancelara el turno completo.',
     ].join('\n'),
-    description: refund
-      ? 'Usa esta opcion solo si corresponde restaurar creditos ya consumidos. La operacion sigue usando la regla actual del backend.'
-      : 'Usa esta opcion cuando no corresponde restaurar creditos. La sesion y sus reservas activas se cancelaran.',
+    description: 'Las reservas se cancelarán de forma neutral, liberarán cupos y arcos y no entrarán en la revisión dominical.',
   }
 }
 
@@ -141,6 +136,7 @@ export default function AdminSessionsPage() {
   const [month, setMonth] = useState(monday.month())
   const [selectedYMD, setSelectedYMD] = useState(monday.format('YYYY-MM-DD'))
   const [sessions, setSessions] = useState<SessionRow[]>([])
+  const [locationFilter, setLocationFilter] = useState<'all' | 'tiabaya' | 'umacollo'>('all')
   const [allocations, setAllocations] = useState<Record<string, DistanceAllocation[]>>({})
   const [reservedBookings, setReservedBookings] = useState<ReservedBooking[]>([])
   const [liveUpdateAt, setLiveUpdateAt] = useState<string | null>(null)
@@ -169,14 +165,17 @@ export default function AdminSessionsPage() {
 
       const { data: sessionRows, error: sessionsError } = await supabase
         .from('sessions')
-        .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override')
+        .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override, location:academy_locations!sessions_location_id_fkey(id, code, name)')
         .gte('start_at', monthStart.toISOString())
         .lte('start_at', monthEnd.toISOString())
         .order('start_at', { ascending: true })
 
       if (sessionsError) throw sessionsError
 
-      const currentSessions = (sessionRows || []) as SessionRow[]
+      const currentSessions = ((sessionRows || []) as any[]).map((session) => ({
+        ...session,
+        location: Array.isArray(session.location) ? (session.location[0] || null) : session.location,
+      })) as SessionRow[]
       setSessions(currentSessions)
 
       const sessionIds = currentSessions.map((session) => session.id)
@@ -275,7 +274,7 @@ export default function AdminSessionsPage() {
   const sessionsByDay = useMemo(() => {
     const grouped: Record<string, SessionRow[]> = {}
 
-    sessions.forEach((session) => {
+    sessions.filter((session) => locationFilter === 'all' || session.location?.code === locationFilter).forEach((session) => {
       const ymd = dayjs(session.start_at).format('YYYY-MM-DD')
       if (!grouped[ymd]) grouped[ymd] = []
       grouped[ymd].push(session)
@@ -286,12 +285,12 @@ export default function AdminSessionsPage() {
     })
 
     return grouped
-  }, [sessions])
+  }, [locationFilter, sessions])
 
   const daySummary = useMemo(() => {
     const summary: Record<string, { scheduled: number; cancelled: number }> = {}
 
-    sessions.forEach((session) => {
+    sessions.filter((session) => locationFilter === 'all' || session.location?.code === locationFilter).forEach((session) => {
       const ymd = dayjs(session.start_at).format('YYYY-MM-DD')
       if (!summary[ymd]) summary[ymd] = { scheduled: 0, cancelled: 0 }
       if (session.status === 'scheduled') summary[ymd].scheduled += 1
@@ -299,7 +298,7 @@ export default function AdminSessionsPage() {
     })
 
     return summary
-  }, [sessions])
+  }, [locationFilter, sessions])
 
   const bookingSummaryBySession = useMemo(() => {
     const summary: Record<
@@ -392,9 +391,11 @@ export default function AdminSessionsPage() {
     }
   }
 
-  const cancelSession = async (session: SessionRow, refund: boolean) => {
+  const cancelSession = async (session: SessionRow) => {
     const affectedBookings = bookingSummaryBySession[session.id]?.totalReserved || 0
-    const impact = buildSessionCancellationImpact(session, affectedBookings, refund)
+    const reason = window.prompt('Motivo obligatorio de la cancelación del turno:')?.trim()
+    if (!reason) return
+    const impact = buildSessionCancellationImpact(session, affectedBookings)
     const ok = await confirm(impact.message, {
       title: impact.title,
       description: impact.description,
@@ -406,7 +407,7 @@ export default function AdminSessionsPage() {
     try {
       const data = await adminCancelSession(supabase as any, {
         sessionId: session.id,
-        refund,
+        reason,
       })
       toast.push({ message: `Turno cancelado. Reservas afectadas: ${data ?? 0}`, type: 'success' })
       await loadMonth(year, month)
@@ -548,6 +549,13 @@ export default function AdminSessionsPage() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">Selecciona un dia y despliega solo el turno que necesites operar.</p>
+                <div className="mt-3 flex flex-wrap gap-2" aria-label="Filtrar turnos por sede">
+                  {(['all', 'tiabaya', 'umacollo'] as const).map((value) => (
+                    <button key={value} type="button" onClick={() => setLocationFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${locationFilter === value ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                      {value === 'all' ? 'Todas las sedes' : value === 'tiabaya' ? 'Tiabaya' : 'Umacollo'}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => moveWeek(-1)} className="inline-flex min-h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
@@ -602,6 +610,7 @@ export default function AdminSessionsPage() {
                         sessionId={session.id}
                         startAt={session.start_at}
                         endAt={session.end_at}
+                        locationName={session.location?.name || 'Tiabaya'}
                         sessionStatusLabel={status.label}
                         sessionStatusTone={status.tone}
                         occupancyLabel={occupancy.label}
@@ -614,8 +623,7 @@ export default function AdminSessionsPage() {
                         bookings={bookingsBySession[session.id] || []}
                         attendanceHref={buildAttendanceHref(session)}
                         editHref={`/admin/sesiones/editar/${session.id}`}
-                        onCancelWithoutRefund={() => cancelSession(session, false)}
-                        onCancelWithRefund={() => cancelSession(session, true)}
+                        onCancelByAcademy={() => cancelSession(session)}
                       />
                     )
                   }}
