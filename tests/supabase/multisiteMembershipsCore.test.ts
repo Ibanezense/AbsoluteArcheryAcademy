@@ -89,7 +89,7 @@ describe('multisite membership core migration', () => {
     expect(freeze).toContain("'membership_freeze'")
     expect(freeze).toContain('cycle_number')
     expect(sql).toContain('CREATE OR REPLACE FUNCTION public.admin_finish_membership_freeze')
-    expect(functionSql('prevent_booking_with_frozen_membership')).toContain('v_session_date BETWEEN freeze.start_date AND freeze.end_date')
+    expect(functionSql('prevent_booking_with_frozen_membership')).toContain('v_session_date BETWEEN membership_freeze.start_date AND membership_freeze.end_date')
 
     const review = functionSql('get_weekly_attendance_review')
     expect(review).toContain('v_week_start := p_sunday - 6')
@@ -113,6 +113,13 @@ describe('multisite membership core migration', () => {
     expect(claims).toContain('FOR UPDATE SKIP LOCKED')
     expect(claims).toContain('El arco asignado no esta disponible en este horario')
     expect(sql).toMatch(/academy_bows_authenticated_read[\s\S]*USING \(public\.is_admin_user\(\)\)/)
+    expect(sql).toContain('validate_recovery_credit_source')
+    expect(sql).toContain('v_source.student_id <> NEW.student_id')
+    expect(sql).toContain('prevent_overlapping_student_bookings')
+    expect(sql).toContain('existing_session.start_at < v_session.end_at')
+    expect(functionSql('admin_finish_membership_freeze')).toContain('membership.purchase_id = p_purchase_id')
+    expect(functionSql('admin_finish_membership_freeze')).not.toContain('DELETE FROM public.bookings')
+    expect(functionSql('get_student_week_overview')).toContain('commitments.normal_reserved')
   })
 
   it('creates Wednesday-Friday Umacollo templates and inactive Tuesday templates', () => {
