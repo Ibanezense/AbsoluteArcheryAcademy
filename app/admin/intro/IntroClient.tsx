@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -33,6 +33,8 @@ import {
   type IntroSessionGroup,
 } from '@/lib/services/IntroClassesService'
 import { WEEKEND_INTRO_CAPACITY_QUERY_KEY } from '@/lib/utils/weekendIntroCapacity'
+import { INTRO_AVAILABLE_SESSIONS_QUERY_KEY } from '@/lib/utils/introAvailability'
+import { useAcademyLocations } from '@/lib/infrastructureQueries'
 import RegisterIntroModal from './components/RegisterIntroModal'
 
 dayjs.locale('es')
@@ -43,6 +45,10 @@ type IntroClientRow = IntroSessionGroup['clients'][number] & {
   session_end: string
   capacity: number
   booked_total: number
+  location_id: string
+  location_code: string
+  location_name: string
+  location_address: string | null
 }
 
 type IntroDateScope = 'today' | 'tomorrow' | 'week' | 'upcoming' | 'all'
@@ -166,6 +172,10 @@ function flattenIntroSessions(data: IntroSessionGroup[]): IntroClientRow[] {
         session_end: session.end_at,
         capacity: session.capacity,
         booked_total: session.booked_total,
+        location_id: session.location_id,
+        location_code: session.location_code,
+        location_name: session.location_name,
+        location_address: session.location_address,
       })),
     )
     .sort((a, b) => dayjs(a.session_start).valueOf() - dayjs(b.session_start).valueOf())
@@ -350,11 +360,11 @@ function IntroDailyAgenda({
                       <button
                         key={client.booking_id}
                         type="button"
-                        onClick={() => onSelect({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total })}
+                        onClick={() => onSelect({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total, location_id: session.location_id, location_code: session.location_code, location_name: session.location_name, location_address: session.location_address })}
                         className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl bg-white px-3 text-left transition hover:bg-orange-50/50"
                       >
                         <span className="truncate text-sm font-black text-slate-800">{client.full_name}</span>
-                        <span className="text-xs font-bold text-slate-500">{paymentStatusLabel({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total })}</span>
+                        <span className="text-xs font-bold text-slate-500">{paymentStatusLabel({ ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at, capacity: session.capacity, booked_total: session.booked_total, location_id: session.location_id, location_code: session.location_code, location_name: session.location_name, location_address: session.location_address })}</span>
                       </button>
                     ))
                   )}
@@ -594,7 +604,9 @@ function EditIntroModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { data: locations = [] } = useAcademyLocations()
   const [sessions, setSessions] = useState<AvailableIntroSession[]>([])
+  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [isLoadingSessions, setIsLoadingSessions] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -610,6 +622,40 @@ function EditIntroModal({
     courtesyReason: '',
   })
 
+  const loadSessions = useCallback(async (currentClient: IntroClientRow, locationId: string) => {
+    setIsLoadingSessions(true)
+    try {
+      const available = await IntroClassesService.getAvailableSessions(31, selectedLocationId)
+      const currentSession: AvailableIntroSession = {
+        session_id: currentClient.session_id,
+        start_at: currentClient.session_start,
+        end_at: currentClient.session_end,
+        capacity: currentClient.capacity,
+        booked: currentClient.booked_total,
+        available: Math.max(currentClient.capacity - currentClient.booked_total, 0),
+        location_id: currentClient.location_id,
+        location_code: currentClient.location_code,
+        location_name: currentClient.location_name,
+        location_address: currentClient.location_address,
+        is_current_assignment: true,
+      }
+      const currentLocationId = currentClient.location_id
+      const merged = locationId === currentLocationId
+        ? available.some((session) => session.session_id === currentSession.session_id)
+          ? available.map((session) => session.session_id === currentSession.session_id
+            ? { ...session, is_current_assignment: true }
+            : session)
+          : [currentSession, ...available]
+        : available
+
+      setSessions(merged)
+    } catch (err) {
+      setError('Error al cargar turnos disponibles.')
+    } finally {
+      setIsLoadingSessions(false)
+    }
+  }, [selectedLocationId])
+
   useEffect(() => {
     if (!client) return
 
@@ -624,33 +670,14 @@ function EditIntroModal({
       paymentMethod: client.payment_method || (introClassType(client) === 'paid' ? 'transferencia' : 'not_applicable'),
       courtesyReason: client.courtesy_reason || '',
     })
+    setSelectedLocationId(client.location_id)
     setError(null)
-    void loadSessions(client)
   }, [client])
 
-  const loadSessions = async (currentClient: IntroClientRow) => {
-    setIsLoadingSessions(true)
-    try {
-      const available = await IntroClassesService.getAvailableSessions(31)
-      const currentSession: AvailableIntroSession = {
-        session_id: currentClient.session_id,
-        start_at: currentClient.session_start,
-        end_at: currentClient.session_end,
-        capacity: currentClient.capacity,
-        booked: currentClient.booked_total,
-        available: Math.max(currentClient.capacity - currentClient.booked_total, 0),
-      }
-      const merged = available.some((session) => session.session_id === currentSession.session_id)
-        ? available
-        : [currentSession, ...available]
-
-      setSessions(merged)
-    } catch (err) {
-      setError('Error al cargar turnos disponibles.')
-    } finally {
-      setIsLoadingSessions(false)
-    }
-  }
+  useEffect(() => {
+    if (!client || !selectedLocationId) return
+    void loadSessions(client, selectedLocationId)
+  }, [client, selectedLocationId, loadSessions])
 
   const updateIntroClassType = (nextType: IntroClassType) => {
     setFormData((prev) => ({
@@ -757,6 +784,28 @@ function EditIntroModal({
 
             <section className="space-y-3">
               <h3 className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Horario</h3>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {locations.filter((location) => location.is_active).map((location) => (
+                  <button
+                    key={location.id}
+                    type="button"
+                    onClick={() => {
+                      const nextLocationId = location.id
+                      const currentLocationId = client.location_id
+                      setSelectedLocationId(nextLocationId)
+                      setSessions([])
+                      setFormData((prev) => ({
+                        ...prev,
+                        sessionId: nextLocationId === currentLocationId ? client.session_id : '',
+                      }))
+                    }}
+                    className={`rounded-2xl border p-3 text-left ${selectedLocationId === location.id ? 'border-accent bg-orange-50' : 'border-slate-200 bg-slate-50'}`}
+                  >
+                    <span className="block text-sm font-black text-slate-900">{location.name}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{location.address || 'Dirección pendiente'}</span>
+                  </button>
+                ))}
+              </div>
               <label className="block">
                 <span className="mb-1.5 block text-sm font-bold text-slate-700">Turno asignado</span>
                 <div className="relative">
@@ -764,7 +813,7 @@ function EditIntroModal({
                   <select value={formData.sessionId} onChange={(event) => setFormData((prev) => ({ ...prev, sessionId: event.target.value }))} disabled={isLoadingSessions} className="input pl-10">
                     {sessions.map((session) => (
                       <option key={session.session_id} value={session.session_id}>
-                        {dayjs(session.start_at).format('ddd DD MMM - HH:mm')} · {session.location_name || 'Tiabaya'} ({session.available} cupos libres)
+                        {session.is_current_assignment ? 'Turno actual · ' : ''}{dayjs(session.start_at).format('ddd DD MMM - HH:mm')} · {session.location_name} ({session.available} cupos libres)
                       </option>
                     ))}
                   </select>
@@ -987,6 +1036,8 @@ export default function IntroClient() {
   const handleCreated = () => {
     setIsModalOpen(false)
     void queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: INTRO_AVAILABLE_SESSIONS_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: ['sessions'] })
     void fetchData()
   }
 
@@ -994,6 +1045,8 @@ export default function IntroClient() {
     setSelectedEditClient(null)
     setSelectedClient(null)
     void queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: INTRO_AVAILABLE_SESSIONS_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: ['sessions'] })
     void fetchData()
   }
 

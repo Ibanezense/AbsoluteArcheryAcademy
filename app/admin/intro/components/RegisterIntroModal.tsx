@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X, Calendar, DollarSign, User, Phone, Loader2 } from 'lucide-react'
 import dayjs from 'dayjs'
 import clsx from 'clsx'
@@ -10,6 +10,7 @@ import {
   type IntroClassType,
   type IntroPaymentStatus,
 } from '@/lib/services/IntroClassesService'
+import { useAcademyLocations } from '@/lib/infrastructureQueries'
 
 interface Props {
   isOpen: boolean
@@ -26,7 +27,9 @@ const paidDefaults = {
 }
 
 export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props) {
+  const { data: locations = [] } = useAcademyLocations()
   const [sessions, setSessions] = useState<AvailableIntroSession[]>([])
+  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,9 +42,22 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
     ...paidDefaults,
   })
 
+  const loadSessions = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const available = await IntroClassesService.getAvailableSessions(31, selectedLocationId)
+      setSessions(available)
+    } catch (err) {
+      setError('Error al cargar turnos disponibles.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedLocationId])
+
   useEffect(() => {
     if (isOpen) {
-      void loadSessions()
+      setSelectedLocationId('')
+      setSessions([])
       setFormData({
         fullName: '',
         age: '',
@@ -53,20 +69,10 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
     }
   }, [isOpen])
 
-  const loadSessions = async () => {
-    setIsLoading(true)
-    try {
-      const available = await IntroClassesService.getAvailableSessions(31)
-      setSessions(available)
-      if (available.length > 0) {
-        setFormData((prev) => ({ ...prev, sessionId: available[0].session_id }))
-      }
-    } catch (err) {
-      setError('Error al cargar turnos disponibles.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  useEffect(() => {
+    if (!isOpen || !selectedLocationId) return
+    void loadSessions()
+  }, [isOpen, selectedLocationId, loadSessions])
 
   const updateIntroClassType = (introClassType: IntroClassType) => {
     setFormData((prev) => ({
@@ -82,7 +88,7 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
 
-    if (!formData.fullName || !formData.age || !formData.sessionId || formData.amountPaid === '') {
+    if (!selectedLocationId || !formData.fullName || !formData.age || !formData.sessionId || formData.amountPaid === '') {
       setError('Por favor completa todos los campos requeridos.')
       return
     }
@@ -121,6 +127,10 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
       onSuccess()
     } catch (err: any) {
       setError(err.message || 'Error al procesar el registro.')
+      setFormData((prev) => ({ ...prev, sessionId: '' }))
+      if (selectedLocationId) {
+        void loadSessions()
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -209,6 +219,33 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
                 <h3 className="text-xs font-black uppercase tracking-[0.16em] text-textsec">2. Asignar turno</h3>
 
                 <div>
+                  <label className="mb-2 block text-sm font-medium text-textpri">Primero elige la sede *</label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {locations.filter((location) => location.is_active).map((location) => (
+                      <button
+                        key={location.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedLocationId(location.id)
+                          setSessions([])
+                          setFormData((prev) => ({ ...prev, sessionId: '' }))
+                          setError(null)
+                        }}
+                        className={clsx(
+                          'min-h-20 rounded-2xl border p-4 text-left transition',
+                          selectedLocationId === location.id
+                            ? 'border-accent bg-orange-50 shadow-soft'
+                            : 'border-line bg-background hover:border-accent/40',
+                        )}
+                      >
+                        <span className="block font-black text-textpri">{location.name}</span>
+                        <span className="mt-1 block text-xs leading-5 text-textsec">{location.address || 'Dirección pendiente'}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <label className="mb-1.5 block text-sm font-medium text-textpri">
                     Proximas sesiones con cupo
                   </label>
@@ -218,24 +255,27 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
                       className="w-full cursor-pointer appearance-none rounded-xl border border-line bg-background py-2.5 pl-10 pr-10 text-sm text-textpri outline-none transition-colors focus:border-accent disabled:opacity-50"
                       value={formData.sessionId}
                       onChange={(event) => setFormData((prev) => ({ ...prev, sessionId: event.target.value }))}
-                      disabled={isLoading || sessions.length === 0}
+                      disabled={!selectedLocationId || isLoading || sessions.length === 0}
                       required
                     >
-                      {isLoading ? (
+                      {!selectedLocationId ? (
+                        <option value="">Selecciona primero una sede</option>
+                      ) : isLoading ? (
                         <option value="">Cargando turnos...</option>
                       ) : sessions.length === 0 ? (
-                        <option value="">No hay turnos con cupo durante el proximo mes</option>
+                        <option value="">No hay turnos con cupo en esta sede</option>
                       ) : (
                         sessions.map((session) => (
                           <option key={session.session_id} value={session.session_id}>
-                            {dayjs(session.start_at).format('ddd DD MMM - HH:mm')} ({session.available} cupos libres)
+                            {dayjs(session.start_at).format('ddd DD MMM - HH:mm')}–{dayjs(session.end_at).format('HH:mm')} · {session.location_name} · {dayjs(session.end_at).diff(dayjs(session.start_at), 'minute')} min · {session.available} cupos libres
                           </option>
                         ))
                       )}
                     </select>
                   </div>
                   <p className="mt-1.5 text-xs text-textsec">
-                    Las clases intro ocupan cupo real de 10 m y pueden agendarse durante el proximo mes.
+                    {sessions.find((session) => session.session_id === formData.sessionId)?.location_address
+                      || 'Verás aquí los turnos recurrentes disponibles de la sede elegida.'}
                   </p>
                 </div>
               </div>
@@ -354,7 +394,7 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
             <button
               type="submit"
               form="intro-form"
-              disabled={isSubmitting || sessions.length === 0}
+              disabled={isSubmitting || !selectedLocationId || !formData.sessionId || sessions.length === 0}
               className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white shadow-soft transition-transform hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 active:scale-95 disabled:opacity-50"
             >
               {isSubmitting ? (

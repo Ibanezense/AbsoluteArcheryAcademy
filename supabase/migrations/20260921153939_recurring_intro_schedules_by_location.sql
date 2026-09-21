@@ -215,7 +215,8 @@ RETURNS TABLE (
   spots_remaining integer,
   location_code text,
   location_name text,
-  location_address text
+  location_address text,
+  location_id uuid
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -237,7 +238,8 @@ BEGIN
     (availability.data->>'intro_spots_remaining')::integer,
     location.code,
     location.name,
-    location.address
+    location.address,
+    location.id
   FROM public.sessions session
   JOIN public.academy_locations location ON location.id = session.location_id
   JOIN public.weekly_session_templates template ON template.id = session.weekly_template_id

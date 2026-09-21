@@ -32,9 +32,11 @@ export type AvailableIntroSession = {
     capacity: number;
     booked: number;
     available: number;
-    location_code?: string;
-    location_name?: string;
-    location_address?: string | null;
+    location_id: string;
+    location_code: string;
+    location_name: string;
+    location_address: string | null;
+    is_current_assignment?: boolean;
 };
 
 export type IntroSessionGroup = {
@@ -43,6 +45,10 @@ export type IntroSessionGroup = {
     end_at: string;
     capacity: number;
     booked_total: number;
+    location_id: string;
+    location_code: string;
+    location_name: string;
+    location_address: string | null;
     clients: {
         booking_id: string;
         intro_client_id: string;
@@ -80,7 +86,8 @@ export class IntroClassesService {
         const { data: sessionsData, error: sessionsError } = await supabase
             .from('sessions')
             .select(`
-                id, start_at, end_at,
+                id, start_at, end_at, location_id,
+                location:academy_locations!sessions_location_id_fkey ( id, code, name, address ),
                 session_distance_allocations ( distance_m, slot_capacity, targets )
             `)
             .gte('start_at', startAt)
@@ -137,6 +144,7 @@ export class IntroClassesService {
         }
 
         return (sessionsData || []).map((session: any) => {
+            const location = Array.isArray(session.location) ? session.location[0] : session.location;
             const allocation = Array.isArray(session.session_distance_allocations)
                 ? session.session_distance_allocations.find((item: any) => item.distance_m === 10)
                 : session.session_distance_allocations?.distance_m === 10
@@ -177,6 +185,10 @@ export class IntroClassesService {
                 end_at: session.end_at,
                 capacity,
                 booked_total: bookedTotal,
+                location_id: session.location_id,
+                location_code: location?.code || '',
+                location_name: location?.name || 'Sede sin nombre',
+                location_address: location?.address || null,
                 clients,
             };
         });
@@ -289,7 +301,7 @@ export class IntroClassesService {
         });
     }
 
-    static async getAvailableSessions(daysAhead: number = 31): Promise<AvailableIntroSession[]> {
+    static async getAvailableSessions(daysAhead: number = 31, locationId?: string): Promise<AvailableIntroSession[]> {
         const now = new Date();
         const future = new Date();
         future.setDate(future.getDate() + daysAhead);
@@ -299,22 +311,40 @@ export class IntroClassesService {
             {
                 p_date_from: limaDate(now),
                 p_date_to: limaDate(future),
+                p_location_id: locationId || null,
             },
         );
 
         if (sessionsError) throw sessionsError;
 
-        return (sessionsData || []).map((session: any) => ({
-            session_id: session.session_id,
-            start_at: session.start_at,
-            end_at: session.end_at,
-            capacity: session.equipment_capacity,
-            booked: session.equipment_reserved,
-            available: session.spots_remaining,
-            location_code: session.location_code,
-            location_name: session.location_name,
-            location_address: session.location_address,
-        }));
+        return (sessionsData || []).map((session: any) => {
+            const numericFields = [session.equipment_capacity, session.equipment_reserved, session.spots_remaining];
+            const valid = typeof session.session_id === 'string'
+                && typeof session.start_at === 'string'
+                && typeof session.end_at === 'string'
+                && Date.parse(session.end_at) > Date.parse(session.start_at)
+                && numericFields.every((value) => Number.isFinite(Number(value)) && Number(value) >= 0)
+                && typeof session.location_id === 'string'
+                && typeof session.location_code === 'string'
+                && typeof session.location_name === 'string';
+
+            if (!valid) {
+                throw new Error('Respuesta inválida de disponibilidad de turnos');
+            }
+
+            return {
+                session_id: session.session_id,
+                start_at: session.start_at,
+                end_at: session.end_at,
+                capacity: Number(session.equipment_capacity),
+                booked: Number(session.equipment_reserved),
+                available: Number(session.spots_remaining),
+                location_id: session.location_id,
+                location_code: session.location_code,
+                location_name: session.location_name,
+                location_address: session.location_address || null,
+            };
+        });
     }
 
     static async registerIntroClass(payload: {

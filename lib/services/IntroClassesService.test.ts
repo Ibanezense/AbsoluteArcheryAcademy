@@ -186,6 +186,10 @@ describe('IntroClassesService.getAvailableSessions', () => {
         equipment_capacity: 8,
         equipment_reserved: 3,
         spots_remaining: 5,
+        location_id: 'location-ti',
+        location_code: 'tiabaya',
+        location_name: 'Tiabaya',
+        location_address: null,
       }],
       error: null,
     } as never)
@@ -197,13 +201,64 @@ describe('IntroClassesService.getAvailableSessions', () => {
       capacity: 8,
       booked: 3,
       available: 5,
+      location_id: 'location-ti',
+      location_code: 'tiabaya',
+      location_name: 'Tiabaya',
+      location_address: null,
     }])
 
     expect(supabase.rpc).toHaveBeenCalledTimes(1)
     expect(supabase.rpc).toHaveBeenCalledWith('get_available_intro_sessions', {
       p_date_from: '2026-08-14',
       p_date_to: '2026-09-14',
+      p_location_id: null,
     })
     expect(supabase.from).not.toHaveBeenCalled()
+  })
+
+  it('filters availability by location and preserves its metadata', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-21T15:00:00.000Z'))
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{
+        session_id: 'um-session',
+        start_at: '2026-09-23T22:00:00.000Z',
+        end_at: '2026-09-23T23:00:00.000Z',
+        equipment_capacity: 4,
+        equipment_reserved: 1,
+        spots_remaining: 3,
+        location_id: 'location-um',
+        location_code: 'umacollo',
+        location_name: 'Umacollo',
+        location_address: 'Arequipa',
+      }],
+      error: null,
+    } as never)
+
+    await expect(IntroClassesService.getAvailableSessions(31, 'location-um')).resolves.toEqual([{
+      session_id: 'um-session',
+      start_at: '2026-09-23T22:00:00.000Z',
+      end_at: '2026-09-23T23:00:00.000Z',
+      capacity: 4,
+      booked: 1,
+      available: 3,
+      location_id: 'location-um',
+      location_code: 'umacollo',
+      location_name: 'Umacollo',
+      location_address: 'Arequipa',
+    }])
+    expect(supabase.rpc).toHaveBeenCalledWith('get_available_intro_sessions', expect.objectContaining({
+      p_location_id: 'location-um',
+    }))
+  })
+
+  it('rejects malformed availability rows instead of offering an unsafe option', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: [{ session_id: 'unsafe', start_at: null, spots_remaining: 1 }],
+      error: null,
+    } as never)
+
+    await expect(IntroClassesService.getAvailableSessions(31, 'location-1'))
+      .rejects.toThrow('Respuesta inválida de disponibilidad')
   })
 })
