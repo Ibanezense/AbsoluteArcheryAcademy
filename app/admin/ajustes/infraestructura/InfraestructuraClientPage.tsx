@@ -94,6 +94,7 @@ export default function InfraestructuraClientPage() {
   const [modalType, setModalType] = useState<ModalType>(null)
   const [selectedBow, setSelectedBow] = useState<BowInventoryItem | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<WeeklySessionTemplate | null>(null)
+  const [templateLocationId, setTemplateLocationId] = useState('')
   const [weekStart, setWeekStart] = useState(getMondayISO())
   const [weeksToGenerate, setWeeksToGenerate] = useState(4)
 
@@ -137,10 +138,36 @@ export default function InfraestructuraClientPage() {
     [templates]
   )
 
+  const templatesByLocation = useMemo(
+    () => new Map(
+      locations.map((location) => [
+        location.id,
+        templates.filter((template) => template.location_id === location.id),
+      ]),
+    ),
+    [locations, templates],
+  )
+
+  const selectedLocationCode = locations.find((location) => location.id === templateLocationId)?.code
+  const slotsPerTarget = selectedLocationCode === 'umacollo' ? 2 : 4
+
   const closeModal = () => {
     setModalType(null)
     setSelectedBow(null)
     setSelectedTemplate(null)
+    setTemplateLocationId('')
+  }
+
+  const openTemplateCreate = () => {
+    setSelectedTemplate(null)
+    setTemplateLocationId(locations.find((location) => location.code === 'tiabaya')?.id || locations[0]?.id || '')
+    setModalType('template-create')
+  }
+
+  const openTemplateEdit = (template: WeeklySessionTemplate) => {
+    setSelectedTemplate(template)
+    setTemplateLocationId(template.location_id)
+    setModalType('template-edit')
   }
 
   const handleBowSubmit = async (formData: FormData) => {
@@ -186,17 +213,19 @@ export default function InfraestructuraClientPage() {
     const startTime = String(formData.get('start_time') || '')
     const endTime = String(formData.get('end_time') || '')
     const isActive = formData.get('is_active') === 'on'
+    const locationId = String(formData.get('location_id') || '')
+    const allowsIntro = formData.get('allows_intro') === 'on'
     const distances = DISTANCES.map((distance) => {
       const pacas = Number(formData.get(`distance_${distance}`) || 0)
       return {
         distance_m: distance,
-        slot_capacity: pacas * 4, // 4 cupos por paca
+        slot_capacity: pacas * slotsPerTarget,
         targets: pacas,
       }
     })
 
-    if (!label || !weekday || !startTime || !endTime || endTime <= startTime) {
-      toast.push({ message: 'Revisa el nombre, dia y horario de la plantilla.', type: 'error' })
+    if (!locationId || !label || !weekday || !startTime || !endTime || endTime <= startTime) {
+      toast.push({ message: 'Revisa la sede, el nombre, el día y el horario de la plantilla.', type: 'error' })
       return
     }
 
@@ -208,22 +237,27 @@ export default function InfraestructuraClientPage() {
     try {
       if (modalType === 'template-create') {
         await createTemplateMutation.mutateAsync({
+          locationId,
           label,
           weekday,
           start_time: startTime,
           end_time: endTime,
           is_active: isActive,
+          allowsIntro,
           distances,
         })
-        toast.push({ message: 'Plantilla semanal creada.', type: 'success' })
+        const created = await generateSessionsMutation.mutateAsync({ weekStart: getMondayISO(), weeks: 5 })
+        toast.push({ message: `Horario recurrente creado. Turnos nuevos: ${created}.`, type: 'success' })
       } else if (modalType === 'template-edit' && selectedTemplate) {
         await updateTemplateMutation.mutateAsync({
           id: selectedTemplate.id,
+          locationId,
           label,
           weekday,
           start_time: startTime,
           end_time: endTime,
           is_active: isActive,
+          allowsIntro,
           distances,
         })
         toast.push({ message: 'Plantilla semanal actualizada.', type: 'success' })
@@ -395,7 +429,7 @@ export default function InfraestructuraClientPage() {
             </p>
           </div>
           <button
-            onClick={() => setModalType('template-create')}
+            onClick={openTemplateCreate}
             className="btn flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -403,53 +437,65 @@ export default function InfraestructuraClientPage() {
           </button>
         </div>
 
-        <div className="space-y-3">
-          {templates.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-textsec">
-              No hay plantillas semanales configuradas.
-            </div>
-          ) : (
-            templates.map((template) => (
-              <div key={template.id} className="rounded-2xl border border-white/10 bg-bg/40 p-4">
-                <div className="flex items-start justify-between gap-4">
+        <div className="grid gap-5 xl:grid-cols-2">
+          {locations.map((location) => {
+            const locationTemplates = templatesByLocation.get(location.id) || []
+            return (
+              <section key={location.id} className="rounded-3xl border border-white/10 bg-bg/25 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-medium text-textpri">{template.label}</h3>
-                      <span
-                        className={`rounded-full border px-2 py-1 text-xs ${template.is_active
-                          ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                          : 'border-red-500/30 bg-red-500/15 text-red-300'
-                          }`}
-                      >
-                        {template.is_active ? 'Activa' : 'Inactiva'}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-textsec">
-                      {weekdayLabel(template.weekday)} · {template.start_time.slice(0, 5)} - {template.end_time.slice(0, 5)}
-                    </p>
-                    <p className="mt-2 text-sm text-textsec">{renderDistanceSummary(template)}</p>
+                    <h3 className="text-lg font-semibold text-textpri">{location.name}</h3>
+                    <p className="text-xs text-textsec">{location.address || 'Dirección pendiente'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedTemplate(template)
-                        setModalType('template-edit')
-                      }}
-                      className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTemplate(template.id)}
-                      className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent">
+                    {locationTemplates.length} horarios
+                  </span>
                 </div>
-              </div>
-            ))
-          )}
+                <div className="space-y-3">
+                  {locationTemplates.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-textsec">
+                      No hay horarios recurrentes configurados en esta sede.
+                    </div>
+                  ) : locationTemplates.map((template) => (
+                    <div key={template.id} className="rounded-2xl border border-white/10 bg-bg/50 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-medium text-textpri">{template.label}</h4>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-textsec">
+                              {template.location?.name || location.name}
+                            </span>
+                            <span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${template.allows_intro
+                              ? 'border-sky-400/30 bg-sky-400/10 text-sky-200'
+                              : 'border-white/10 bg-white/5 text-textsec'}`}>
+                              {template.allows_intro ? 'Clases de prueba' : 'Solo alumnos'}
+                            </span>
+                            <span className={`rounded-full border px-2 py-1 text-[11px] ${template.is_active
+                              ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+                              : 'border-red-500/30 bg-red-500/15 text-red-300'}`}>
+                              {template.is_active ? 'Activa' : 'Inactiva'}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-textsec">
+                            {weekdayLabel(template.weekday)} · {template.start_time.slice(0, 5)} - {template.end_time.slice(0, 5)}
+                          </p>
+                          <div className="mt-3">{renderDistanceSummary(template)}</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button type="button" aria-label={`Editar ${template.label}`} onClick={() => openTemplateEdit(template)} className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri">
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button type="button" aria-label={`Eliminar ${template.label}`} onClick={() => handleDeleteTemplate(template.id)} className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )
+          })}
         </div>
       </div>
 
@@ -576,6 +622,21 @@ export default function InfraestructuraClientPage() {
             <form action={handleTemplateSubmit} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
+                  <label className="mb-2 block text-sm font-medium text-textsec">Sede</label>
+                  <select
+                    name="location_id"
+                    value={templateLocationId}
+                    onChange={(event) => setTemplateLocationId(event.target.value)}
+                    className="input"
+                    required
+                  >
+                    <option value="" disabled>Selecciona una sede</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>{location.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="mb-2 block text-sm font-medium text-textsec">Nombre</label>
                   <input
                     name="label"
@@ -623,20 +684,24 @@ export default function InfraestructuraClientPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 p-4">
+              <div key={templateLocationId} className="rounded-2xl border border-white/10 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <p className="font-medium text-textpri">Pacas por distancia</p>
-                    <p className="text-[10px] text-textsec uppercase tracking-widest mt-1">Cada paca = 4 cupos para alumnos</p>
+                    <p className="text-[10px] text-textsec uppercase tracking-widest mt-1">
+                      Cada paca = {slotsPerTarget} cupos en {selectedLocationCode === 'umacollo' ? 'Umacollo' : 'Tiabaya'}
+                    </p>
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-textsec">
-                    <input
-                      name="is_active"
-                      type="checkbox"
-                      defaultChecked={selectedTemplate ? selectedTemplate.is_active : true}
-                    />
-                    Plantilla activa
-                  </label>
+                  <div className="grid gap-2 text-sm text-textsec">
+                    <label className="flex items-center gap-2">
+                      <input name="is_active" type="checkbox" defaultChecked={selectedTemplate ? selectedTemplate.is_active : true} />
+                      Plantilla activa
+                    </label>
+                    <label className="flex items-center gap-2 font-semibold text-sky-200">
+                      <input name="allows_intro" type="checkbox" defaultChecked={selectedTemplate?.allows_intro || false} />
+                      Acepta clases de prueba
+                    </label>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {DISTANCES.map((distance) => {

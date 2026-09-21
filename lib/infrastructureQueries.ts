@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabaseClient'
+import { INTRO_AVAILABLE_SESSIONS_QUERY_KEY } from './utils/introAvailability'
 
 export interface AcademyLocation {
   id: string
@@ -66,6 +67,7 @@ export interface WeeklySessionTemplate {
   start_time: string
   end_time: string
   is_active: boolean
+  allows_intro: boolean
   created_at: string
   updated_at: string
   distances: WeeklyTemplateDistance[]
@@ -89,11 +91,13 @@ export interface UpdateBowInventoryData extends CreateBowInventoryData {
 }
 
 export interface UpsertWeeklyTemplateData {
+  locationId: string
   label: string
   weekday: number
   start_time: string
   end_time: string
   is_active: boolean
+  allowsIntro: boolean
   distances: WeeklyTemplateDistance[]
 }
 
@@ -214,6 +218,7 @@ export function useWeeklySessionTemplates() {
           start_time,
           end_time,
           is_active,
+          allows_intro,
           created_at,
           updated_at,
           location_id,
@@ -258,69 +263,38 @@ export function useWeeklySessionTemplates() {
   })
 }
 
-async function saveTemplateDistances(templateId: string, distances: WeeklyTemplateDistance[]) {
-  const normalized = distances
-    .filter((distance) => distance.slot_capacity > 0)
-    .map((distance) => ({
-      weekly_template_id: templateId,
-      distance_m: distance.distance_m,
-      slot_capacity: distance.slot_capacity,
-      targets: distance.targets || Math.ceil(distance.slot_capacity / 4),
-    }))
+async function upsertWeeklyTemplate(payload: UpsertWeeklyTemplateData & { id?: string }): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_upsert_weekly_template', {
+    p_template_id: payload.id || null,
+    p_location_id: payload.locationId,
+    p_label: payload.label,
+    p_weekday: payload.weekday,
+    p_start_time: payload.start_time,
+    p_end_time: payload.end_time,
+    p_is_active: payload.is_active,
+    p_allows_intro: payload.allowsIntro,
+    p_distances: payload.distances,
+  })
 
-  const { error: deleteError } = await supabase
-    .from('weekly_session_template_distances')
-    .delete()
-    .eq('weekly_template_id', templateId)
-
-  if (deleteError) {
-    throw new Error(`Error resetting template distances: ${deleteError.message}`)
+  if (error) {
+    throw new Error(`Error guardando plantilla semanal: ${error.message}`)
   }
 
-  if (!normalized.length) {
-    return
-  }
+  return String(data)
+}
 
-  const { error: insertError } = await supabase
-    .from('weekly_session_template_distances')
-    .insert(normalized)
-
-  if (insertError) {
-    throw new Error(`Error saving template distances: ${insertError.message}`)
-  }
+function invalidateWeeklyTemplateConsumers(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
+  queryClient.invalidateQueries({ queryKey: INTRO_AVAILABLE_SESSIONS_QUERY_KEY })
+  queryClient.invalidateQueries({ queryKey: ['sessions'] })
 }
 
 export function useCreateWeeklySessionTemplate() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: UpsertWeeklyTemplateData): Promise<WeeklySessionTemplate> => {
-      const { data, error } = await supabase
-        .from('weekly_session_templates')
-        .insert({
-          label: payload.label,
-          weekday: payload.weekday,
-          start_time: payload.start_time,
-          end_time: payload.end_time,
-          is_active: payload.is_active,
-        })
-        .select()
-        .single()
-
-      if (error) {
-        throw new Error(`Error creating weekly template: ${error.message}`)
-      }
-
-      await saveTemplateDistances(data.id, payload.distances)
-
-      return {
-        ...(data as Omit<WeeklySessionTemplate, 'distances'>),
-        distances: payload.distances.filter((distance) => distance.slot_capacity > 0),
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
-    },
+    mutationFn: async (payload: UpsertWeeklyTemplateData): Promise<string> => upsertWeeklyTemplate(payload),
+    onSuccess: () => invalidateWeeklyTemplateConsumers(queryClient),
   })
 }
 
@@ -328,34 +302,8 @@ export function useUpdateWeeklySessionTemplate() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: UpdateWeeklyTemplateData): Promise<WeeklySessionTemplate> => {
-      const { data, error } = await supabase
-        .from('weekly_session_templates')
-        .update({
-          label: payload.label,
-          weekday: payload.weekday,
-          start_time: payload.start_time,
-          end_time: payload.end_time,
-          is_active: payload.is_active,
-        })
-        .eq('id', payload.id)
-        .select()
-        .single()
-
-      if (error) {
-        throw new Error(`Error updating weekly template: ${error.message}`)
-      }
-
-      await saveTemplateDistances(payload.id, payload.distances)
-
-      return {
-        ...(data as Omit<WeeklySessionTemplate, 'distances'>),
-        distances: payload.distances.filter((distance) => distance.slot_capacity > 0),
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['weekly-session-templates'] })
-    },
+    mutationFn: async (payload: UpdateWeeklyTemplateData): Promise<string> => upsertWeeklyTemplate(payload),
+    onSuccess: () => invalidateWeeklyTemplateConsumers(queryClient),
   })
 }
 
