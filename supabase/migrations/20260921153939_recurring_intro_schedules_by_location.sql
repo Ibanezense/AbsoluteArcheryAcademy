@@ -475,4 +475,68 @@ REVOKE ALL ON FUNCTION public.admin_update_intro_class(uuid, uuid, text, integer
 REVOKE ALL ON FUNCTION public.admin_update_intro_class(uuid, uuid, text, integer, text, uuid, numeric, text, text, text, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_update_intro_class(uuid, uuid, text, integer, text, uuid, numeric, text, text, text, text) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.admin_get_weekend_intro_capacity(
+  p_reference_date date DEFAULT NULL
+)
+RETURNS TABLE (
+  session_id uuid,
+  start_at timestamptz,
+  end_at timestamptz,
+  equipment_capacity integer,
+  equipment_reserved integer,
+  spots_remaining integer,
+  academy_capacity integer,
+  academy_bows_used integer,
+  intro_bows_capacity integer,
+  intro_bows_used integer
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_reference_date date := COALESCE(
+    p_reference_date,
+    (now() AT TIME ZONE 'America/Lima')::date
+  );
+  v_saturday date := date_trunc('week', v_reference_date)::date + 5;
+  v_sunday date := v_saturday + 1;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'Solo administradores pueden consultar la capacidad de pruebas';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    session.id,
+    session.start_at,
+    session.end_at,
+    (2 + (availability.data->>'academy_capacity')::integer)::integer,
+    (
+      (availability.data->>'intro_reserved')::integer
+      + (availability.data->>'academy_students_reserved')::integer
+    )::integer,
+    (availability.data->>'intro_spots_remaining')::integer,
+    (availability.data->>'academy_capacity')::integer,
+    (availability.data->>'academy_bows_used')::integer,
+    2::integer,
+    (availability.data->>'intro_bows_used')::integer
+  FROM public.sessions session
+  JOIN public.weekly_session_templates template ON template.id = session.weekly_template_id
+  CROSS JOIN LATERAL (
+    SELECT public.get_session_equipment_availability(session.id) AS data
+  ) availability
+  WHERE session.status = 'scheduled'
+    AND template.is_active = true
+    AND template.allows_intro = true
+    AND (session.start_at AT TIME ZONE 'America/Lima')::date BETWEEN v_saturday AND v_sunday
+  ORDER BY session.start_at;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_get_weekend_intro_capacity(date) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.admin_get_weekend_intro_capacity(date) FROM anon;
+GRANT EXECUTE ON FUNCTION public.admin_get_weekend_intro_capacity(date) TO authenticated, service_role;
+
 COMMIT;

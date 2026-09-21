@@ -99,6 +99,13 @@ describe('recurring intro schedules by location migration', () => {
     expect(update.indexOf('session_accepts_intro')).toBeGreaterThan(update.indexOf('FOR UPDATE'))
   })
 
+  it('keeps the admin weekend summary aligned with intro-enabled templates', () => {
+    const capacity = functionSql('admin_get_weekend_intro_capacity')
+    expect(capacity).toContain('JOIN public.weekly_session_templates template')
+    expect(capacity).toContain('template.is_active = true')
+    expect(capacity).toContain('template.allows_intro = true')
+  })
+
   it('ships rollback-only transactional scenarios for both locations and disabled templates', () => {
     const transactionalPath = join(process.cwd(), 'supabase', 'tests', 'intro_schedules_by_location_transactional.sql')
     expect(existsSync(transactionalPath)).toBe(true)
