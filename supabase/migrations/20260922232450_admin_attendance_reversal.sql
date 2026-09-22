@@ -76,6 +76,8 @@ DECLARE
   v_balance_after integer;
   v_booking_id uuid;
   v_weekly_attendance_id uuid;
+  v_credit_kind text := 'normal';
+  v_recovery_credit_id uuid;
 BEGIN
   IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'No autenticado';
@@ -128,8 +130,10 @@ BEGIN
   END IF;
 
   IF p_source = 'booking' THEN
-    SELECT booking.student_id, booking.active_membership_id, booking.id
-    INTO v_student_id, v_membership_id, v_booking_id
+    SELECT booking.student_id, booking.active_membership_id, booking.id,
+      booking.credit_kind, booking.recovery_credit_id
+    INTO v_student_id, v_membership_id, v_booking_id,
+      v_credit_kind, v_recovery_credit_id
     FROM public.bookings booking
     WHERE booking.id = p_event_id
       AND booking.status = 'no_show'
@@ -147,7 +151,10 @@ BEGIN
     WHERE ledger.booking_id = v_booking_id
       AND ledger.student_id = v_student_id
       AND ledger.student_membership_id = v_membership_id
-      AND ledger.movement_type = 'attendance_consumed'
+      AND ledger.movement_type = CASE
+        WHEN v_credit_kind = 'recovery' THEN 'recovery_consumed'
+        ELSE 'attendance_consumed'
+      END
       AND ledger.delta = -1
     ORDER BY ledger.created_at ASC, ledger.id ASC
     LIMIT 1
@@ -221,38 +228,48 @@ BEGIN
     RAISE EXCEPTION 'La inasistencia ya fue revertida';
   END IF;
 
-  UPDATE public.student_memberships membership
-  SET
-    classes_used = GREATEST(classes_used - 1, 0),
-    classes_remaining = classes_remaining + 1,
-    status = CASE
-      WHEN status IN ('expired', 'consumed')
-        AND expiration_reason = 'no_classes_remaining'
-        AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
-      THEN 'active'
-      ELSE status
-    END,
-    expired_at = CASE
-      WHEN status IN ('expired', 'consumed')
-        AND expiration_reason = 'no_classes_remaining'
-        AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
-      THEN NULL
-      ELSE expired_at
-    END,
-    expiration_reason = CASE
-      WHEN status IN ('expired', 'consumed')
-        AND expiration_reason = 'no_classes_remaining'
-        AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
-      THEN NULL
-      ELSE expiration_reason
-    END,
-    updated_at = now()
-  WHERE membership.id = v_membership_id
-    AND membership.student_id = v_student_id
-  RETURNING membership.classes_remaining INTO v_balance_after;
+  IF v_credit_kind = 'recovery' THEN
+    UPDATE public.membership_recovery_credits recovery
+    SET
+      classes_remaining = LEAST(classes_remaining + 1, classes_granted),
+      updated_at = now()
+    WHERE recovery.id = v_recovery_credit_id
+      AND recovery.student_membership_id = v_membership_id
+    RETURNING recovery.classes_remaining INTO v_balance_after;
+  ELSE
+    UPDATE public.student_memberships membership
+    SET
+      classes_used = GREATEST(classes_used - 1, 0),
+      classes_remaining = classes_remaining + 1,
+      status = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND expiration_reason = 'no_classes_remaining'
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+        THEN 'active'
+        ELSE status
+      END,
+      expired_at = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND expiration_reason = 'no_classes_remaining'
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+        THEN NULL
+        ELSE expired_at
+      END,
+      expiration_reason = CASE
+        WHEN status IN ('expired', 'consumed')
+          AND expiration_reason = 'no_classes_remaining'
+          AND (end_date IS NULL OR end_date >= (now() AT TIME ZONE 'America/Lima')::date)
+        THEN NULL
+        ELSE expiration_reason
+      END,
+      updated_at = now()
+    WHERE membership.id = v_membership_id
+      AND membership.student_id = v_student_id
+    RETURNING membership.classes_remaining INTO v_balance_after;
+  END IF;
 
   IF v_balance_after IS NULL THEN
-    RAISE EXCEPTION 'La membresía debitada ya no existe';
+    RAISE EXCEPTION 'El crédito debitado ya no existe';
   END IF;
 
   INSERT INTO public.student_credit_ledger (
