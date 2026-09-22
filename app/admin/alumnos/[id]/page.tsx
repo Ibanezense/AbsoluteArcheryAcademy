@@ -48,6 +48,7 @@ import {
   type MembershipPaymentType,
 } from '@/lib/services/adminMembershipService'
 import { setStudentManualInactive } from '@/lib/services/adminStudentOperationalStatusService'
+import { reverseStudentNoShow } from '@/lib/services/adminAttendanceReversalService'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import {
@@ -70,7 +71,10 @@ import {
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 import { getLimaDateKey, MEMBERSHIP_TIMEZONE } from '@/lib/utils/membershipCycles'
-import { buildStudentAttendanceHistory } from '@/lib/utils/studentAttendanceHistory'
+import {
+  buildStudentAttendanceHistory,
+  formatAttendanceMembershipMonth,
+} from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
   id: string
@@ -901,8 +905,11 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const nextBooking = upcomingBookings[0] || null
   const recentClasses = data.bookings.filter((booking) => booking.status !== 'reserved')
   const pendingPayments = data.payments.filter((payment) => payment.payment_status === 'pending' || payment.payment_status === 'late')
+  const reversedBookingIds = new Set(
+    data.attendance_reversals.flatMap((reversal) => reversal.booking_id ? [reversal.booking_id] : []),
+  )
   const recentNoShows = data.bookings.filter((booking) => {
-    if (booking.status !== 'no_show' || !booking.start_at) return false
+    if (booking.status !== 'no_show' || !booking.start_at || reversedBookingIds.has(booking.id)) return false
     return dayjs(booking.start_at).isAfter(dayjs().subtract(14, 'day'))
   })
   const renewalWarning = 'Se creará un ciclo independiente. Los saldos anteriores se conservan y se consumen primero en orden cronológico.'
@@ -1160,7 +1167,15 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} />}
       {activeTab === 'attendance' && (
-        <AttendanceTab bookings={buildStudentAttendanceHistory(data.bookings, data.weekly_attendance)} />
+        <AttendanceTab
+          bookings={buildStudentAttendanceHistory(
+            data.bookings,
+            data.weekly_attendance,
+            data.attendance_reversals,
+          )}
+          memberships={data.memberships}
+          refreshStudentData={refreshStudentData}
+        />
       )}
       {activeTab === 'payments' && <PaymentsTab payments={data.payments} />}
         {activeTab === 'sports' && (
@@ -1832,37 +1847,154 @@ function BookingsTab({ bookings }: { bookings: StudentDetailData['bookings'] }) 
   )
 }
 
-function AttendanceTab({ bookings }: { bookings: StudentDetailData['bookings'] }) {
+function AttendanceTab({
+  bookings,
+  memberships,
+  refreshStudentData,
+}: {
+  bookings: StudentDetailData['bookings']
+  memberships: StudentDetailData['memberships']
+  refreshStudentData: () => Promise<void>
+}) {
+  const queryClient = useQueryClient()
+  const toast = useToast()
   const [filter, setFilter] = useState<AttendanceFilter>('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [reversalTarget, setReversalTarget] = useState<StudentDetailData['bookings'][number] | null>(null)
+  const [reason, setReason] = useState('')
+  const [isReversing, setIsReversing] = useState(false)
   const summary = summarizeAttendance(bookings)
   const attendanceRows = filterAttendance(bookings, filter, from, to)
 
+  const closeReversalDialog = () => {
+    if (isReversing) return
+    setReversalTarget(null)
+    setReason('')
+  }
+
+  const handleReverseNoShow = async () => {
+    if (!reversalTarget || !reason.trim()) {
+      toast.push({ message: 'Ingresa el motivo de la reversión.', type: 'error' })
+      return
+    }
+
+    setIsReversing(true)
+    try {
+      await reverseStudentNoShow(supabase, {
+        source: reversalTarget.source === 'weekly' ? 'weekly' : 'booking',
+        eventId: reversalTarget.source_event_id || reversalTarget.id,
+        reason: reason.trim(),
+        requestId: crypto.randomUUID(),
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+      ])
+      await refreshStudentData()
+      toast.push({ message: 'La inasistencia fue revertida y el crédito fue devuelto.', type: 'success' })
+      setReversalTarget(null)
+      setReason('')
+    } catch (reversalError: any) {
+      toast.push({ message: reversalError.message || 'No se pudo revertir la inasistencia.', type: 'error' })
+    } finally {
+      setIsReversing(false)
+    }
+  }
+
   return (
-    <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <AttendanceKpi label="Asistencias" value={summary.attended} tone="bg-emerald-50 text-emerald-700" />
-        <AttendanceKpi label="Inasistencias" value={summary.noShow} tone="bg-rose-50 text-rose-700" />
-        <AttendanceKpi label="Cancelaciones" value={summary.cancelled} tone="bg-amber-50 text-amber-700" />
-      </div>
-      <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-        <select aria-label="Filtrar asistencias" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={filter} onChange={(event) => setFilter(event.target.value as AttendanceFilter)}>
-          <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias</option><option value="cancelled">Cancelaciones</option>
-        </select>
-        <input aria-label="Fecha inicial" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={from} onChange={(event) => setFrom(event.target.value)} />
-        <input aria-label="Fecha final" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={to} onChange={(event) => setTo(event.target.value)} />
-      </div>
-      {attendanceRows.length === 0 ? (
-        <EmptyOperationalState title="Sin resultados" description="No hay registros que coincidan con los filtros seleccionados." />
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200">
-          <table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Nota</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">{attendanceRows.map((booking) => <tr key={booking.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td><td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td><td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td><td className="max-w-xs px-4 py-4 text-slate-600">{booking.source === 'weekly' ? booking.admin_notes || 'Inasistencia semanal (jueves a domingo)' : booking.admin_notes || '-'}</td></tr>)}</tbody>
-          </table>
+    <>
+      <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
+        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+          <AttendanceKpi label="Asistencias" value={summary.attended} tone="bg-emerald-50 text-emerald-700" />
+          <AttendanceKpi label="Inasistencias" value={summary.noShow} tone="bg-rose-50 text-rose-700" />
+          <AttendanceKpi label="Cancelaciones" value={summary.cancelled} tone="bg-amber-50 text-amber-700" />
+        </div>
+        <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <select aria-label="Filtrar asistencias" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={filter} onChange={(event) => setFilter(event.target.value as AttendanceFilter)}>
+            <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias</option><option value="cancelled">Cancelaciones</option>
+          </select>
+          <input aria-label="Fecha inicial" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <input aria-label="Fecha final" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={to} onChange={(event) => setTo(event.target.value)} />
+        </div>
+        {attendanceRows.length === 0 ? (
+          <EmptyOperationalState title="Sin resultados" description="No hay registros que coincidan con los filtros seleccionados." />
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+                <tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Membresía</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Nota</th><th className="px-4 py-3">Acción</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {attendanceRows.map((booking) => (
+                  <tr key={booking.id} className="bg-white">
+                    <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td>
+                    <td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td>
+                    <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td>
+                    <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-700">{formatAttendanceMembershipMonth(booking.active_membership_id, memberships)}</td>
+                    <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td>
+                    <td className="max-w-xs px-4 py-4 text-slate-600">{booking.source === 'weekly' ? booking.admin_notes || 'Inasistencia semanal (jueves a domingo)' : booking.admin_notes || '-'}</td>
+                    <td className="px-4 py-4">
+                      {booking.status === 'no_show' ? (
+                        <button
+                          type="button"
+                          className="whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+                          onClick={() => {
+                            setReversalTarget(booking)
+                            setReason('')
+                          }}
+                        >
+                          Revertir inasistencia
+                        </button>
+                      ) : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionShell>
+
+      {reversalTarget && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 p-4" role="presentation" onMouseDown={closeReversalDialog}>
+          <div
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reverse-no-show-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="reverse-no-show-title" className="text-xl font-black text-slate-950">Revertir inasistencia</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Se devolverá una clase a la membresía {formatAttendanceMembershipMonth(reversalTarget.active_membership_id, memberships)} y el registro dejará de aparecer en el historial.</p>
+              </div>
+              <button type="button" aria-label="Cerrar" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" onClick={closeReversalDialog} disabled={isReversing}><X className="h-5 w-5" /></button>
+            </div>
+            <label className="mt-5 block text-sm font-black text-slate-800" htmlFor="attendance-reversal-reason">Motivo de la reversión</label>
+            <textarea
+              id="attendance-reversal-reason"
+              className="mt-2 min-h-28 w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+              placeholder="Ejemplo: inasistencia justificada por enfermedad"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              disabled={isReversing}
+              required
+            />
+            <div className="mt-5 flex justify-end gap-3">
+              <button type="button" className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700" onClick={closeReversalDialog} disabled={isReversing}>Cancelar</button>
+              <button type="button" className="rounded-2xl bg-rose-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50" onClick={handleReverseNoShow} disabled={isReversing || !reason.trim()}>
+                {isReversing ? 'Revirtiendo...' : 'Confirmar reversión'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </SectionShell>
+    </>
   )
 }
 
