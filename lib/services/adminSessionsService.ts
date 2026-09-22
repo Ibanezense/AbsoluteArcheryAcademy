@@ -16,6 +16,7 @@ export type SaveAdminSessionInput = {
   notes: string | null
   weeklyTemplateId: string | null
   isManualOverride: boolean
+  locationId: string
   allocations: AdminSessionAllocationInput[]
 }
 
@@ -34,6 +35,7 @@ export async function saveAdminSessionWithAllocations(
     p_notes: input.notes,
     p_weekly_template_id: input.weeklyTemplateId,
     p_is_manual_override: input.isManualOverride,
+    p_location_id: input.locationId,
     p_allocations: input.allocations.map((allocation) => ({
       distance_m: allocation.distanceM,
       targets: allocation.targets,
