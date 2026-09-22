@@ -11,6 +11,7 @@ import {
   type IntroPaymentStatus,
 } from '@/lib/services/IntroClassesService'
 import { useAcademyLocations } from '@/lib/infrastructureQueries'
+import { resolveAvailableIntroSessionId } from '@/lib/utils/introSessionSelection'
 
 interface Props {
   isOpen: boolean
@@ -47,6 +48,10 @@ export default function RegisterIntroModal({ isOpen, onClose, onSuccess }: Props
     try {
       const available = await IntroClassesService.getAvailableSessions(31, selectedLocationId)
       setSessions(available)
+      setFormData((prev) => ({
+        ...prev,
+        sessionId: resolveAvailableIntroSessionId(prev.sessionId, available),
+      }))
     } catch (err) {
       setError('Error al cargar turnos disponibles.')
     } finally {
