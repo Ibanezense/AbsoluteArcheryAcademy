@@ -1,5 +1,29 @@
 BEGIN;
 
+CREATE OR REPLACE FUNCTION public.session_accepts_intro(p_session_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.sessions session
+    JOIN public.academy_locations location ON location.id = session.location_id
+    LEFT JOIN public.weekly_session_templates template ON template.id = session.weekly_template_id
+    WHERE session.id = p_session_id
+      AND session.status = 'scheduled'
+      AND location.is_active = true
+      AND (location.opens_on IS NULL OR (session.start_at AT TIME ZONE location.timezone)::date >= location.opens_on)
+      AND (template.id IS NULL OR template.is_active = true)
+      AND (
+        template.allows_intro = true
+        OR (template.id IS NULL AND location.code = 'umacollo')
+      )
+  );
+$$;
+
 DROP FUNCTION IF EXISTS public.get_available_intro_sessions(date, date, uuid);
 
 CREATE OR REPLACE FUNCTION public.get_available_intro_sessions(

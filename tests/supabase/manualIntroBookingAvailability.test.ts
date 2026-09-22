@@ -15,5 +15,7 @@ describe('manual intro booking availability', () => {
     expect(sql).toContain('template.allows_intro = true')
     expect(sql).toContain("availability.data->>'physical_spots_remaining'")
     expect(sql).not.toContain("availability.data->>'intro_spots_remaining'")
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION public.session_accepts_intro')
+    expect(sql).toContain("OR (template.id IS NULL AND location.code = 'umacollo')")
   })
 })
