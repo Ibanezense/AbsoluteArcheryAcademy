@@ -21,6 +21,9 @@ const validRow = {
   academy_bows_used: 2,
   intro_bows_capacity: 2,
   intro_bows_used: 1,
+  location_id: 'location-tiabaya',
+  location_code: 'tiabaya',
+  location_name: 'Tiabaya',
 }
 
 describe('fetchAdminWeekendIntroCapacity', () => {
@@ -43,6 +46,9 @@ describe('fetchAdminWeekendIntroCapacity', () => {
       academyBowsUsed: 2,
       introBowsCapacity: 2,
       introBowsUsed: 1,
+      locationId: 'location-tiabaya',
+      locationCode: 'tiabaya',
+      locationName: 'Tiabaya',
     }])
   })
 
@@ -69,10 +75,10 @@ describe('fetchAdminWeekendIntroCapacity', () => {
 
     await expect(fetchAdminWeekendIntroCapacity(rpcErrorClient, '2026-08-21'))
       .rejects.toThrow(
-        'No se pudo cargar la disponibilidad del fin de semana: permission denied for function',
+        'No se pudo cargar la disponibilidad semanal: permission denied for function',
       )
     await expect(fetchAdminWeekendIntroCapacity(fallbackClient, '2026-08-21'))
-      .rejects.toThrow('No se pudo cargar la disponibilidad del fin de semana.')
+      .rejects.toThrow('No se pudo cargar la disponibilidad semanal.')
   })
 
   it.each([
@@ -94,6 +100,9 @@ describe('fetchAdminWeekendIntroCapacity', () => {
     ['empty ID', { session_id: '' }],
     ['whitespace-only ID', { session_id: '   ' }],
     ['non-string ID', { session_id: 42 }],
+    ['empty location ID', { location_id: '' }],
+    ['empty location code', { location_code: '' }],
+    ['empty location name', { location_name: '' }],
     ['invalid start date', { start_at: 'not-a-date' }],
     ['empty end date', { end_at: '' }],
   ])('rejects a row with an %s', async (_label, override) => {

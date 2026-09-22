@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { useAdminWeekendIntroCapacity } from '@/lib/hooks/useAdminDashboardData'
 import {
   buildWeekendIntroSlots,
-  getLimaReferenceDate,
+  getCurrentIntroWeekDates,
   type WeekendIntroCapacityDay,
   type WeekendIntroCapacitySlot,
   type WeekendIntroCapacityStatus,
@@ -15,11 +15,19 @@ import {
 const dayDefinitions: Array<{
   key: WeekendIntroCapacityDay
   label: string
-  capacity: number
+  locationLabel: 'Umacollo' | 'Tiabaya'
 }> = [
-  { key: 'saturday', label: 'Sábado', capacity: 4 },
-  { key: 'sunday', label: 'Domingo', capacity: 3 },
+  { key: 'wednesday', label: 'Miércoles', locationLabel: 'Umacollo' },
+  { key: 'thursday', label: 'Jueves', locationLabel: 'Umacollo' },
+  { key: 'friday', label: 'Viernes', locationLabel: 'Umacollo' },
+  { key: 'saturday', label: 'Sábado', locationLabel: 'Tiabaya' },
+  { key: 'sunday', label: 'Domingo', locationLabel: 'Tiabaya' },
 ]
+
+const locationDefinitions = [
+  { label: 'Umacollo', days: dayDefinitions.slice(0, 3) },
+  { label: 'Tiabaya', days: dayDefinitions.slice(3) },
+] as const
 
 const statusLabels: Record<Exclude<WeekendIntroCapacityStatus, 'available'>, string> = {
   last_spot: 'Último cupo',
@@ -48,23 +56,6 @@ const dateFormatter = new Intl.DateTimeFormat('es-PE', {
   day: 'numeric',
   month: 'short',
 })
-
-function addCalendarDays(date: string, days: number) {
-  const [year, month, day] = date.split('-').map(Number)
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
-}
-
-function getWeekendDates(now: Date): Record<WeekendIntroCapacityDay, string> {
-  const referenceDate = getLimaReferenceDate(now)
-  const referenceUtc = new Date(`${referenceDate}T00:00:00Z`)
-  const daysSinceMonday = (referenceUtc.getUTCDay() + 6) % 7
-  const monday = addCalendarDays(referenceDate, -daysSinceMonday)
-
-  return {
-    saturday: addCalendarDays(monday, 5),
-    sunday: addCalendarDays(monday, 6),
-  }
-}
 
 function formatDayDate(date: string) {
   return dateFormatter.format(new Date(`${date}T12:00:00Z`)).replace('.', '')
@@ -187,7 +178,7 @@ function SectionHeading({
             Disponibilidad para clases de prueba
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-500">
-            La disponibilidad combina 6 arcos de academia de 20 lb y 2 arcos exclusivos de 18 lb para introducción.
+            Miércoles a viernes en Umacollo; sábado y domingo en Tiabaya. Los cupos reflejan los horarios habilitados para esta semana.
           </p>
         </div>
       </div>
@@ -203,38 +194,55 @@ function SectionHeading({
 }
 
 function LoadingSlots({ dates }: { dates: Record<WeekendIntroCapacityDay, string> }) {
-  const skeletons = Array.from({ length: 7 })
+  const skeletons = Array.from({ length: 2 })
 
   return (
-    <div className="grid gap-5 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-[4fr_3fr]">
-      {dayDefinitions.map((day, dayIndex) => {
-        const start = dayIndex === 0 ? 0 : 4
-        return (
-          <div key={day.key}>
-            <DayHeading label={day.label} date={dates[day.key]} />
-            <div className={`mt-3 grid gap-2.5 sm:grid-cols-2 ${day.key === 'saturday' ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
-              {skeletons.slice(start, start + day.capacity).map((_, index) => (
-                <div
-                  key={`${day.key}-${index}`}
-                  aria-hidden="true"
-                  className="min-h-[5.6rem] animate-pulse rounded-2xl border border-slate-200 bg-slate-100 p-3.5"
-                >
-                  <div className="h-5 w-24 rounded bg-slate-200" />
-                  <div className="mt-3 h-3 w-20 rounded bg-slate-200" />
+    <div className="space-y-6 p-5 md:p-6">
+      {locationDefinitions.map((location) => (
+        <section key={location.label}>
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.14em] text-accent">
+            Sede {location.label}
+          </p>
+          <div className={`grid gap-5 ${location.label === 'Umacollo' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+            {location.days.map((day) => (
+              <div key={day.key}>
+                <DayHeading label={day.label} locationLabel={day.locationLabel} date={dates[day.key]} />
+                <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                  {skeletons.map((_, index) => (
+                    <div
+                      key={`${day.key}-${index}`}
+                      aria-hidden="true"
+                      className="min-h-[5.6rem] animate-pulse rounded-2xl border border-slate-200 bg-slate-100 p-3.5"
+                    >
+                      <div className="h-5 w-24 rounded bg-slate-200" />
+                      <div className="mt-3 h-3 w-20 rounded bg-slate-200" />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        )
-      })}
+        </section>
+      ))}
     </div>
   )
 }
 
-function DayHeading({ label, date }: { label: string; date: string }) {
+function DayHeading({
+  label,
+  locationLabel,
+  date,
+}: {
+  label: string
+  locationLabel: string
+  date: string
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <h3 className="font-heading text-base font-black uppercase tracking-[0.06em] text-slate-900">{label}</h3>
+    <div className="flex items-end justify-between gap-3 border-b border-slate-100 pb-2">
+      <div>
+        <h3 className="font-heading text-base font-black uppercase tracking-[0.06em] text-slate-900">{label}</h3>
+        <p className="mt-0.5 text-xs font-semibold text-slate-500">{locationLabel}</p>
+      </div>
       <span className="text-xs font-bold uppercase tracking-[0.08em] text-slate-400">
         {formatDayDate(date)}
       </span>
@@ -252,7 +260,7 @@ export default function WeekendIntroCapacity() {
 
   const { sessions, isLoading, isFetching, error, refetch } = useAdminWeekendIntroCapacity(now)
   const slots = buildWeekendIntroSlots(sessions, now)
-  const dates = getWeekendDates(now)
+  const dates = getCurrentIntroWeekDates(now)
 
   return (
     <section
@@ -283,25 +291,43 @@ export default function WeekendIntroCapacity() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-5 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-[4fr_3fr]">
-          {dayDefinitions.map((day) => {
-            const daySlots = slots.filter((slot) => slot.day === day.key)
-
-            return (
-              <div key={day.key}>
-                <DayHeading label={day.label} date={dates[day.key]} />
-                <div className={`mt-3 grid gap-2.5 sm:grid-cols-2 ${day.key === 'saturday' ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
-                  {daySlots.map((slot) => (
-                    <SlotCard
-                      key={`${slot.day}-${slot.position}`}
-                      slot={slot}
-                      dayLabel={day.label}
-                    />
-                  ))}
-                </div>
+        <div className="space-y-7 p-5 md:p-6">
+          {locationDefinitions.map((location) => (
+            <section key={location.label} aria-label={`Sede ${location.label}`}>
+              <div className="mb-3 flex items-center gap-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-accent">
+                  Sede {location.label}
+                </p>
+                <span className="h-px flex-1 bg-slate-100" />
               </div>
-            )
-          })}
+              <div className={`grid gap-5 ${location.label === 'Umacollo' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+                {location.days.map((day) => {
+                  const daySlots = slots.filter((slot) => slot.day === day.key)
+
+                  return (
+                    <div key={day.key}>
+                      <DayHeading label={day.label} locationLabel={day.locationLabel} date={dates[day.key]} />
+                      {daySlots.length === 0 ? (
+                        <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">
+                          No hay turnos programados
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                          {daySlots.map((slot) => (
+                            <SlotCard
+                              key={slot.session?.sessionId ?? `${slot.day}-${slot.position}`}
+                              slot={slot}
+                              dayLabel={`${day.label}, sede ${day.locationLabel}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </section>
