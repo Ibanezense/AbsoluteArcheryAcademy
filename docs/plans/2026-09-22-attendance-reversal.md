@@ -374,4 +374,3 @@ Comprobar HTTP 200, abrir el perfil administrativo y verificar:
 **Step 5: Final report**
 
 Entregar commit de `main`, URL/estado de Vercel, migración aplicada, conteo de pruebas y resultado de las verificaciones de ambos orígenes.
-

@@ -89,4 +89,3 @@ Solo las filas `No asistió` mostrarán `Revertir inasistencia`. Al pulsarlo se 
 - Formato de mes `Setiembre`/`Octubre` y fallback `Sin membresía`.
 - Actualización de cachés administrativas después de revertir.
 - Suite completa, lint y compilación de producción.
-
