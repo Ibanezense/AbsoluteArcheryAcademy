@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { saveAdminSessionWithAllocations } from '@/lib/services/adminSessionsService'
 import { fromLocalDateTimeInput, toLocalDateTimeInput } from '@/lib/utils/dateUtils'
+import { useAcademyLocations } from '@/lib/infrastructureQueries'
 
 const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70] as const
 type Distance = typeof DISTANCES[number]
@@ -18,6 +19,7 @@ type SessionForm = {
   notes: string
   weekly_template_id: string | null
   is_manual_override: boolean
+  location_id: string
 }
 
 export default function EditarSesionPage() {
@@ -34,12 +36,14 @@ export default function EditarSesionPage() {
     notes: '',
     weekly_template_id: null,
     is_manual_override: true,
+    location_id: '',
   })
   const [distanceCaps, setDistanceCaps] = useState<Record<Distance, number>>(
     Object.fromEntries(DISTANCES.map((distance) => [distance, 0])) as Record<Distance, number>
   )
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
+  const { data: locations = [], isLoading: locationsLoading, error: locationsError } = useAcademyLocations()
 
   useEffect(() => {
     const loadSession = async () => {
@@ -50,7 +54,7 @@ export default function EditarSesionPage() {
 
         const { data: sessionRow, error: sessionError } = await supabase
           .from('sessions')
-          .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override')
+          .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override, location_id')
           .eq('id', id)
           .single()
 
@@ -65,6 +69,7 @@ export default function EditarSesionPage() {
           notes: sessionRow.notes || '',
           weekly_template_id: sessionRow.weekly_template_id,
           is_manual_override: sessionRow.is_manual_override ?? true,
+          location_id: sessionRow.location_id || '',
         })
 
         const { data: allocationRows, error: allocationsError } = await supabase
@@ -106,6 +111,11 @@ export default function EditarSesionPage() {
       return
     }
 
+    if (!session.location_id) {
+      toast.push({ message: 'Selecciona la sede del turno.', type: 'error' })
+      return
+    }
+
     if (!Object.values(distanceCaps).some((value) => value > 0)) {
       toast.push({ message: 'Configura al menos un cupo por distancia.', type: 'error' })
       return
@@ -139,6 +149,7 @@ export default function EditarSesionPage() {
         notes: sessionPayload.notes,
         weeklyTemplateId: sessionPayload.weekly_template_id,
         isManualOverride: sessionPayload.is_manual_override,
+        locationId: session.location_id,
         allocations,
       })
 
@@ -173,10 +184,14 @@ export default function EditarSesionPage() {
     }
   }
 
-  if (loading) {
+  if (loading || locationsLoading) {
     return (
       <div className="p-5">Cargando...</div>
     )
+  }
+
+  if (locationsError) {
+    return <div className="p-5 text-danger">No se pudieron cargar las sedes.</div>
   }
 
   return (
@@ -201,6 +216,22 @@ export default function EditarSesionPage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="card p-5 space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-textsec" htmlFor="session-location">Sede</label>
+                <select
+                  id="session-location"
+                  className="input"
+                  value={session.location_id}
+                  onChange={(event) => setSession((current) => ({ ...current, location_id: event.target.value }))}
+                  required
+                >
+                  <option value="" disabled>Selecciona una sede</option>
+                  {locations.filter((location) => location.is_active || location.id === session.location_id).map((location) => (
+                    <option key={location.id} value={location.id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="mb-2 block text-sm font-medium text-textsec">Inicio</label>
                 <input
@@ -316,6 +347,12 @@ export default function EditarSesionPage() {
               <p className="text-sm text-textsec">Horario</p>
               <p className="mt-1 font-medium text-textpri">
                 {session.start_at ? new Date(session.start_at).toLocaleString() : '-'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-bg/60 p-4">
+              <p className="text-sm text-textsec">Sede</p>
+              <p className="mt-1 font-medium text-textpri">
+                {locations.find((location) => location.id === session.location_id)?.name || 'Sin seleccionar'}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-bg/60 p-4">

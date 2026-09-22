@@ -28,6 +28,7 @@ describe('saveAdminSessionWithAllocations', () => {
       notes: null,
       weeklyTemplateId: null,
       isManualOverride: true,
+      locationId: 'location-tiabaya',
       allocations: [{ distanceM: 10, targets: 2, slotCapacity: 8 }],
     })
 
@@ -40,6 +41,7 @@ describe('saveAdminSessionWithAllocations', () => {
       p_notes: null,
       p_weekly_template_id: null,
       p_is_manual_override: true,
+      p_location_id: 'location-tiabaya',
       p_allocations: [{ distance_m: 10, targets: 2, slot_capacity: 8 }],
     })
     expect(supabase.from).not.toHaveBeenCalled()
@@ -60,6 +62,7 @@ describe('saveAdminSessionWithAllocations', () => {
         notes: null,
         weeklyTemplateId: null,
         isManualOverride: true,
+        locationId: 'location-tiabaya',
         allocations: [{ distanceM: 10, targets: 2, slotCapacity: 8 }],
       }),
     ).rejects.toThrow('allocation insert failed')
