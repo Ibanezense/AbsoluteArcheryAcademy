@@ -18,9 +18,17 @@ export type WeekendIntroCapacitySession = {
   academyBowsUsed: number
   introBowsCapacity: number
   introBowsUsed: number
+  locationId: string
+  locationCode: string
+  locationName: string
 }
 
-export type WeekendIntroCapacityDay = 'saturday' | 'sunday'
+export type WeekendIntroCapacityDay =
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday'
 
 export type WeekendIntroCapacitySlot = {
   day: WeekendIntroCapacityDay
@@ -59,13 +67,16 @@ function addCalendarDays(date: string, days: number): string {
   return result.toISOString().slice(0, 10)
 }
 
-function getCurrentWeekendDates(now: Date) {
+export function getCurrentIntroWeekDates(now: Date): Record<WeekendIntroCapacityDay, string> {
   const referenceDate = getLimaReferenceDate(now)
   const referenceUtc = new Date(`${referenceDate}T00:00:00Z`)
   const daysSinceMonday = (referenceUtc.getUTCDay() + 6) % 7
   const monday = addCalendarDays(referenceDate, -daysSinceMonday)
 
   return {
+    wednesday: addCalendarDays(monday, 2),
+    thursday: addCalendarDays(monday, 3),
+    friday: addCalendarDays(monday, 4),
     saturday: addCalendarDays(monday, 5),
     sunday: addCalendarDays(monday, 6),
   }
@@ -86,33 +97,21 @@ function getSessionStatus(
 function buildDaySlots(
   day: WeekendIntroCapacityDay,
   sessions: WeekendIntroCapacitySession[],
-  capacity: number,
   nowTime: number,
 ): WeekendIntroCapacitySlot[] {
-  const slots: WeekendIntroCapacitySlot[] = sessions.slice(0, capacity).map((session, position) => ({
+  return sessions.map((session, position) => ({
     day,
     position,
     session,
     status: getSessionStatus(session, new Date(session.startAt).getTime(), nowTime),
   }))
-
-  while (slots.length < capacity) {
-    slots.push({
-      day,
-      position: slots.length,
-      session: null,
-      status: 'not_scheduled',
-    })
-  }
-
-  return slots
 }
 
 export function buildWeekendIntroSlots(
   sessions: WeekendIntroCapacitySession[],
   now: Date,
 ): WeekendIntroCapacitySlot[] {
-  const weekendDates = getCurrentWeekendDates(now)
+  const weekDates = getCurrentIntroWeekDates(now)
   const nowTime = now.getTime()
   const validSessions = sessions
     .map((session) => ({
@@ -126,18 +125,33 @@ export function buildWeekendIntroSlots(
       return left.session.sessionId.localeCompare(right.session.sessionId)
     })
 
-  const saturdaySessions: WeekendIntroCapacitySession[] = []
-  const sundaySessions: WeekendIntroCapacitySession[] = []
+  const sessionsByDay: Record<WeekendIntroCapacityDay, WeekendIntroCapacitySession[]> = {
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: [],
+  }
+  const expectedLocationByDay: Record<WeekendIntroCapacityDay, string> = {
+    wednesday: 'umacollo',
+    thursday: 'umacollo',
+    friday: 'umacollo',
+    saturday: 'tiabaya',
+    sunday: 'tiabaya',
+  }
 
   for (const { session, startTime } of validSessions) {
     const limaDate = getLimaReferenceDate(new Date(startTime))
+    const day = (Object.keys(weekDates) as WeekendIntroCapacityDay[]).find(
+      (candidate) => weekDates[candidate] === limaDate,
+    )
 
-    if (limaDate === weekendDates.saturday) saturdaySessions.push(session)
-    if (limaDate === weekendDates.sunday) sundaySessions.push(session)
+    if (day && session.locationCode.toLowerCase() === expectedLocationByDay[day]) {
+      sessionsByDay[day].push(session)
+    }
   }
 
-  return [
-    ...buildDaySlots('saturday', saturdaySessions, 4, nowTime),
-    ...buildDaySlots('sunday', sundaySessions, 3, nowTime),
-  ]
+  return (Object.keys(sessionsByDay) as WeekendIntroCapacityDay[]).flatMap((day) =>
+    buildDaySlots(day, sessionsByDay[day], nowTime),
+  )
 }

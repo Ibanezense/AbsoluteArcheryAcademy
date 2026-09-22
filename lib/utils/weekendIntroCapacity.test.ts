@@ -10,6 +10,7 @@ function session(
   sessionId: string,
   startAt: string,
   spotsRemaining = 2,
+  locationCode = 'tiabaya',
 ): WeekendIntroCapacitySession {
   const startTime = new Date(startAt).getTime()
 
@@ -26,6 +27,9 @@ function session(
     academyBowsUsed: Math.min(6, 8 - spotsRemaining),
     introBowsCapacity: 2,
     introBowsUsed: Math.min(2, 8 - spotsRemaining),
+    locationId: `location-${locationCode}`,
+    locationCode,
+    locationName: locationCode === 'umacollo' ? 'Umacollo' : 'Tiabaya',
   }
 }
 
@@ -39,20 +43,32 @@ describe('weekend intro capacity helpers', () => {
     expect(getLimaReferenceDate(new Date('2026-08-17T03:30:00Z'))).toBe('2026-08-16')
   })
 
-  it('always returns four Saturday slots followed by three Sunday slots in chronological order', () => {
+  it('returns the configured Wednesday-to-Sunday sessions for the expected location', () => {
     const rows = [
+      session('fri-2', '2026-08-21T23:00:00Z', 2, 'umacollo'),
       session('sun-3', '2026-08-23T19:00:00Z'),
       session('sat-2', '2026-08-22T15:00:00Z'),
       session('sat-4', '2026-08-22T21:00:00Z'),
+      session('wed-2', '2026-08-19T23:00:00Z', 2, 'umacollo'),
       session('sun-1', '2026-08-23T14:00:00Z'),
       session('sat-1', '2026-08-22T13:00:00Z'),
+      session('thu-1', '2026-08-20T22:00:00Z', 2, 'umacollo'),
       session('sun-2', '2026-08-23T16:30:00Z'),
+      session('wed-1', '2026-08-19T22:00:00Z', 2, 'umacollo'),
+      session('fri-1', '2026-08-21T22:00:00Z', 2, 'umacollo'),
       session('sat-3', '2026-08-22T18:00:00Z'),
+      session('wrong-weekday-site', '2026-08-20T23:00:00Z', 2, 'tiabaya'),
+      session('wrong-weekend-site', '2026-08-22T23:00:00Z', 2, 'umacollo'),
     ]
 
     const slots = buildWeekendIntroSlots(rows, new Date('2026-08-20T15:00:00Z'))
 
     expect(slots.map((slot) => slot.day)).toEqual([
+      'wednesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'friday',
       'saturday',
       'saturday',
       'saturday',
@@ -62,6 +78,11 @@ describe('weekend intro capacity helpers', () => {
       'sunday',
     ])
     expect(slots.map((slot) => slot.session?.sessionId ?? null)).toEqual([
+      'wed-1',
+      'wed-2',
+      'thu-1',
+      'fri-1',
+      'fri-2',
       'sat-1',
       'sat-2',
       'sat-3',
@@ -72,7 +93,7 @@ describe('weekend intro capacity helpers', () => {
     ])
   })
 
-  it('fills missing positions at the end of each day', () => {
+  it('uses only configured sessions and does not create fixed placeholder slots', () => {
     const slots = buildWeekendIntroSlots(
       [
         session('sat-1', '2026-08-22T14:00:00Z'),
@@ -84,12 +105,8 @@ describe('weekend intro capacity helpers', () => {
 
     expect(slots.map((slot) => [slot.day, slot.session?.sessionId ?? null, slot.status])).toEqual([
       ['saturday', 'sat-1', 'available'],
-      ['saturday', null, 'not_scheduled'],
-      ['saturday', null, 'not_scheduled'],
-      ['saturday', null, 'not_scheduled'],
       ['sunday', 'sun-1', 'available'],
       ['sunday', 'sun-2', 'available'],
-      ['sunday', null, 'not_scheduled'],
     ])
   })
 
@@ -150,7 +167,7 @@ describe('weekend intro capacity helpers', () => {
     ])
   })
 
-  it('ignores invalid dates and deterministically caps extra rows for each day', () => {
+  it('ignores invalid dates and keeps every configured session for each day', () => {
     const rows = [
       session('sat-5', '2026-08-22T22:00:00Z'),
       session('sat-3', '2026-08-22T18:00:00Z'),
@@ -172,9 +189,23 @@ describe('weekend intro capacity helpers', () => {
       'sat-2',
       'sat-3',
       'sat-4',
+      'sat-5',
       'sun-1',
       'sun-2',
       'sun-3',
+      'sun-4',
     ])
+  })
+
+  it('keeps the current Lima week across the UTC boundary into Wednesday', () => {
+    const rows = [
+      session('wed-current', '2026-08-19T22:00:00Z', 2, 'umacollo'),
+      session('wed-next', '2026-08-26T22:00:00Z', 2, 'umacollo'),
+    ]
+
+    for (const now of [new Date('2026-08-19T04:59:59Z'), new Date('2026-08-19T05:00:00Z')]) {
+      expect(buildWeekendIntroSlots(rows, now).map((slot) => slot.session?.sessionId))
+        .toEqual(['wed-current'])
+    }
   })
 })

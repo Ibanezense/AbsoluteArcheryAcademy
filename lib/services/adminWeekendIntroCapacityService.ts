@@ -77,6 +77,9 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
   const startTime = parseRfc3339Timestamp(row.start_at)
   const endTime = parseRfc3339Timestamp(row.end_at)
   const isValid = isNonEmptyString(row.session_id)
+    && isNonEmptyString(row.location_id)
+    && isNonEmptyString(row.location_code)
+    && isNonEmptyString(row.location_name)
     && startTime !== null
     && endTime !== null
     && endTime > startTime
@@ -106,6 +109,9 @@ function normalizeCapacityRow(value: unknown, index: number): WeekendIntroCapaci
     academyBowsUsed: row.academy_bows_used as number,
     introBowsCapacity: row.intro_bows_capacity as number,
     introBowsUsed: row.intro_bows_used as number,
+    locationId: row.location_id as string,
+    locationCode: row.location_code as string,
+    locationName: row.location_name as string,
   }
 }
 
@@ -118,13 +124,13 @@ export async function fetchAdminWeekendIntroCapacity(
   })
 
   if (error) {
-    const context = 'No se pudo cargar la disponibilidad del fin de semana'
+    const context = 'No se pudo cargar la disponibilidad semanal'
     throw new Error(error.message ? `${context}: ${error.message}` : `${context}.`)
   }
 
   if (data === null) return []
   if (!Array.isArray(data)) {
-    throw new Error('La capacidad del fin de semana devolvió un formato inválido.')
+    throw new Error('La capacidad semanal devolvió un formato inválido.')
   }
 
   return data.map(normalizeCapacityRow)

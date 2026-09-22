@@ -22,17 +22,22 @@ describe('admin weekend intro capacity dashboard', () => {
     )
   })
 
-  it('uses the capacity query and slot builder to render the two weekend groups', () => {
+  it('uses the capacity query and slot builder to render the five weekly groups', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
 
     expect(component).toContain("'use client'")
     expect(component).toContain('useAdminWeekendIntroCapacity(now)')
     expect(component).toContain('buildWeekendIntroSlots(sessions, now)')
-    expect(component).toContain("{ key: 'saturday', label: 'Sábado', capacity: 4 }")
-    expect(component).toContain("{ key: 'sunday', label: 'Domingo', capacity: 3 }")
+    expect(component).toContain("{ key: 'wednesday', label: 'Miércoles', locationLabel: 'Umacollo' }")
+    expect(component).toContain("{ key: 'thursday', label: 'Jueves', locationLabel: 'Umacollo' }")
+    expect(component).toContain("{ key: 'friday', label: 'Viernes', locationLabel: 'Umacollo' }")
+    expect(component).toContain("{ key: 'saturday', label: 'Sábado', locationLabel: 'Tiabaya' }")
+    expect(component).toContain("{ key: 'sunday', label: 'Domingo', locationLabel: 'Tiabaya' }")
     expect(component).toContain('Disponibilidad para clases de prueba')
-    expect(component).toContain('6 arcos de academia de 20 lb')
-    expect(component).toContain('2 arcos exclusivos de 18 lb')
+    expect(component).toContain('Miércoles a viernes en Umacollo')
+    expect(component).toContain('sábado y domingo en Tiabaya')
+    expect(component).toContain('locationLabel={day.locationLabel}')
+    expect(component).toContain('No hay turnos programados')
     expect(component).toContain('Sábado')
     expect(component).toContain('Domingo')
     expect(component).toContain("slots.filter((slot) => slot.day === day.key)")
@@ -54,7 +59,7 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toContain('return () => window.clearInterval(clock)')
     expect(component).toContain('useAdminWeekendIntroCapacity(now)')
     expect(component).toContain('buildWeekendIntroSlots(sessions, now)')
-    expect(component).toContain('getWeekendDates(now)')
+    expect(component).toContain('getCurrentIntroWeekDates(now)')
   })
 
   it('covers every state and only links actionable slots to intro management', () => {
@@ -111,10 +116,10 @@ describe('admin weekend intro capacity dashboard', () => {
     expect(component).toMatch(/introBowsUsed[\s\S]*introBowsCapacity/)
   })
 
-  it('keeps loading and errors local to a seven-slot section', () => {
+  it('keeps loading and errors local to the weekly section', () => {
     const component = source('components/admin/WeekendIntroCapacity.tsx')
 
-    expect(component).toContain('Array.from({ length: 7 })')
+    expect(component).toContain('Array.from({ length: 2 })')
     expect(component).toContain('animate-pulse')
     expect(component).toContain('No se pudo cargar la disponibilidad de clases de prueba.')
     expect(component).toContain('Reintentar')
