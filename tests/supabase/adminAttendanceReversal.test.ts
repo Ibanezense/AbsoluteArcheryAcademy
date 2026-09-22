@@ -36,11 +36,17 @@ describe('admin attendance reversal migration', () => {
     expect(sql).toMatch(/CHECK\s*\([\s\S]*booking_id IS NOT NULL[\s\S]*weekly_attendance_id IS NOT NULL[\s\S]*= 1[\s\S]*\)/i)
     expect(sql).toMatch(/UNIQUE INDEX[\s\S]*attendance_reversals\s*\(booking_id\)[\s\S]*booking_id IS NOT NULL/i)
     expect(sql).toMatch(/UNIQUE INDEX[\s\S]*attendance_reversals\s*\(weekly_attendance_id\)[\s\S]*weekly_attendance_id IS NOT NULL/i)
+    expect(sql).toContain('idx_attendance_reversals_membership')
+    expect(sql).toContain('idx_attendance_reversals_original_ledger')
+    expect(sql).toContain('idx_attendance_reversals_actor')
   })
 
   it('returns the consumed credit to the exact membership once', () => {
-    const rpc = reversalFunction(migrationSql())
+    const sql = migrationSql()
+    const rpc = reversalFunction(sql)
 
+    expect(sql).toContain('DROP INDEX IF EXISTS public.idx_student_credit_ledger_weekly_attendance')
+    expect(sql).toMatch(/CREATE UNIQUE INDEX idx_student_credit_ledger_weekly_attendance[\s\S]*movement_type = 'weekly_no_show_consumed'/)
     expect(rpc).toContain('IF NOT public.is_admin_user()')
     expect(rpc).toContain('p_request_id')
     expect(rpc).toContain('FOR UPDATE')

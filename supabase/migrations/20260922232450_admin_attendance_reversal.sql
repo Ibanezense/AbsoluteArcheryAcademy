@@ -15,6 +15,14 @@ ALTER TABLE public.student_credit_ledger
     )
   );
 
+-- The historical index allowed only one ledger row per weekly event. Keep the
+-- one-consumption invariant while allowing a separate, auditable refund row.
+DROP INDEX IF EXISTS public.idx_student_credit_ledger_weekly_attendance;
+CREATE UNIQUE INDEX idx_student_credit_ledger_weekly_attendance
+  ON public.student_credit_ledger(weekly_attendance_id)
+  WHERE weekly_attendance_id IS NOT NULL
+    AND movement_type = 'weekly_no_show_consumed';
+
 CREATE TABLE IF NOT EXISTS public.attendance_reversals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id uuid NOT NULL REFERENCES public.students(id) ON DELETE RESTRICT,
@@ -42,6 +50,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_reversals_weekly_once
 
 CREATE INDEX IF NOT EXISTS idx_attendance_reversals_student
   ON public.attendance_reversals(student_id, reversed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_reversals_membership
+  ON public.attendance_reversals(student_membership_id);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_reversals_original_ledger
+  ON public.attendance_reversals(original_ledger_id);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_reversals_actor
+  ON public.attendance_reversals(reversed_by_profile_id);
 
 ALTER TABLE public.attendance_reversals ENABLE ROW LEVEL SECURITY;
 
