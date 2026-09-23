@@ -79,12 +79,14 @@ export type StudentBookingSummary = {
   start_at: string | null
   end_at: string | null
   source?: 'booking' | 'weekly'
+  source_event_id?: string
   occurrence_index?: number
   note?: string | null
 }
 
 export type StudentWeeklyAttendanceSummary = {
   id: string
+  student_membership_id: string | null
   week_start: string
   week_end: string
   status: 'no_show'
@@ -92,6 +94,12 @@ export type StudentWeeklyAttendanceSummary = {
   marked_at: string
   occurrence_index: number
   note: string | null
+}
+
+export type StudentAttendanceReversalSummary = {
+  id: string
+  booking_id: string | null
+  weekly_attendance_id: string | null
 }
 
 export type StudentDetailData = {
@@ -136,6 +144,7 @@ export type StudentDetailData = {
   ledger: StudentLedgerSummary[]
   bookings: StudentBookingSummary[]
   weekly_attendance: StudentWeeklyAttendanceSummary[]
+  attendance_reversals: StudentAttendanceReversalSummary[]
 }
 
 function sortMemberships(memberships: StudentMembershipSummary[]) {
@@ -169,7 +178,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
     queryKey: [...studentKeys.detail(studentId), serviceDate],
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -280,10 +289,16 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
           supabase
             .from('student_weekly_attendance')
-            .select('id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')
+            .select('id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')
             .eq('student_id', studentId)
             .order('week_end', { ascending: false })
             .order('occurrence_index', { ascending: false })
+            .limit(250),
+          supabase
+            .from('attendance_reversals')
+            .select('id,booking_id,weekly_attendance_id')
+            .eq('student_id', studentId)
+            .order('reversed_at', { ascending: false })
             .limit(250),
         ])
 
@@ -294,6 +309,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       if (upcomingBookingsError) throw upcomingBookingsError
       if (commitmentsError) throw commitmentsError
       if (weeklyAttendanceError) throw weeklyAttendanceError
+      if (attendanceReversalsError) throw attendanceReversalsError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
@@ -405,8 +421,10 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           start_at: booking.sessions?.start_at || null,
           end_at: booking.sessions?.end_at || null,
           source: 'booking',
+          source_event_id: booking.id,
         })),
         weekly_attendance: (weeklyAttendance || []) as StudentWeeklyAttendanceSummary[],
+        attendance_reversals: (attendanceReversals || []) as StudentAttendanceReversalSummary[],
       }
     },
   })
