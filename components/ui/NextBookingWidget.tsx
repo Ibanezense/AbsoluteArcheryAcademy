@@ -18,7 +18,7 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
 
   async function handleCancelBooking() {
     if (!booking?.booking_id) return
-    if (!confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.')) return
+    if (!confirm('La reserva se cancelará y el crédito quedará disponible inmediatamente.')) return
 
     try {
       setIsCancelling(true)

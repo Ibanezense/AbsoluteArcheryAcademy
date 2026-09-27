@@ -26,10 +26,11 @@ describe('multisite student experience', () => {
     expect(bookingPage).toContain('book_session_multisite')
   })
 
-  it('labels student cancellations as pending administrative review', () => {
+  it('labels student cancellations as final with immediate credit release', () => {
     const reservations = source('app/mis-reservas/page.tsx')
-    expect(reservations).toContain('Cancelación pendiente de revisión')
-    expect(reservations).toContain('La cancelación liberará el cupo')
+    expect(reservations).toContain('Cancelación del alumno')
+    expect(reservations).toContain('La cancelación liberará el cupo y el crédito inmediatamente')
+    expect(reservations).not.toContain('pendiente de revisión')
     expect(reservations).toContain('Cancelar reserva')
   })
 })

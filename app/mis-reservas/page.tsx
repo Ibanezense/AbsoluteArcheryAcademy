@@ -38,11 +38,10 @@ function labelBowUsage(row: Row) {
 }
 
 function cancellationLabel(row: Row) {
-  if (row.cancellation_review_status === 'pending') return 'Cancelación pendiente de revisión'
-  if (row.cancellation_resolution === 'justified') return 'Cancelación justificada'
   if (row.cancellation_resolution === 'no_show') return 'Inasistencia'
   if (row.cancellation_source === 'academy') return 'Cancelación de academia'
   if (row.cancellation_source === 'membership_freeze') return 'Cancelación por congelamiento'
+  if (row.cancellation_source === 'student') return 'Cancelación del alumno'
   return null
 }
 
@@ -106,7 +105,7 @@ export default function MisReservasPage() {
   }, [rows])
 
   const cancelar = async (id: string) => {
-    if (!(await confirm('La cancelación liberará el cupo inmediatamente y quedará pendiente de revisión. No se descontará ninguna clase en este momento.'))) return
+    if (!(await confirm('La cancelación liberará el cupo y el crédito inmediatamente.'))) return
 
     const { error } = await supabase.rpc('cancel_booking', { p_booking: id })
     if (error) {
@@ -118,9 +117,10 @@ export default function MisReservasPage() {
       ...row,
       status: 'cancelled',
       cancellation_source: 'student',
-      cancellation_review_status: 'pending',
+      cancellation_resolution: 'justified',
+      cancellation_review_status: 'resolved',
     } : row))
-    toast.push({ message: 'Cancelación pendiente de revisión.', type: 'success' })
+    toast.push({ message: 'Reserva cancelada. El crédito está disponible nuevamente.', type: 'success' })
   }
 
   if (contextLoading || loading) {

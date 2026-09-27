@@ -23,7 +23,6 @@ import { membershipPlanKeys } from '@/lib/hooks/useMembershipPlans'
 import {
   getWeeklyAttendanceReview,
   markWeeklyNoShow,
-  resolveStudentCancellation,
   type WeeklyAttendanceCandidate,
   type WeeklyAttendanceReview as WeeklyAttendanceReviewData,
 } from '@/lib/services/adminWeeklyAttendanceService'
@@ -354,41 +353,6 @@ function AsistenciaContent() {
     }
   }
 
-  const handleResolveCancellation = async (candidate: WeeklyAttendanceCandidate, resolution: 'justified' | 'no_show') => {
-    if (!candidate.cancellation_id || weeklyActionLoading) return
-    let adminReason: string | undefined
-    if (resolution === 'justified') {
-      adminReason = window.prompt('Motivo administrativo obligatorio de la cancelación justificada:')?.trim()
-      if (!adminReason) return
-    }
-    const confirmed = await confirm(
-      resolution === 'no_show'
-        ? `Se descontará una clase a ${candidate.student_name} y quedará registrada como inasistencia.`
-        : `La cancelación de ${candidate.student_name} quedará justificada. Si no existe otra oportunidad válida esta semana, se ampliará la membresía 7 días.`,
-      { title: resolution === 'no_show' ? 'Confirmar inasistencia' : 'Confirmar justificación', confirmLabel: 'Confirmar', tone: resolution === 'no_show' ? 'danger' : 'warning' },
-    )
-    if (!confirmed) return
-    setWeeklyActionLoading(candidate.student_id)
-    try {
-      const result = await resolveStudentCancellation(supabase, {
-        cancellationId: candidate.cancellation_id,
-        resolution,
-        adminReason,
-      })
-      toast.push({
-        message: result.extension_applied
-          ? 'Cancelación justificada y membresía ampliada 7 días.'
-          : resolution === 'no_show' ? 'Inasistencia registrada.' : 'Cancelación justificada.',
-        type: 'success',
-      })
-      await loadWeeklyReview(selectedDate)
-    } catch (error: any) {
-      toast.push({ message: error.message || 'No se pudo resolver la cancelación.', type: 'error' })
-    } finally {
-      setWeeklyActionLoading(null)
-    }
-  }
-
   return (
     <div className="space-y-6">
       <AdminPageHeader
@@ -524,7 +488,6 @@ function AsistenciaContent() {
           error={weeklyReviewError}
           processingStudentId={weeklyActionLoading}
           onMark={handleMarkWeeklyNoShow}
-          onResolveCancellation={handleResolveCancellation}
         />
       )}
     </div>

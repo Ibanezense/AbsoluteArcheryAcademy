@@ -79,7 +79,7 @@ export default function ReservaConfirm() {
           : 'Arco academia'
 
   const cancelar = async () => {
-    if (!(await confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.'))) return
+    if (!(await confirm('La reserva se cancelará y el crédito quedará disponible inmediatamente.'))) return
 
     setWorking(true)
     const { data: cancelData, error } = await supabase.rpc('cancel_booking', { p_booking: data.booking_id })

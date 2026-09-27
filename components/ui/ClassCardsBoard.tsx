@@ -246,7 +246,7 @@ export function ClassCardsBoard({ cards, loading, error, canReserve, studentId }
   async function handleCancelBooking(card: StudentClassCard) {
     if (!studentId || !card.booking_id) return
 
-    if (!confirm('La reserva se cancelará. Tu saldo de clases no cambiará porque el crédito solo se descuenta al registrar asistencia o inasistencia.')) return
+    if (!confirm('La reserva se cancelará y el crédito quedará disponible inmediatamente.')) return
 
     try {
       const key = cardKey(card)

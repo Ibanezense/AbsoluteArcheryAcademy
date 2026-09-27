@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { CalendarDays, MapPin } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
-import { StudentCard, StudentNotice } from './StudentCard'
+import { StudentCard } from './StudentCard'
 
 type WeekClass = {
   booking_id: string
@@ -23,7 +23,6 @@ type WeekOverview = {
   weekly_completed: number
   normal_classes_remaining: number
   recovery_classes_remaining: number
-  pending_cancellations: number
   classes: WeekClass[]
 }
 
@@ -62,10 +61,6 @@ export function StudentWeekOverview({ studentId }: { studentId: string }) {
           {overview.normal_classes_remaining} normales · {overview.recovery_classes_remaining} recuperación
         </p>
       </div>
-
-      {overview.pending_cancellations > 0 && (
-        <StudentNotice>Cancelación pendiente de revisión: {overview.pending_cancellations}</StudentNotice>
-      )}
 
       <StudentCard className="divide-y divide-line overflow-hidden">
         {overview.classes.length === 0 && (

@@ -23,7 +23,7 @@ export type WeeklyAttendanceCandidate = {
   weekly_no_show_count: number
   completed_count: number
   missing_count: number
-  candidate_type?: 'unreserved_quota' | 'student_cancellation'
+  candidate_type?: 'unreserved_quota'
   cancellation_id?: string | null
   booking_id?: string | null
   start_at?: string | null
@@ -80,17 +80,4 @@ export async function markWeeklyNoShow(
   }
 
   return result
-}
-
-export async function resolveStudentCancellation(
-  client: RpcClient,
-  input: { cancellationId: string; resolution: 'justified' | 'no_show'; adminReason?: string },
-) {
-  const { data, error } = await client.rpc('admin_resolve_student_cancellation', {
-    p_cancellation_id: input.cancellationId,
-    p_resolution: input.resolution,
-    p_admin_reason: input.adminReason?.trim() || null,
-  })
-  if (error) throw new Error(error.message || 'No se pudo resolver la cancelación.')
-  return data as { success: boolean; already_resolved: boolean; extension_applied?: boolean }
 }
