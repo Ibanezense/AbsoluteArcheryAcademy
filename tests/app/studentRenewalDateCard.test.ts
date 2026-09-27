@@ -23,4 +23,12 @@ describe('student renewal date card', () => {
     expect(homeSource).toContain('emphasizeTone')
     expect(homeSource).toContain('emphasizeTone={true}')
   })
+
+  it('applies the renewal tone to the complete card and its label', () => {
+    expect(homeSource).toContain("red: 'border-red-200 bg-red-50/40'")
+    expect(homeSource).toContain("orange: 'border-orange-200 bg-orange-50/40'")
+    expect(homeSource).toContain('const emphasizedCard = emphasizeTone ? emphasisCardClasses[tone] :')
+    expect(homeSource).toContain('<StudentCard className={`min-h-[132px] p-4 ${emphasizedCard}`}>')
+    expect(homeSource).toContain('<p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>')
+  })
 })
