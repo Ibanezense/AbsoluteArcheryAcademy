@@ -19,6 +19,7 @@ import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
+import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'
 
 function StudentHomeContent() {
   const router = useRouter()
@@ -107,7 +108,7 @@ function StudentHomeContent() {
     )
   }
 
-  const membershipEnd = dashboard.membership_end ? dayjs(dashboard.membership_end) : null
+  const renewalDate = getStudentRenewalDateState(dashboard.membership_end)
   const membershipBadge = getDashboardMembershipBadge({
     membershipStatus: dashboard.membership_status,
     membershipEnd: dashboard.membership_end,
@@ -188,10 +189,11 @@ function StudentHomeContent() {
           />
           <QuickMetric
             icon={<CalendarClock className="h-5 w-5" />}
-            label="Vence"
-            value={membershipEnd ? membershipEnd.format('D MMM') : '-'}
-            detail="Vencimiento"
-            tone="green"
+            label={renewalDate.label}
+            value={renewalDate.value}
+            detail={renewalDate.detail}
+            tone={renewalDate.tone}
+            emphasizeTone={true}
           />
           <QuickMetric
             icon={<Target className="h-5 w-5" />}
@@ -280,25 +282,45 @@ function QuickMetric({
   value,
   detail,
   tone,
+  emphasizeTone = false,
 }: {
   icon: ReactNode
   label: string
   value: string
   detail: string
-  tone: 'orange' | 'green' | 'blue'
+  tone: 'orange' | 'green' | 'blue' | 'red' | 'neutral'
+  emphasizeTone?: boolean
 }) {
   const toneClasses = {
     orange: 'bg-orange-50 text-accent',
     green: 'bg-green-50 text-success',
     blue: 'bg-blue-50 text-blue-600',
+    red: 'bg-red-50 text-red-600',
+    neutral: 'bg-slate-100 text-slate-500',
   }
+  const emphasisClasses = {
+    orange: 'text-orange-600',
+    green: 'text-success',
+    blue: 'text-blue-600',
+    red: 'text-red-600',
+    neutral: 'text-slate-500',
+  }
+  const emphasisCardVariants = {
+    orange: 'warning',
+    green: 'success',
+    blue: 'info',
+    red: 'danger',
+    neutral: 'neutral',
+  } as const
+  const emphasizedText = emphasizeTone ? emphasisClasses[tone] : ''
+  const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'
 
   return (
-    <StudentCard className="min-h-[132px] p-4">
+    <StudentCard variant={cardVariant} className="min-h-[132px] p-4">
       <div className={`mb-4 grid h-10 w-10 place-items-center rounded-full ${toneClasses[tone]}`}>{icon}</div>
-      <p className="text-sm font-bold leading-tight">{label}</p>
-      <p className="mt-3 text-[1.45rem] font-black leading-tight tracking-[-0.04em] text-slate-950">{value}</p>
-      <p className="mt-1 text-sm font-medium leading-tight text-textsec">{detail}</p>
+      <p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>
+      <p className={`mt-3 text-[1.45rem] font-black leading-tight tracking-[-0.04em] ${emphasizedText || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-1 text-sm font-medium leading-tight ${emphasizedText || 'text-textsec'}`}>{detail}</p>
     </StudentCard>
   )
 }
