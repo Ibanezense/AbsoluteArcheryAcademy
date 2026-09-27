@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-type StudentCardVariant = 'default' | 'info' | 'warning' | 'success' | 'danger'
+type StudentCardVariant = 'default' | 'info' | 'warning' | 'success' | 'danger' | 'neutral'
 
 const variantClasses: Record<StudentCardVariant, string> = {
   default: 'border-line bg-white shadow-card',
@@ -8,6 +8,7 @@ const variantClasses: Record<StudentCardVariant, string> = {
   warning: 'border-orange-200 bg-orange-50/60 shadow-card',
   success: 'border-green-200 bg-green-50/55 shadow-card',
   danger: 'border-red-200 bg-red-50/55 shadow-card',
+  neutral: 'border-slate-200 bg-slate-50 shadow-card',
 }
 
 type StudentCardProps = {

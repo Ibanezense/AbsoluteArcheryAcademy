@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const homeSource = readFileSync(join(process.cwd(), 'app', 'page.tsx'), 'utf8')
+const studentCardSource = readFileSync(
+  join(process.cwd(), 'components', 'student', 'StudentCard.tsx'),
+  'utf8',
+)
 
 describe('student renewal date card', () => {
   it('derives the card from the canonical membership end date', () => {
@@ -25,10 +29,17 @@ describe('student renewal date card', () => {
   })
 
   it('applies the renewal tone to the complete card and its label', () => {
-    expect(homeSource).toContain("red: 'border-red-200 bg-red-50/40'")
-    expect(homeSource).toContain("orange: 'border-orange-200 bg-orange-50/40'")
-    expect(homeSource).toContain('const emphasizedCard = emphasizeTone ? emphasisCardClasses[tone] :')
-    expect(homeSource).toContain('<StudentCard className={`min-h-[132px] p-4 ${emphasizedCard}`}>')
+    expect(homeSource).toContain("red: 'danger'")
+    expect(homeSource).toContain("orange: 'warning'")
+    expect(homeSource).toContain("neutral: 'neutral'")
+    expect(homeSource).toContain("const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'")
+    expect(homeSource).toContain('<StudentCard variant={cardVariant} className="min-h-[132px] p-4">')
     expect(homeSource).toContain('<p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>')
+  })
+
+  it('selects one StudentCard background variant instead of combining it with the default', () => {
+    expect(homeSource).not.toContain('emphasisCardClasses')
+    expect(homeSource).not.toContain('className={`min-h-[132px] p-4 ${emphasizedCard}`}')
+    expect(studentCardSource).toContain("neutral: 'border-slate-200 bg-slate-50 shadow-card'")
   })
 })

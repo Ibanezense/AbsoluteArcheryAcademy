@@ -305,18 +305,18 @@ function QuickMetric({
     red: 'text-red-600',
     neutral: 'text-slate-500',
   }
-  const emphasisCardClasses = {
-    orange: 'border-orange-200 bg-orange-50/40',
-    green: 'border-green-200 bg-green-50/40',
-    blue: 'border-blue-200 bg-blue-50/40',
-    red: 'border-red-200 bg-red-50/40',
-    neutral: 'border-slate-200 bg-slate-50',
-  }
+  const emphasisCardVariants = {
+    orange: 'warning',
+    green: 'success',
+    blue: 'info',
+    red: 'danger',
+    neutral: 'neutral',
+  } as const
   const emphasizedText = emphasizeTone ? emphasisClasses[tone] : ''
-  const emphasizedCard = emphasizeTone ? emphasisCardClasses[tone] : ''
+  const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'
 
   return (
-    <StudentCard className={`min-h-[132px] p-4 ${emphasizedCard}`}>
+    <StudentCard variant={cardVariant} className="min-h-[132px] p-4">
       <div className={`mb-4 grid h-10 w-10 place-items-center rounded-full ${toneClasses[tone]}`}>{icon}</div>
       <p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>
       <p className={`mt-3 text-[1.45rem] font-black leading-tight tracking-[-0.04em] ${emphasizedText || 'text-slate-950'}`}>{value}</p>
