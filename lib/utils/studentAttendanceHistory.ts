@@ -20,6 +20,31 @@ const SPANISH_MONTHS = [
   'Diciembre',
 ]
 
+type MembershipIdentity = { id: string; membership_code?: string | null; start_date: string; end_date: string | null }
+
+function formatCycleDate(value: string | null) {
+  if (!value) return 'Sin fecha final'
+  const [year, month, day] = value.split('-')
+  const shortMonths = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  return `${Number(day)} ${shortMonths[Number(month) - 1]} ${year}`
+}
+
+export function getAttendanceMembershipIdentity(membershipId: string | null | undefined, memberships: MembershipIdentity[]) {
+  const membership = memberships.find((item) => item.id === membershipId)
+  if (!membership) return { code: 'Por revisar', period: 'Sin membresía vinculada', needsReview: true }
+  return {
+    code: membership.membership_code || 'Código pendiente',
+    period: `${formatCycleDate(membership.start_date)} – ${formatCycleDate(membership.end_date)}`,
+    needsReview: false,
+  }
+}
+
+export function attendanceForMembership<T extends { active_membership_id: string | null }>(rows: T[], membershipId: string): T[] {
+  if (membershipId === 'all') return rows
+  if (membershipId === 'unlinked') return rows.filter((row) => !row.active_membership_id)
+  return rows.filter((row) => row.active_membership_id === membershipId)
+}
+
 export function formatAttendanceMembershipMonth(
   membershipId: string | null | undefined,
   memberships: Pick<StudentMembershipSummary, 'id' | 'start_date'>[],

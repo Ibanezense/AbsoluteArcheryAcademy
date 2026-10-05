@@ -74,6 +74,8 @@ import { getLimaDateKey, MEMBERSHIP_TIMEZONE } from '@/lib/utils/membershipCycle
 import {
   buildStudentAttendanceHistory,
   formatAttendanceMembershipMonth,
+  getAttendanceMembershipIdentity,
+  attendanceForMembership,
 } from '@/lib/utils/studentAttendanceHistory'
 
 type MembershipEditorState = {
@@ -1469,6 +1471,7 @@ function LegacyMembershipTab({
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200">
               <InfoRow label="Plan" value={activeMembership.custom_name} />
+              <InfoRow label="Código de membresía" value={activeMembership.membership_code || 'Código pendiente'} />
               <InfoRow label="Inicio" value={formatDate(activeMembership.start_date)} />
               <InfoRow label="Vencimiento" value={formatDate(activeMembership.end_date)} />
               <InfoRow label="Clases totales" value={activeMembership.classes_total} />
@@ -1513,7 +1516,7 @@ function LegacyMembershipTab({
                     <td className="px-4 py-4"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases</p></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.start_date)}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.end_date)}</td>
-                    <td className="whitespace-nowrap px-4 py-4 text-slate-500">MEM-{membership.id.slice(0, 8).toUpperCase()}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-500">{membership.membership_code || 'Código pendiente'}</td>
                     <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} /></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{payments.find((payment) => payment.student_membership_id === membership.id)?.payment_method || 'Sin registro'}</td>
                     <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatMoney(membership.total_amount, membership.currency)}</td>
@@ -1661,7 +1664,7 @@ function MembershipTab({
                   const availableClasses = availableClassesById[membership.id] || 0
                   return (
                     <tr key={membership.id} className="group bg-white transition hover:bg-slate-50/70">
-                      <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{availableClasses} libres de {membership.classes_remaining} restantes · {membership.classes_total} totales</p></td>
+                      <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 font-mono text-xs font-bold text-orange-700">{membership.membership_code || 'Código pendiente'}</p><p className="mt-1 text-xs text-slate-500">{availableClasses} libres de {membership.classes_remaining} restantes · {membership.classes_total} totales</p></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.start_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.end_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-mono text-xs font-black text-blue-600">{display.documentNumber}</td>
@@ -1859,13 +1862,18 @@ function AttendanceTab({
   const queryClient = useQueryClient()
   const toast = useToast()
   const [filter, setFilter] = useState<AttendanceFilter>('all')
+  const [membershipFilter, setMembershipFilter] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [reversalTarget, setReversalTarget] = useState<StudentDetailData['bookings'][number] | null>(null)
   const [reason, setReason] = useState('')
   const [isReversing, setIsReversing] = useState(false)
-  const summary = summarizeAttendance(bookings)
-  const attendanceRows = filterAttendance(bookings, filter, from, to)
+  const membershipRows = attendanceForMembership(bookings, membershipFilter)
+  const summary = summarizeAttendance(membershipRows)
+  const attendanceRows = filterAttendance(membershipRows, filter, from, to)
+  const selectedMembership = memberships.find((membership) => membership.id === membershipFilter)
+  const normalSummary = summarizeAttendance(membershipRows.filter((row) => row.credit_kind !== 'recovery'))
+  const recoverySummary = summarizeAttendance(membershipRows.filter((row) => row.credit_kind === 'recovery'))
 
   const closeReversalDialog = () => {
     if (isReversing) return
@@ -1908,12 +1916,26 @@ function AttendanceTab({
   return (
     <>
       <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
+        {selectedMembership && (
+          <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-slate-700">
+            <p className="font-black text-slate-950">{selectedMembership.membership_code} · {selectedMembership.custom_name}</p>
+            <p className="mt-1">{getAttendanceMembershipIdentity(selectedMembership.id, memberships).period}</p>
+            <p className="mt-2">Clases normales: {selectedMembership.classes_total} otorgadas · {selectedMembership.classes_used} consumidas · {selectedMembership.classes_remaining} restantes.</p>
+            <p className="mt-1">Historial: {normalSummary.attended} asistidas · {normalSummary.noShow} inasistencias. Las cancelaciones no consumen clases.</p>
+            {(recoverySummary.attended + recoverySummary.noShow > 0) && <p className="mt-1">Recuperaciones: {recoverySummary.attended} asistidas · {recoverySummary.noShow} inasistencias.</p>}
+          </div>
+        )}
         <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <AttendanceKpi label="Asistencias" value={summary.attended} tone="bg-emerald-50 text-emerald-700" />
           <AttendanceKpi label="Inasistencias" value={summary.noShow} tone="bg-rose-50 text-rose-700" />
           <AttendanceKpi label="Cancelaciones" value={summary.cancelled} tone="bg-amber-50 text-amber-700" />
         </div>
         <div className="mb-5 flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <select aria-label="Filtrar por membresía" className="min-h-11 max-w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={membershipFilter} onChange={(event) => setMembershipFilter(event.target.value)}>
+            <option value="all">Todas las membresías</option>
+            {memberships.map((membership) => <option key={membership.id} value={membership.id}>{membership.membership_code || 'Código pendiente'} · {getAttendanceMembershipIdentity(membership.id, memberships).period}</option>)}
+            <option value="unlinked">Sin membresía vinculada · Por revisar</option>
+          </select>
           <select aria-label="Filtrar asistencias" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={filter} onChange={(event) => setFilter(event.target.value as AttendanceFilter)}>
             <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias</option><option value="cancelled">Cancelaciones</option>
           </select>
@@ -1934,7 +1956,11 @@ function AttendanceTab({
                     <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td>
                     <td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td>
                     <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td>
-                    <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-700">{formatAttendanceMembershipMonth(booking.active_membership_id, memberships)}</td>
+                    <td className="whitespace-nowrap px-4 py-4 text-slate-700">
+                      <p className={`font-black ${getAttendanceMembershipIdentity(booking.active_membership_id, memberships).needsReview ? 'text-amber-700' : ''}`}>{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).code}</p>
+                      <p className="mt-1 text-xs text-slate-500">{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).period}</p>
+                      <p className="mt-1 text-xs text-slate-500">{booking.credit_kind === 'recovery' ? 'Recuperación' : 'Clase normal'}</p>
+                    </td>
                     <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(booking.status)} tone={statusTone(booking.status)} /></td>
                     <td className="max-w-xs px-4 py-4 text-slate-600">{booking.source === 'weekly' ? booking.admin_notes || 'Inasistencia semanal (jueves a domingo)' : booking.admin_notes || '-'}</td>
                     <td className="px-4 py-4">
@@ -1971,7 +1997,7 @@ function AttendanceTab({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 id="reverse-no-show-title" className="text-xl font-black text-slate-950">Revertir inasistencia</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Se devolverá una clase a la membresía {formatAttendanceMembershipMonth(reversalTarget.active_membership_id, memberships)} y el registro dejará de aparecer en el historial.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Se devolverá una clase a la membresía {getAttendanceMembershipIdentity(reversalTarget.active_membership_id, memberships).code} ({formatAttendanceMembershipMonth(reversalTarget.active_membership_id, memberships)}) y el registro dejará de aparecer en el historial.</p>
               </div>
               <button type="button" aria-label="Cerrar" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" onClick={closeReversalDialog} disabled={isReversing}><X className="h-5 w-5" /></button>
             </div>

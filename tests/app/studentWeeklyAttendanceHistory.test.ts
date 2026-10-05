@@ -7,10 +7,11 @@ const page = readFileSync(join(process.cwd(), 'app', 'admin', 'alumnos', '[id]',
 
 describe('student weekly attendance history', () => {
   it('loads weekly attendance events from the student entity', () => {
-    expect(hook).toContain(".from('student_weekly_attendance')")
+    expect(hook).toContain("loadHistory('student_weekly_attendance',")
     expect(hook).toContain(".eq('student_id', studentId)")
-    expect(hook).toContain(".select('id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')")
-    expect(hook).toContain(".order('occurrence_index', { ascending: false })")
+    expect(hook).toContain("'id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note'")
+    expect(hook).toContain('.range(offset, offset + pageSize - 1)')
+    expect(hook).toContain(".order('id', { ascending: false })")
     expect(hook).toContain('weekly_attendance:')
   })
 

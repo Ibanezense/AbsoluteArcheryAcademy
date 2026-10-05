@@ -17,6 +17,7 @@ export type StudentAccountSummary = {
 
 export type StudentMembershipSummary = {
   id: string
+  membership_code?: string | null
   membership_plan_id: string | null
   membership_origin: 'paid' | 'gift'
   assignment_batch_id: string | null
@@ -71,6 +72,7 @@ export type StudentBookingSummary = {
   id: string
   session_id: string
   active_membership_id: string | null
+  credit_kind?: 'normal' | 'recovery'
   status: string
   distance_m: number | null
   bow_usage_type: string | null
@@ -178,6 +180,20 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
     queryKey: [...studentKeys.detail(studentId), serviceDate],
     enabled: !!studentId,
     queryFn: async (): Promise<StudentDetailData> => {
+      // Fetch every event so an older cycle's summary is never truncated at 250 rows.
+      const loadHistory = async (table: string, columns: string, orderColumn: string) => {
+        const rows: any[] = []
+        const pageSize = 500
+        for (let offset = 0; ; offset += pageSize) {
+          const { data, error } = await supabase.from(table).select(columns)
+            .eq('student_id', studentId).order(orderColumn, { ascending: false })
+            .order('id', { ascending: false }).range(offset, offset + pageSize - 1)
+          if (error) throw error
+          rows.push(...(data || []))
+          if ((data || []).length < pageSize) break
+        }
+        return { data: rows, error: null }
+      }
       const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }] =
         await Promise.all([
           supabase
@@ -234,6 +250,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
               ),
               memberships:student_memberships (
                 id,
+                membership_code,
                 membership_plan_id,
                 membership_origin,
                 assignment_batch_id,
@@ -273,33 +290,17 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
+          loadHistory('bookings', 'id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)', 'created_at'),
           supabase
             .from('bookings')
-            .select('id,session_id,active_membership_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)')
-            .eq('student_id', studentId)
-            .order('created_at', { ascending: false })
-            .limit(250),
-          supabase
-            .from('bookings')
-            .select('id,session_id,active_membership_id,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions!inner(start_at,end_at)')
+            .select('id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions!inner(start_at,end_at)')
             .eq('student_id', studentId)
             .eq('status', 'reserved')
             .gt('sessions.start_at', new Date().toISOString())
             .order('start_at', { referencedTable: 'sessions', ascending: true }),
           supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
-          supabase
-            .from('student_weekly_attendance')
-            .select('id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note')
-            .eq('student_id', studentId)
-            .order('week_end', { ascending: false })
-            .order('occurrence_index', { ascending: false })
-            .limit(250),
-          supabase
-            .from('attendance_reversals')
-            .select('id,booking_id,weekly_attendance_id')
-            .eq('student_id', studentId)
-            .order('reversed_at', { ascending: false })
-            .limit(250),
+          loadHistory('student_weekly_attendance', 'id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note', 'week_end'),
+          loadHistory('attendance_reversals', 'id,booking_id,weekly_attendance_id', 'reversed_at'),
         ])
 
       if (studentError) throw studentError
@@ -413,6 +414,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           id: booking.id,
           session_id: booking.session_id,
           active_membership_id: booking.active_membership_id || null,
+          credit_kind: booking.credit_kind || 'normal',
           status: booking.status,
           distance_m: booking.distance_m,
           bow_usage_type: booking.bow_usage_type,
