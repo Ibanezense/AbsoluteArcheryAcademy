@@ -448,8 +448,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                         id="booking-date"
                         type="date"
                         value={selectedDate}
-                        min={dateRange.fromDate}
-                        max={dateRange.toDate}
+                        min={dateRange.minDate}
                         onChange={(event) => {
                           setSelectedDate(event.target.value)
                           setSelectedSession('')
@@ -464,7 +463,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    Puedes revisar disponibilidad dentro del mes seleccionado. El backend sigue respetando las validaciones reales.
+                    Puedes elegir fechas de otros meses. Los turnos se actualizan según la fecha elegida; la reserva requiere una membresía vigente ese día.
                   </p>
                 </section>
 

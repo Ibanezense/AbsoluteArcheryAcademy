@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
 describe('reservations from the student profile', () => {
+  it('allows changing months directly in the date picker', () => {
+    const modal = readFileSync('components/AdminQuickBooking.tsx', 'utf8')
+    expect(modal.includes('min={dateRange.minDate}')).toBe(true)
+    expect(modal.includes('max={dateRange.toDate}')).toBe(false)
+  })
   it('opens the existing admin booking flow locked to this student and refreshes the profile', () => {
     const profile = readFileSync('app/admin/alumnos/[id]/page.tsx', 'utf8')
     expect(profile).toContain('Agregar reserva')
