@@ -34,6 +34,7 @@ import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisu
 import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admin/AdminOperationalComponents'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
+import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
@@ -474,6 +475,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [assignmentOpen, setAssignmentOpen] = useState(false)
   const [assignmentForm, setAssignmentForm] = useState<MembershipAssignmentFormState>(emptyMembershipAssignment)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
+  const [bookingOpen, setBookingOpen] = useState(false)
 
   const upcomingBookings = useMemo(() => (data?.bookings || [])
     .filter((booking) => booking.status === 'reserved' && booking.start_at && dayjs(booking.start_at).isAfter(boundaryClock))
@@ -1167,7 +1169,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         />
       )}
 
-      {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} />}
+      {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} onAdd={() => setBookingOpen(true)} />}
+      <AdminQuickBooking isOpen={bookingOpen} onClose={() => setBookingOpen(false)} studentId={data.id} onBooked={refreshStudentData} />
       {activeTab === 'attendance' && (
         <AttendanceTab
           bookings={buildStudentAttendanceHistory(
@@ -1821,11 +1824,13 @@ function EditorInput({ label, value, onChange, type = 'text' }: { label: string;
   )
 }
 
-function BookingsTab({ bookings }: { bookings: StudentDetailData['bookings'] }) {
+function BookingsTab({ bookings, onAdd }: { bookings: StudentDetailData['bookings']; onAdd: () => void }) {
   const pendingBookings = selectPendingBookings(bookings)
 
   return (
-    <SectionShell title="Reservas" description="Reservas activas que aún no se convirtieron en asistencia, cancelación o inasistencia.">
+    <SectionShell title="Reservas" description="Reservas activas que aún no se convirtieron en asistencia, cancelación o inasistencia." action={
+      <button type="button" onClick={onAdd} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-bold text-white"><Plus className="h-4 w-4" />Agregar reserva</button>
+    }>
       {pendingBookings.length === 0 ? (
         <EmptyOperationalState title="Sin reservas pendientes" description="No hay reservas activas para este alumno." />
       ) : (

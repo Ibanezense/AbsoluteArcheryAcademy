@@ -1,3 +1,14 @@
+import { getLimaDateKey } from './membershipCycles'
+
+export function groupAdminBookingSessions<T extends { start_at: string }>(sessions: T[]) {
+  const grouped: Record<string, T[]> = {}
+  for (const session of sessions) {
+    const day = getLimaDateKey(new Date(session.start_at))
+    ;(grouped[day] ||= []).push(session)
+  }
+  return grouped
+}
+
 export type QuickBookingStudent = {
   id: string
   full_name: string

@@ -5,7 +5,8 @@ import Avatar from '@/components/ui/Avatar'
 import { useAdminBookSession, useAdminStudents, type AdminStudent } from '@/lib/adminBookingQueries'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
-import { getAdminQuickBookingDateRange, getQuickBookingStudentOptions } from '@/lib/utils/adminQuickBooking'
+import { getAdminQuickBookingDateRange, getQuickBookingStudentOptions, groupAdminBookingSessions } from '@/lib/utils/adminQuickBooking'
+import { getLimaDateKey } from '@/lib/utils/membershipCycles'
 import {
   AlertTriangle,
   CalendarDays,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 
 type AvailableSession = {
+  location_name?: string
   session_id: string
   start_at: string
   end_at: string
@@ -37,6 +39,8 @@ type AvailableSession = {
 type Props = {
   isOpen: boolean
   onClose: () => void
+  studentId?: string
+  onBooked?: () => Promise<void>
 }
 
 type AlertItem = {
@@ -45,11 +49,7 @@ type AlertItem = {
 }
 
 function todayLocalValue() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return getLimaDateKey(new Date())
 }
 
 function formatDateLabel(value?: string | null) {
@@ -148,7 +148,7 @@ function AlertIcon({ tone }: { tone: AlertItem['tone'] }) {
   return <AlertTriangle className="h-4 w-4" />
 }
 
-export default function AdminQuickBooking({ isOpen, onClose }: Props) {
+export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked }: Props) {
   const [selectedStudent, setSelectedStudent] = useState('')
   const [selectedDate, setSelectedDate] = useState(todayLocalValue)
   const [studentSearch, setStudentSearch] = useState('')
@@ -165,8 +165,8 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
   const selectedMonth = selectedDate.slice(0, 7)
 
   const availableStudents = useMemo(
-    () => getQuickBookingStudentOptions(students, studentSearch, 10),
-    [studentSearch, students],
+    () => studentId ? students.filter((student) => student.id === studentId) : getQuickBookingStudentOptions(students, studentSearch, 10),
+    [studentId, studentSearch, students],
   )
 
   const selectedStudentData = students.find((student) => student.id === selectedStudent) || null
@@ -174,14 +174,14 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
   useEffect(() => {
     if (!isOpen) return
 
-    setSelectedStudent('')
+    setSelectedStudent(studentId || '')
     setSelectedDate(todayLocalValue())
     setStudentSearch('')
     setSelectedSession('')
     setAdminNotes('')
     setForceBooking(false)
     setSessions([])
-  }, [isOpen])
+  }, [isOpen, studentId])
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -205,7 +205,15 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
 
         if (error) throw error
 
-        setSessions((data || []) as AvailableSession[])
+        const available = (data || []) as AvailableSession[]
+        if (available.length > 0) {
+          const { data: locations, error: locationError } = await supabase.from('sessions')
+            .select('id, location:academy_locations(name)')
+            .in('id', available.map((session) => session.session_id))
+          if (locationError) throw locationError
+          const names = new Map((locations || []).map((row: any) => [row.id, row.location?.name]))
+          setSessions(available.map((session) => ({ ...session, location_name: names.get(session.session_id) })))
+        } else setSessions([])
       } catch (loadError) {
         console.error('Error loading available sessions for admin booking:', loadError)
         setSessions([])
@@ -217,17 +225,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
     void loadSessions()
   }, [dateRange.fromDate, dateRange.toDate, selectedStudent])
 
-  const sessionsByDate = useMemo(() => {
-    const grouped: Record<string, AvailableSession[]> = {}
-
-    sessions.forEach((session) => {
-      const dateKey = session.start_at.slice(0, 10)
-      if (!grouped[dateKey]) grouped[dateKey] = []
-      grouped[dateKey].push(session)
-    })
-
-    return grouped
-  }, [sessions])
+  const sessionsByDate = useMemo(() => groupAdminBookingSessions(sessions), [sessions])
 
   const sessionsForSelectedDate = useMemo(
     () => sessionsByDate[selectedDate] || [],
@@ -316,6 +314,11 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
 
       toast.push({ message: 'Reserva creada correctamente.', type: 'success' })
       onClose()
+      try {
+        await onBooked?.()
+      } catch {
+        toast.push({ message: 'La reserva se guardó. No se pudo actualizar el perfil; vuelve a abrirlo.', type: 'error' })
+      }
     } catch (error: any) {
       toast.push({ message: error?.message || 'No se pudo crear la reserva.', type: 'error' })
     }
@@ -360,7 +363,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
               <div className="space-y-6">
                 <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                   <p className="text-lg font-black tracking-[-0.02em] text-slate-950">1. Alumno</p>
-                  <div className="relative mt-4">
+                  {!studentId && <div className="relative mt-4">
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       id="student-search"
@@ -371,7 +374,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
                       placeholder="Buscar por nombre, DNI o telefono"
                       disabled={studentsLoading}
                     />
-                  </div>
+                  </div>}
 
                   <div className="mt-4 grid gap-3">
                     {availableStudents.map((student) => {
@@ -381,6 +384,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
                         <button
                           key={student.id}
                           type="button"
+                          disabled={Boolean(studentId)}
                           onClick={() => {
                             setSelectedStudent(student.id)
                             setSelectedSession('')
@@ -502,6 +506,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
                           </div>
 
                           <div className="mt-4 space-y-2 text-sm text-slate-600">
+                            <p className="font-bold text-slate-950">{session.location_name || 'Sede no disponible'}</p>
                             <div className="flex items-center justify-between">
                               <span>disponibilidad libre segun el equipo del alumno</span>
                               <span className="font-semibold text-slate-950">{equipmentAvailabilityText(session)}</span>
@@ -577,6 +582,7 @@ export default function AdminQuickBooking({ isOpen, onClose }: Props) {
                     <SummaryRow icon={<CalendarDays className="h-4 w-4" />} label="Clases disponibles" value={selectedStudentData ? `${selectedStudentData.classes_remaining} clases` : 'Sin dato'} />
                     <SummaryRow icon={<CalendarDays className="h-4 w-4" />} label="Fecha" value={formatDateLabel(selectedDate)} />
                     <SummaryRow icon={<Clock3 className="h-4 w-4" />} label="Turno" value={selectedSessionData ? formatTimeRange(selectedSessionData.start_at, selectedSessionData.end_at) : 'Por seleccionar'} />
+                    <SummaryRow icon={<Target className="h-4 w-4" />} label="Sede" value={selectedSessionData?.location_name || 'Por seleccionar'} />
                     <SummaryRow icon={<Target className="h-4 w-4" />} label="Distancia" value={selectedSessionData ? `${selectedSessionData.distance_m} m` : (selectedStudentData?.distance_m ? `${selectedStudentData.distance_m} m` : 'Sin definir')} />
                     <SummaryRow icon={<ShieldAlert className="h-4 w-4" />} label="Equipo" value={selectedStudentData ? equipmentLabel(selectedStudentData) : 'Sin definir'} />
                   </div>
