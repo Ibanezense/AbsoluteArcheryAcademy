@@ -184,8 +184,9 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
   }, [isOpen, studentId])
 
   useEffect(() => {
+    let current = true
     const loadSessions = async () => {
-      if (!selectedStudent) {
+      if (!isOpen || !selectedStudent) {
         setSessions([])
         return
       }
@@ -212,18 +213,19 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
             .in('id', available.map((session) => session.session_id))
           if (locationError) throw locationError
           const names = new Map((locations || []).map((row: any) => [row.id, row.location?.name]))
-          setSessions(available.map((session) => ({ ...session, location_name: names.get(session.session_id) })))
-        } else setSessions([])
+          if (current) setSessions(available.map((session) => ({ ...session, location_name: names.get(session.session_id) })))
+        } else if (current) setSessions([])
       } catch (loadError) {
         console.error('Error loading available sessions for admin booking:', loadError)
-        setSessions([])
+        if (current) setSessions([])
       } finally {
-        setSessionsLoading(false)
+        if (current) setSessionsLoading(false)
       }
     }
 
     void loadSessions()
-  }, [dateRange.fromDate, dateRange.toDate, selectedStudent])
+    return () => { current = false }
+  }, [dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen])
 
   const sessionsByDate = useMemo(() => groupAdminBookingSessions(sessions), [sessions])
 

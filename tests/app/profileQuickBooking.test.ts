@@ -15,4 +15,8 @@ describe('reservations from the student profile', () => {
     expect(modal).toContain('disabled={Boolean(studentId)}')
     expect(modal).toContain('await onBooked?.()')
   })
+  it('reloads sessions whenever the profile booking dialog is reopened', () => {
+    const modal = readFileSync('components/AdminQuickBooking.tsx', 'utf8')
+    expect(modal.includes('[dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen]')).toBe(true)
+  })
 })
