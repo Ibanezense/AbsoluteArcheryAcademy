@@ -17,7 +17,7 @@ describe('admin students compact list', () => {
     expect(page).toContain('Teléfono')
     expect(page).toContain('Membresía')
     expect(page).toContain('Última asistencia')
-    expect(page).toContain('Fecha de ingreso')
+    expect(page).toContain('Vencimiento de membresía')
   })
 
   it('uses one search field and the five approved visible status filters', () => {

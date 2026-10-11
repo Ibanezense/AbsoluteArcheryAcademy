@@ -70,7 +70,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-PE', {
 
 function formatDate(value: string | null) {
   if (!value) return null
-  const date = new Date(value)
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00-05:00` : value)
   return Number.isNaN(date.getTime()) ? null : dateFormatter.format(date)
 }
 
@@ -125,7 +125,7 @@ function DesktopStudentTable({
             <th className="w-[14%] px-4 py-3.5">Teléfono</th>
             <th className="w-[20%] px-4 py-3.5">Membresía</th>
             <th className="w-[15%] px-4 py-3.5">Última asistencia</th>
-            <th className="w-[15%] px-4 py-3.5">Fecha de ingreso</th>
+            <th className="w-[15%] px-4 py-3.5">Vencimiento de membresía</th>
             <th className="w-[8%] px-4 py-3.5 text-right">
               <span className="sr-only">Acciones</span>
             </th>
@@ -134,7 +134,7 @@ function DesktopStudentTable({
         <tbody className="divide-y divide-slate-100">
           {students.map((student) => {
             const lastAttendance = formatDate(student.last_attendance_at)
-            const enrollmentDate = formatDate(student.created_at)
+            const membershipEnd = formatDate(student.membership_end)
 
             return (
               <tr key={student.id} className="group bg-white transition-colors hover:bg-orange-50/35">
@@ -179,7 +179,7 @@ function DesktopStudentTable({
                   </span>
                 </td>
                 <td className="px-4 py-4 align-middle text-sm">
-                  <span className="font-semibold text-slate-700">{enrollmentDate || 'Sin fecha'}</span>
+                  <span className="font-semibold text-slate-700">{membershipEnd || 'Sin vencimiento'}</span>
                 </td>
                 <td className="px-4 py-4 align-middle">
                   <div className="flex items-center justify-end gap-1">
@@ -221,7 +221,7 @@ function MobileStudentList({
     <div className="divide-y divide-slate-100 md:hidden">
       {students.map((student) => {
         const lastAttendance = formatDate(student.last_attendance_at)
-        const enrollmentDate = formatDate(student.created_at)
+        const membershipEnd = formatDate(student.membership_end)
 
         return (
           <article key={student.id} className="bg-white p-4">
@@ -246,7 +246,7 @@ function MobileStudentList({
                   : student.membership_name || 'Sin membresía'}
               />
               <MobileDetail label="Última asistencia" value={lastAttendance || 'Sin asistencias'} />
-              <MobileDetail label="Fecha de ingreso" value={enrollmentDate || 'Sin fecha'} />
+              <MobileDetail label="Vencimiento de membresía" value={membershipEnd || 'Sin vencimiento'} />
             </dl>
 
             <MembershipRenewalAlertAction
