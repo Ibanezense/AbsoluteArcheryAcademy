@@ -227,6 +227,7 @@ function statusLabel(status: string | null | undefined) {
     reserved: 'Confirmada',
     attended: 'Asistió',
     no_show: 'No asistió',
+    expired_unattended: 'No asistida · No recuperable',
     paid: 'Pagado',
     pending: 'Pendiente',
     late: 'Atrasado',
@@ -243,7 +244,7 @@ function statusLabel(status: string | null | undefined) {
 function statusTone(status: string | null | undefined): BadgeTone {
   if (status === 'active' || status === 'current' || status === 'attended' || status === 'paid') return 'success'
   if (status === 'reserved' || status === 'pending' || status === 'draft' || status === 'expiring' || status === 'queued' || status === 'scheduled') return 'warning'
-  if (status === 'no_show' || status === 'late' || status === 'expired' || status === 'inactive' || status === 'consumed' || status === 'blocked' || status === 'suspended') return 'danger'
+  if (status === 'no_show' || status === 'expired_unattended' || status === 'late' || status === 'expired' || status === 'inactive' || status === 'consumed' || status === 'blocked' || status === 'suspended') return 'danger'
   if (status === 'waived') return 'info'
   return 'neutral'
 }
@@ -1177,6 +1178,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
             data.bookings,
             data.weekly_attendance,
             data.attendance_reversals,
+            data.class_expirations,
           )}
           memberships={data.memberships}
           refreshStudentData={refreshStudentData}
@@ -1876,6 +1878,7 @@ function AttendanceTab({
   const membershipRows = attendanceForMembership(bookings, membershipFilter)
   const summary = summarizeAttendance(membershipRows)
   const attendanceRows = filterAttendance(membershipRows, filter, from, to)
+  const expiredClassCount = membershipRows.filter((row) => row.status === 'expired_unattended').length
   const selectedMembership = memberships.find((membership) => membership.id === membershipFilter)
   const normalSummary = summarizeAttendance(membershipRows.filter((row) => row.credit_kind !== 'recovery'))
   const recoverySummary = summarizeAttendance(membershipRows.filter((row) => row.credit_kind === 'recovery'))
@@ -1927,6 +1930,7 @@ function AttendanceTab({
             <p className="mt-1">{getAttendanceMembershipIdentity(selectedMembership.id, memberships).period}</p>
             <p className="mt-2">Clases normales: {selectedMembership.classes_total} otorgadas · {selectedMembership.classes_used} consumidas · {selectedMembership.classes_remaining} restantes.</p>
             <p className="mt-1">Historial: {normalSummary.attended} asistidas · {normalSummary.noShow} inasistencias. Las cancelaciones no consumen clases.</p>
+            {expiredClassCount > 0 && <p className="mt-1 font-bold text-rose-700">{expiredClassCount} clases no asistidas y no recuperables por vencimiento.</p>}
             {(recoverySummary.attended + recoverySummary.noShow > 0) && <p className="mt-1">Recuperaciones: {recoverySummary.attended} asistidas · {recoverySummary.noShow} inasistencias.</p>}
           </div>
         )}
@@ -1942,7 +1946,7 @@ function AttendanceTab({
             <option value="unlinked">Sin membresía vinculada · Por revisar</option>
           </select>
           <select aria-label="Filtrar asistencias" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={filter} onChange={(event) => setFilter(event.target.value as AttendanceFilter)}>
-            <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias</option><option value="cancelled">Cancelaciones</option>
+            <option value="all">Todos los resultados</option><option value="attended">Asistencias</option><option value="no_show">Inasistencias anteriores</option><option value="cancelled">Cancelaciones</option><option value="expired_unattended">No asistidas · No recuperables</option>
           </select>
           <input aria-label="Fecha inicial" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={from} onChange={(event) => setFrom(event.target.value)} />
           <input aria-label="Fecha final" type="date" className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700" value={to} onChange={(event) => setTo(event.target.value)} />
@@ -1959,7 +1963,7 @@ function AttendanceTab({
                 {attendanceRows.map((booking) => (
                   <tr key={booking.id} className="bg-white">
                     <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td>
-                    <td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td>
+                    <td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' || booking.source === 'expiry' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td>
                     <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-700">
                       <p className={`font-black ${getAttendanceMembershipIdentity(booking.active_membership_id, memberships).needsReview ? 'text-amber-700' : ''}`}>{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).code}</p>

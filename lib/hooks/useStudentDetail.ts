@@ -80,7 +80,7 @@ export type StudentBookingSummary = {
   admin_notes: string | null
   start_at: string | null
   end_at: string | null
-  source?: 'booking' | 'weekly'
+  source?: 'booking' | 'weekly' | 'expiry'
   source_event_id?: string
   occurrence_index?: number
   note?: string | null
@@ -102,6 +102,15 @@ export type StudentAttendanceReversalSummary = {
   id: string
   booking_id: string | null
   weekly_attendance_id: string | null
+}
+
+export type StudentClassExpirationSummary = {
+  id: string
+  student_id: string
+  student_membership_id: string
+  normal_classes: number
+  recovery_classes: number
+  expired_at: string
 }
 
 export type StudentDetailData = {
@@ -147,6 +156,7 @@ export type StudentDetailData = {
   bookings: StudentBookingSummary[]
   weekly_attendance: StudentWeeklyAttendanceSummary[]
   attendance_reversals: StudentAttendanceReversalSummary[]
+  class_expirations: StudentClassExpirationSummary[]
 }
 
 function sortMemberships(memberships: StudentMembershipSummary[]) {
@@ -194,7 +204,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
         }
         return { data: rows, error: null }
       }
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }, { data: classExpirations, error: classExpirationsError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -301,6 +311,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: studentId }),
           loadHistory('student_weekly_attendance', 'id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note', 'week_end'),
           loadHistory('attendance_reversals', 'id,booking_id,weekly_attendance_id', 'reversed_at'),
+          loadHistory('membership_class_expirations', 'id,student_id,student_membership_id,normal_classes,recovery_classes,expired_at', 'expired_at'),
         ])
 
       if (studentError) throw studentError
@@ -311,6 +322,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       if (commitmentsError) throw commitmentsError
       if (weeklyAttendanceError) throw weeklyAttendanceError
       if (attendanceReversalsError) throw attendanceReversalsError
+      if (classExpirationsError) throw classExpirationsError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
@@ -427,6 +439,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
         })),
         weekly_attendance: (weeklyAttendance || []) as StudentWeeklyAttendanceSummary[],
         attendance_reversals: (attendanceReversals || []) as StudentAttendanceReversalSummary[],
+        class_expirations: (classExpirations || []) as StudentClassExpirationSummary[],
       }
     },
   })

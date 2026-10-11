@@ -20,7 +20,7 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
 
-type HistoryFilter = 'all' | 'attended' | 'cancelled' | 'no_show'
+type HistoryFilter = 'all' | 'attended' | 'cancelled' | 'no_show' | 'expired_unattended'
 
 export default function MembresiasPage() {
   const router = useRouter()
@@ -191,6 +191,7 @@ export default function MembresiasPage() {
               <FilterButton label="Asistidas" active={filter === 'attended'} onClick={() => setFilter('attended')} />
               <FilterButton label="Canceladas" active={filter === 'cancelled'} onClick={() => setFilter('cancelled')} />
               <FilterButton label="No asistió" active={filter === 'no_show'} onClick={() => setFilter('no_show')} />
+              <FilterButton label="No recuperables" active={filter === 'expired_unattended'} onClick={() => setFilter('expired_unattended')} />
             </div>
 
             <StudentCard className="divide-y divide-line overflow-hidden">
@@ -270,6 +271,19 @@ function FilterButton({ label, active, onClick }: { label: string; active: boole
 }
 
 function HistoryRow({ booking }: { booking: BookingHistoryItem }) {
+  if (booking.event_source !== 'booking') {
+    return (
+      <div className="flex items-center gap-3 p-4">
+        <CalendarClock className="h-5 w-5 shrink-0 text-textsec" />
+        <div className="min-w-0 flex-1">
+          <p className="font-black">{formatDateOnly(booking.start_at)}</p>
+          <p className="text-xs text-textsec">{booking.membership_code || 'Membresía anterior'}</p>
+          <p className="mt-1 text-xs text-textsec">{booking.note}</p>
+        </div>
+        <StatusBadge status={booking.status} />
+      </div>
+    )
+  }
   return (
     <Link href={`/reserva/${booking.booking_id}`} className="flex items-center gap-3 p-4 transition hover:bg-slate-50">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600">

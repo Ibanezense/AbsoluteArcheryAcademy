@@ -20,6 +20,7 @@ import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'
+import { formatDateOnly } from '@/lib/utils/dateUtils'
 
 function StudentHomeContent() {
   const router = useRouter()
@@ -252,16 +253,16 @@ function StudentHomeContent() {
             {recentHistory.map((booking) => (
               <Link
                 key={booking.booking_id}
-                href={`/reserva/${booking.booking_id}`}
+                href={booking.event_source === 'booking' ? `/reserva/${booking.booking_id}` : '/membresias'}
                 className="flex items-center gap-3 p-4 transition hover:bg-slate-50"
               >
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600">
                   <CalendarClock className="h-5 w-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold">{dayjs(booking.start_at).format('ddd, D MMM, YYYY')}</p>
+                  <p className="truncate font-bold">{booking.event_source === 'booking' ? dayjs(booking.start_at).format('ddd, D MMM, YYYY') : formatDateOnly(booking.start_at)}</p>
                   <p className="truncate text-xs font-medium text-textsec">
-                    {dayjs(booking.start_at).format('HH:mm')}
+                    {booking.event_source === 'booking' ? dayjs(booking.start_at).format('HH:mm') : booking.membership_code}
                     {booking.distance_m ? ` · ${booking.distance_m}m` : ''}
                   </p>
                 </div>

@@ -5,6 +5,27 @@ import {
 } from './studentAttendanceHistory'
 
 describe('buildStudentAttendanceHistory', () => {
+  it('shows every expired credit with its original membership and no fictitious session', () => {
+    const rows = buildStudentAttendanceHistory([], [], [], [{
+      id: 'expiry-1', student_id: 'student-1', student_membership_id: 'cycle-1',
+      normal_classes: 2, recovery_classes: 1, expired_at: '2026-11-01T05:00:00Z',
+    }])
+    expect(rows).toHaveLength(3)
+    expect(new Set(rows.map((row) => row.id)).size).toBe(3)
+    expect(rows.every((row) => row.status === 'expired_unattended' && row.source === 'expiry')).toBe(true)
+    expect(rows.every((row) => row.active_membership_id === 'cycle-1' && row.session_id === '')).toBe(true)
+    expect(rows.filter((row) => row.credit_kind === 'recovery')).toHaveLength(1)
+    expect(rows[0].admin_notes).toContain('No recuperable')
+    expect(rows[0].start_at).toBe('2026-10-31')
+  })
+  it('never allows old reversals to hide expired credits', () => {
+    const rows = buildStudentAttendanceHistory([], [], [{ id: 'reversal', booking_id: 'expiry-1', weekly_attendance_id: null }], [{
+      id: 'expiry-1', student_id: 'student-1', student_membership_id: 'cycle-1',
+      normal_classes: 1, recovery_classes: 0, expired_at: '2026-11-01T05:00:00Z',
+    }])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].status).toBe('expired_unattended')
+  })
   it('combines booking attendance and weekly no-shows in reverse chronological order', () => {
     const rows = buildStudentAttendanceHistory(
       [

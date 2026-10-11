@@ -17,6 +17,12 @@ const bookings = [
 ] as any[]
 
 describe('student profile selectors', () => {
+  it('includes expired non-recoverable classes in history without counting them as attended', () => {
+    const expired = { id: 'expired', status: 'expired_unattended', start_at: '2026-10-31T23:59:59-05:00' } as any
+    expect(filterAttendance([...bookings, expired], 'all').map((row) => row.id)).toContain('expired')
+    expect(filterAttendance([expired], 'expired_unattended')).toEqual([expired])
+    expect(summarizeAttendance([expired]).attended).toBe(0)
+  })
   it('summarizes attendance outcomes', () => {
     expect(summarizeAttendance(bookings)).toEqual({ attended: 1, noShow: 1, cancelled: 1 })
   })

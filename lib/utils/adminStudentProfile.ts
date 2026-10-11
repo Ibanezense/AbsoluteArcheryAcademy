@@ -1,10 +1,10 @@
 import dayjs from 'dayjs'
 import type { StudentBookingSummary, StudentPaymentSummary } from '@/lib/hooks/useStudentDetail'
 
-export type AttendanceFilter = 'all' | 'attended' | 'no_show' | 'cancelled'
+export type AttendanceFilter = 'all' | 'attended' | 'no_show' | 'cancelled' | 'expired_unattended'
 export type StudentBowUsageType = 'own' | 'assigned' | 'academy'
 
-const ATTENDANCE_STATUSES = new Set(['attended', 'no_show', 'cancelled'])
+const ATTENDANCE_STATUSES = new Set(['attended', 'no_show', 'cancelled', 'expired_unattended'])
 
 export function getBowFlags(type: StudentBowUsageType) {
   return {

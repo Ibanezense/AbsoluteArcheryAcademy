@@ -306,7 +306,6 @@ export function AttendanceStudentRow({
   canEdit = true,
   editDisabledReason,
   onAttended,
-  onNoShow,
   onEdit,
   onCancel,
 }: {
@@ -322,7 +321,6 @@ export function AttendanceStudentRow({
   canEdit?: boolean
   editDisabledReason?: string | null
   onAttended: () => void
-  onNoShow: () => void
   onEdit: () => void
   onCancel: () => void
 }) {
@@ -364,7 +362,7 @@ export function AttendanceStudentRow({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[29rem]">
+      <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[24rem]">
         <button
           type="button"
           onClick={onAttended}
@@ -372,14 +370,6 @@ export function AttendanceStudentRow({
           className="min-h-11 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isProcessing ? '...' : 'Asistio'}
-        </button>
-        <button
-          type="button"
-          onClick={onNoShow}
-          disabled={isProcessing || !isReserved}
-          className="min-h-11 rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isProcessing ? '...' : 'No asistio'}
         </button>
         <button
           type="button"

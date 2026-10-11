@@ -7,6 +7,10 @@ export type BookingHistoryItem = {
   status: string
   distance_m: number | null
   bow_usage_type: string | null
+  student_membership_id: string | null
+  membership_code: string | null
+  note: string | null
+  event_source: 'booking' | 'weekly' | 'expiry'
 }
 
 const PAGE_SIZE = 10
@@ -32,7 +36,7 @@ export function useBookingHistory(studentId?: string | null) {
     setError(null)
 
     try {
-      const { data, error: rpcError } = await supabase.rpc('get_my_booking_history_paginated', {
+      const { data, error: rpcError } = await supabase.rpc('get_student_attendance_history', {
         page_number: page,
         page_size: PAGE_SIZE,
         p_student_id: studentId,

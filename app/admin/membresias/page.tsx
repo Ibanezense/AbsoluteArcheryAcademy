@@ -662,30 +662,10 @@ function MembershipSaleForm({
                 })}
               </div>
             </div>
-            <div className="grid content-start gap-3">
-              <label className="grid gap-2">
-                <span className="text-sm font-black text-slate-950">Clases de recuperación del ciclo anterior</span>
-                <input type="number" min={0} step={1} value={form.recovery_classes} onChange={(event) => onPatch({ recovery_classes: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm" />
-              </label>
-              {Number(form.recovery_classes || 0) > 0 && (
-                <>
-                  <label className="grid gap-2">
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Ciclo anterior de referencia</span>
-                    <select value={form.source_membership_id} onChange={(event) => onPatch({ source_membership_id: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm">
-                      <option value="">Sin ciclo específico</option>
-                      {currentMembership && <option value={currentMembership.id}>{currentMembership.custom_name} · vence {formatDate(currentMembership.end_date)}</option>}
-                    </select>
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Motivo obligatorio</span>
-                    <textarea value={form.recovery_reason} onChange={(event) => onPatch({ recovery_reason: event.target.value })} className="min-h-20 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" placeholder="Ej.: clase pendiente del ciclo anterior" />
-                  </label>
-                </>
-              )}
-            </div>
           </div>
         )}
 
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Las clases pendientes vencen al finalizar el periodo y no se recuperan.</p>
         <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
           <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-black text-slate-950">
@@ -703,7 +683,7 @@ function MembershipSaleForm({
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-black text-slate-950">Ciclo {cycle.cycleNumber} · {cycle.origin === 'gift' ? 'Obsequio' : 'Membresia pagada'}</p>
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-accent">
-                        {cycle.classes} normales{cycle.cycleNumber === 1 && Number(form.recovery_classes || 0) > 0 ? ` + ${form.recovery_classes} recuperación` : ''}
+                        {cycle.classes} clases
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">{formatDate(cycle.startDate)} — {formatDate(cycle.endDate)} · {formatMoney(cycle.amount, selectedPlan?.currency)}</p>
@@ -1919,9 +1899,6 @@ export default function AdminMembershipsPage() {
           discountType: assignmentForm.discount_type,
           discountValue: normalizedDiscountValue,
           fixedTemplateIds: assignmentForm.fixed_template_ids,
-          recoveryClasses: Number(assignmentForm.recovery_classes || 0),
-          recoveryReason: assignmentForm.recovery_reason.trim() || undefined,
-          sourceMembershipId: assignmentForm.source_membership_id || undefined,
         })
 
       toast.push({ message: 'Membresia creada correctamente.', type: 'success' })

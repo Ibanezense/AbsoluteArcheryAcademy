@@ -1,9 +1,11 @@
 import type {
   StudentAttendanceReversalSummary,
+  StudentClassExpirationSummary,
   StudentBookingSummary,
   StudentMembershipSummary,
   StudentWeeklyAttendanceSummary,
 } from '@/lib/hooks/useStudentDetail'
+import { getLimaDateKey } from '@/lib/utils/membershipCycles'
 
 const SPANISH_MONTHS = [
   'Enero',
@@ -60,6 +62,7 @@ export function buildStudentAttendanceHistory(
   bookings: StudentBookingSummary[],
   weeklyAttendance: StudentWeeklyAttendanceSummary[],
   reversals: StudentAttendanceReversalSummary[] = [],
+  expirations: StudentClassExpirationSummary[] = [],
 ): StudentBookingSummary[] {
   const legacyWeeklyNote = 'Inasistencia semanal (jueves a domingo)'
   const reversedBookingIds = new Set(
@@ -94,7 +97,27 @@ export function buildStudentAttendanceHistory(
     note: event.note,
     }))
 
-  return [...bookingRows, ...weeklyRows].sort((left, right) => {
+  const expiredRows: StudentBookingSummary[] = expirations.flatMap((event) =>
+    Array.from({ length: event.normal_classes + event.recovery_classes }, (_, index) => ({
+      id: `expiry-${event.id}-${index + 1}`,
+      session_id: '',
+      active_membership_id: event.student_membership_id,
+      credit_kind: index < event.normal_classes ? 'normal' as const : 'recovery' as const,
+      status: 'expired_unattended',
+      distance_m: null,
+      bow_usage_type: null,
+      bow_poundage: null,
+      admin_notes: 'No recuperable. Clase pendiente al finalizar el periodo de membresía.',
+      // Show the last valid day of the cycle, not a fictitious session time.
+      start_at: getLimaDateKey(new Date(new Date(event.expired_at).getTime() - 1000)),
+      end_at: null,
+      source: 'expiry' as const,
+      source_event_id: event.id,
+      occurrence_index: index + 1,
+    })),
+  )
+
+  return [...bookingRows, ...weeklyRows, ...expiredRows].sort((left, right) => {
     const leftTime = left.start_at ? new Date(left.start_at).getTime() : 0
     const rightTime = right.start_at ? new Date(right.start_at).getTime() : 0
     const chronologicalOrder = rightTime - leftTime
