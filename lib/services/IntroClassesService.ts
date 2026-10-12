@@ -1,4 +1,15 @@
 import { supabase } from '@/lib/supabaseClient';
+import type { IntroAppointment, IntroCalendarSession, IntroState } from '@/lib/utils/introCalendar';
+
+export type IntroAppointmentDetails = {
+    fullName: string; age: number; phone?: string | null; amountPaid: number;
+    paymentMethod: string; introClassType: IntroClassType; paymentStatus: IntroPaymentStatus;
+    courtesyReason?: string | null; payOnSite: boolean;
+};
+export type IntroAppointmentChange = {
+    bookingId: string; expectedUpdatedAt: string; action: 'move' | 'state' | 'edit';
+    sessionId?: string; state?: IntroState; details?: Partial<IntroAppointmentDetails>;
+};
 
 export type IntroClassType = 'paid' | 'free' | 'courtesy';
 export type IntroPaymentStatus = 'pending' | 'paid' | 'not_applicable';
@@ -76,6 +87,55 @@ export type IntroWeekendData = {
 };
 
 export class IntroClassesService {
+    static async getCalendar(dateFrom: string, dateTo: string, locationId?: string): Promise<IntroCalendarSession[]> {
+        const { data, error } = await supabase.rpc('admin_get_intro_calendar', {
+            p_date_from: dateFrom, p_date_to: dateTo, p_location_id: locationId || null,
+        });
+        if (error) throw new Error(error.message);
+        return (data || []).map((session: IntroCalendarSession) => ({
+            ...session,
+            clients: session.clients.map((client) => ({
+                ...client, session_id: session.session_id, session_start: session.start_at, session_end: session.end_at,
+                capacity: session.capacity, booked_total: session.booked_total,
+                location_id: session.location_id, location_code: session.location_code,
+                location_name: session.location_name, location_address: session.location_address,
+            })),
+        }));
+    }
+
+    static async getAppointment(bookingId: string): Promise<IntroAppointment | null> {
+        const { data, error } = await supabase.from('bookings').select('session:sessions!inner(start_at)').eq('id', bookingId).not('intro_client_id', 'is', null).maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) return null;
+        const session = (Array.isArray(data.session) ? data.session[0] : data.session) as unknown as { start_at: string };
+        const date = limaDate(new Date(session.start_at));
+        const sessions = await this.getCalendar(date, date);
+        return sessions.flatMap((item) => item.clients).find((client) => client.booking_id === bookingId) || null;
+    }
+
+    static async registerAppointment(payload: IntroAppointmentDetails & { sessionId: string; requestId: string }): Promise<boolean> {
+        const { data, error } = await supabase.rpc('admin_register_intro_appointment', {
+            p_full_name: payload.fullName, p_age: payload.age, p_phone: payload.phone || null,
+            p_session_id: payload.sessionId, p_amount_paid: payload.amountPaid,
+            p_payment_method: payload.paymentMethod, p_intro_class_type: payload.introClassType,
+            p_payment_status: payload.paymentStatus, p_courtesy_reason: payload.courtesyReason || null,
+            p_pay_on_site: payload.payOnSite, p_request_id: payload.requestId,
+        });
+        if (error) throw new Error(error.message);
+        if (!data?.success) throw new Error('No se pudo guardar la cita.');
+        return true;
+    }
+
+    static async changeAppointment(payload: IntroAppointmentChange): Promise<boolean> {
+        const { data, error } = await supabase.rpc('admin_change_intro_appointment', {
+            p_booking_id: payload.bookingId, p_expected_updated_at: payload.expectedUpdatedAt, p_action: payload.action,
+            p_session_id: payload.sessionId || null, p_state: payload.state || null, p_details: payload.details || null,
+        });
+        if (error) throw new Error(error.message);
+        if (!data?.success) throw new Error('No se pudo guardar el cambio.');
+        return true;
+    }
+
     private static async fetchIntroSchedule({
         startAt,
         endAt,

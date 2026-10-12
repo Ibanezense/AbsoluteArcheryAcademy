@@ -1,100 +1,54 @@
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import IntroCalendarToolbar from '@/app/admin/intro/components/IntroCalendarToolbar'
+import IntroWeekCalendar from '@/app/admin/intro/components/IntroWeekCalendar'
+import { weekDates, type IntroCalendarSession } from '@/lib/utils/introCalendar'
 
-function source(path: string) {
-  return readFileSync(join(process.cwd(), path), 'utf8')
-}
+const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
+const dates = weekDates('2026-10-14')
+const noop = () => {}
 
-describe('admin intro productivity phase 3B', () => {
-  it('uses the migrated intro model without showing technical audit copy in the UI', () => {
-    const client = source('app/admin/intro/IntroClient.tsx')
+describe('admin intro weekly calendar', () => {
+  it('renders date, site, payment, all six states and both views', () => {
+    const html = renderToStaticMarkup(React.createElement(IntroCalendarToolbar, {
+      dates, date: dates[0], onDateChange: noop, onNavigate: noop,
+      filters: { states: [], payment: 'all', search: '', locationId: '' }, onFilters: noop,
+      locations: [], view: 'week', onView: noop,
+    }))
+    for (const label of ['Semana anterior', 'Semana siguiente', 'Hoy', 'Todas las sedes', 'Paga en sede', 'Reservado', 'Por pagar', 'Pagado', 'Asistido', 'No show', 'Cancelado', 'Estados']) expect(html).toContain(label)
+    expect(html).toContain('type="date"')
+    expect(html).toContain('Nombre o teléfono')
+  })
+  it('keeps full and empty slots visible without deriving capacity from filtered cards', () => {
+    const session: IntroCalendarSession = { session_id: 'slot', start_at: '2026-10-14T22:00:00Z', end_at: '2026-10-14T23:00:00Z', location_id: 'u', location_code: 'umacollo', location_name: 'Umacollo', location_address: null, capacity: 4, booked_total: 4, available: 0, can_book: false, accepts_intro: true, clients: [] }
+    const html = renderToStaticMarkup(React.createElement(IntroWeekCalendar, { sessions: [session], rows: [], dates, selectedDay: '2026-10-14', onDayChange: noop, onCreate: noop, active: null, onSelect: noop, onEdit: noop, disabled: false }))
+    expect(html).toContain('Umacollo')
+    expect(html).toContain('4/4 ocupados')
+    expect(html).toContain('Sin citas')
+    expect(html).toContain('Sin horarios')
+    expect(html).toContain('17:00')
+    expect(html).toContain('lg:hidden')
+  })
+  it('retains the academy logo across administrative navigation', () => {
+    expect(source('components/AdminSidebar.tsx')).toContain('src="/AA ACADEMY logo blanco.png"')
+    expect(source('app/admin/layout.tsx')).toContain('src="/AA ACADEMY logo blanco.png"')
+  })
+  it('keeps private phone display and WhatsApp in the appointment detail', () => {
+    const detail = source('app/admin/intro/components/IntroAppointmentDetail.tsx')
+    expect(detail).toContain('showPhone')
+    expect(detail).toContain('•••')
+    expect(detail).toContain('wa.me')
+  })
+  it('keeps edits behind the version-checked administrative RPC and resolves deep links by ID', () => {
+    const client = source('app/admin/intro/components/IntroCalendarClient.tsx')
     const service = source('lib/services/IntroClassesService.ts')
-    const modal = source('app/admin/intro/components/RegisterIntroModal.tsx')
-
-    expect(client).not.toContain('IntroModelAudit')
-    expect(client).not.toContain('Modelo de pruebas actualizado')
-    expect(client).not.toContain('Diferencia pagada/gratuita/cortesia')
-    expect(client).not.toContain('Migracion aplicada')
-    expect(client).not.toContain('Auditoria del modelo actual')
-    expect(client).not.toContain('Requiere migracion aplicada')
-    expect(client).not.toContain('Campos usados:')
-    expect(client).not.toContain('Tipo no definido')
-    expect(service).toContain('intro_payments')
-    expect(service).toContain('intro_class_type')
-    expect(service).toContain('payment_status')
-    expect(service).toContain('courtesy_reason')
-    expect(service).toContain('amount')
-    expect(service).toContain('payment_method')
-    expect(modal).toContain('introClassType')
-    expect(modal).toContain('paymentStatus')
-    expect(modal).toContain('courtesyReason')
-    expect(modal).toContain('Pagada')
-    expect(modal).toContain('Gratuita')
-    expect(modal).toContain('Cortesia')
-  })
-
-  it('uses the white academy logo in the desktop sidebar and mobile admin header', () => {
-    const sidebar = source('components/AdminSidebar.tsx')
-    const layout = source('app/admin/layout.tsx')
-
-    expect(sidebar).toContain('src="/AA ACADEMY logo blanco.png"')
-    expect(layout).toContain('src="/AA ACADEMY logo blanco.png"')
-    expect(sidebar).not.toContain('src="/aa-academy-logo-720.png"')
-    expect(layout).not.toContain('src="/aa-academy-logo-720.png"')
-  })
-
-  it('renders responsive daily agenda, desktop table, mobile cards and detail drawer', () => {
-    const client = source('app/admin/intro/IntroClient.tsx')
-    const page = source('app/admin/intro/page.tsx')
-
-    expect(page).toContain('title="Pruebas"')
-    expect(page).toContain('Agenda y seguimiento de clases intro')
-    expect(client).toContain('IntroDailyAgenda')
-    expect(client).toContain('IntroClientTable')
-    expect(client).toContain('IntroClientCard')
-    expect(client).toContain('IntroDetailDrawer')
-    expect(client).toContain('hidden')
-    expect(client).toContain('lg:block')
-    expect(client).toContain('lg:hidden')
-    expect(client).toContain('Ver detalle')
-  })
-
-  it('adds real filters, privacy, WhatsApp, loading, empty and error states without unsafe writes', () => {
-    const client = source('app/admin/intro/IntroClient.tsx')
-
-    expect(client).toContain('IntroFilters')
-    expect(client).toContain('Hoy')
-    expect(client).toContain('Mañana')
-    expect(client).toContain('Esta semana')
-    expect(client).toContain('Próximas')
-    expect(client).toContain('SensitivePhone')
-    expect(client).toContain('maskPhone')
-    expect(client).toContain('wa.me')
-    expect(client).toContain('No hay clases intro para los filtros seleccionados.')
-    expect(client).toContain('No pudimos cargar las clases intro.')
-    expect(client).toContain('IntroSkeleton')
-    expect(client).toContain('Limpiar filtros')
-    expect(client).toContain('flex flex-wrap gap-2')
-    expect(client).toContain('basis-[6.4rem]')
-    expect(client).toContain('text-[13px]')
-    expect(client).toContain('className="input py-3 pl-10 text-sm"')
-    expect(client).not.toMatch(/from\('intro_clients'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
-    expect(client).not.toMatch(/from\('intro_payments'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
-  })
-
-  it('allows admins to edit a full intro class through an atomic RPC-backed modal', () => {
-    const client = source('app/admin/intro/IntroClient.tsx')
-    const service = source('lib/services/IntroClassesService.ts')
-
-    expect(client).toContain('EditIntroModal')
-    expect(client).toContain('Editar clase intro')
-    expect(client).toContain('selectedEditClient')
     expect(client).toContain('editBookingId')
-    expect(client).toContain('onEdit={setSelectedEditClient}')
-    expect(service).toContain('updateIntroClass')
-    expect(service).toContain("supabase.rpc('admin_update_intro_class'")
+    expect(client).toContain('getAppointment(bookingId)')
+    expect(service).toContain("supabase.rpc('admin_change_intro_appointment'")
+    expect(service).toContain('p_expected_updated_at')
     expect(client).not.toMatch(/from\('intro_clients'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
-    expect(client).not.toMatch(/from\('intro_payments'\)[\s\S]{0,300}\.(insert|update|delete|upsert)/)
   })
 })

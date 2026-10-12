@@ -50,29 +50,22 @@ describe('admin weekend intro capacity invalidation', () => {
   })
 
   it('invalidates the shared capacity query after intro creation and preserves local refresh', () => {
-    const intro = source('app/admin/intro/IntroClient.tsx')
-    const component = extractBlock(intro, 'export default function IntroClient()')
-    const handleCreated = extractBlock(component, 'const handleCreated = () =>')
-
-    expect(intro).toContain("import { useQueryClient } from '@tanstack/react-query'")
-    expect(intro).toContain(
-      "import { WEEKEND_INTRO_CAPACITY_QUERY_KEY } from '@/lib/utils/weekendIntroCapacity'",
-    )
-    expect(component).toContain('const queryClient = useQueryClient()')
-    expect(handleCreated).toContain(capacityInvalidation)
-    expect(handleCreated).toContain('setIsModalOpen(false)')
-    expect(handleCreated).toContain('void fetchData()')
+    const intro = source('app/admin/intro/components/IntroCalendarClient.tsx')
+    const actions = source('lib/hooks/useIntroAppointmentActions.ts')
+    expect(intro).toContain('await IntroClassesService.registerAppointment')
+    expect(intro).toContain('await actions.refresh()')
+    expect(actions).toContain('WEEKEND_INTRO_CAPACITY_QUERY_KEY')
+    expect(actions).toContain('queryClient.invalidateQueries({ queryKey })')
+    expect(intro).toContain('setForm(null); setSelected(null)')
   })
 
   it('invalidates the shared capacity query after intro update and preserves cleanup and local refresh', () => {
-    const intro = source('app/admin/intro/IntroClient.tsx')
-    const component = extractBlock(intro, 'export default function IntroClient()')
-    const handleUpdated = extractBlock(component, 'const handleUpdated = () =>')
-
-    expect(handleUpdated).toContain(capacityInvalidation)
-    expect(handleUpdated).toContain('setSelectedEditClient(null)')
-    expect(handleUpdated).toContain('setSelectedClient(null)')
-    expect(handleUpdated).toContain('void fetchData()')
-    expect(intro).not.toContain("['admin-weekend-intro-capacity']")
+    const actions = source('lib/hooks/useIntroAppointmentActions.ts')
+    expect(actions).toContain('onSuccess: refresh')
+    expect(actions).toContain('onError: refresh')
+    expect(actions).toContain('INTRO_CALENDAR_KEY')
+    expect(actions).toContain('INTRO_AVAILABLE_SESSIONS_QUERY_KEY')
+    expect(actions).toContain('WEEKEND_INTRO_CAPACITY_QUERY_KEY')
+    expect(actions).not.toContain("['admin-weekend-intro-capacity']")
   })
 })

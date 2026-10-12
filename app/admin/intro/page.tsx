@@ -1,4 +1,3 @@
-import { AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import IntroClient from './IntroClient'
 
 export const metadata = {
@@ -9,11 +8,6 @@ export const metadata = {
 export default function IntroClassesPage() {
   return (
     <div className="space-y-6">
-      <AdminPageHeader
-        title="Pruebas"
-        description="Agenda y seguimiento de clases intro"
-      />
-
       <IntroClient />
     </div>
   )

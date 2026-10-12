@@ -28,7 +28,6 @@ describe('admin visual system', () => {
       'app/admin/membresias/page.tsx',
       'app/admin/sesiones/page.tsx',
       'app/admin/finanzas/page.tsx',
-      'app/admin/intro/page.tsx',
     ]) {
       expect(source(path)).toContain('AdminPageHeader')
     }

@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient'
 import { adminBookSession, adminCancelBooking } from '@/lib/services/adminBookingService'
 import { WEEKEND_INTRO_CAPACITY_QUERY_KEY } from '@/lib/utils/weekendIntroCapacity'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import { INTRO_CALENDAR_KEY } from '@/lib/hooks/useIntroCalendar'
 
 // Tipos para las funciones de admin
 export interface AdminBooking {
@@ -248,6 +249,7 @@ export function useAdminBookSession() {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
       queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] })
       queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: INTRO_CALENDAR_KEY })
     },
   })
 }
@@ -267,6 +269,7 @@ export function useAdminCancelBooking() {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
       queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] })
       queryClient.invalidateQueries({ queryKey: WEEKEND_INTRO_CAPACITY_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: INTRO_CALENDAR_KEY })
     },
   })
 }
