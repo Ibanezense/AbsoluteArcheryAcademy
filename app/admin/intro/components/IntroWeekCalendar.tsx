@@ -23,7 +23,7 @@ export default function IntroWeekCalendar({ sessions, rows, dates, selectedDay, 
       {locations.map((location) => (
         <section key={location.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3"><MapPin size={15} className="text-accent" /><h2 className="text-sm font-bold text-slate-800">{location.name}</h2><span className="ml-auto text-xs text-slate-400">{rows.filter((row) => row.location_id === location.id).length} citas</span></div>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto lg:max-h-[70dvh]">
             <div className="lg:grid lg:min-w-[1120px] lg:grid-cols-7 lg:divide-x lg:divide-slate-100">
               {dates.map((date) => <div key={date} className={`min-h-[420px] ${date === mobileDate ? 'block' : 'hidden lg:block'} ${date === today ? 'bg-orange-50/30' : ''}`}>
                 <div className={`sticky top-0 z-10 border-b border-slate-100 py-3 text-center ${date === today ? 'bg-orange-50 text-accent' : 'bg-slate-50/95 text-slate-600'}`}><p className="text-[10px] font-semibold uppercase tracking-[0.12em]">{calendarDayLabel(date, { weekday: 'short' })}</p><p className="mt-1 text-xl font-bold">{Number(date.slice(-2))}</p></div>

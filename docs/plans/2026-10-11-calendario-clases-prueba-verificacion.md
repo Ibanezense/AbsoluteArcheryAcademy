@@ -24,6 +24,7 @@ Implementación del plan aprobado el 11 de octubre de 2026, incluida la aclaraci
 | Asistencia | Navegador y SQL: No show y corrección a Asistido en sesión pasada conservan pago pendiente. La sesión futura rechaza el cambio y muestra el motivo sin cambiar la tarjeta. |
 | Cambio de sede | Navegador móvil: Umacollo → Tiabaya, confirmación explícita, fecha/turno nuevos y conservación de datos y pago pendiente. |
 | Móvil | Vista a 390 × 844, selección de día y formulario funcional. Ancho de contenido y viewport iguales: sin desbordamiento horizontal. |
+| Encabezados | Zona de calendario con desplazamiento propio en escritorio. Al desplazarla 599 px, el encabezado de los días mantuvo la misma posición vertical. |
 | Concurrencia | API autenticada: dos solicitudes simultáneas por el último cupo producen un éxito y un rechazo. Dos cambios con la misma versión producen un éxito y un conflicto. |
 | Capacidad | SQL transaccional: turno lleno rechaza registro, edición de datos en turno lleno funciona y reprogramación/cancelación actualizan cupos. |
 | Arcos compartidos | SQL transaccional: ocupar todos los arcos en una sesión bloquea disponibilidad de otra sesión solapada; excluir la reserva propia y liberar un arco restauran disponibilidad. |
@@ -49,6 +50,6 @@ Las sesiones, citas, clientes y pagos aislados usados para las pruebas de API/na
 
 La captura `output/intro-calendar/semana-escritorio.jpg` utiliza datos de prueba de 2036, ya retirados. No representa citas reales agendadas para esa fecha.
 
-Comprobaciones de aplicación: 127 archivos de prueba y 666 pruebas aprobadas; lint sin errores y build de producción satisfactorio. Los avisos de Browserslist sobre su catálogo antiguo ya existían y no impiden el build.
+Comprobaciones finales en la carpeta principal: 127 archivos de prueba y 668 pruebas aprobadas; lint y TypeScript sin errores y build de producción satisfactorio. Las dos pruebas adicionales impiden duplicar los nodos de las tarjetas entre escritorio/móvil o dentro del overlay. Los avisos de Browserslist sobre su catálogo antiguo ya existían y no impiden el build.
 
 La interfaz se implementó localmente. No se publicó un nuevo despliegue ni se enviaron mensajes a clientes.
