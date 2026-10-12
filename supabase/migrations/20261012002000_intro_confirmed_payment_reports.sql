@@ -158,8 +158,8 @@ begin
   join students s on p.student_id = s.id
   join student_memberships sm on p.student_membership_id = sm.id
   left join membership_plans mp on sm.membership_plan_id = mp.id
-  where 
-    p.paid_at >= p_start_date 
+  where
+    p.paid_at >= p_start_date
     and p.paid_at < p_end_date
     and p.source != 'migration'
 
@@ -184,9 +184,8 @@ begin
     and ip.paid_at < p_end_date
 
   order by paid_at desc;
-  
+
 end;
 $function$
 ;
 COMMIT;
-
