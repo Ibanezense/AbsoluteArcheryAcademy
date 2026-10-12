@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
-import { normalizeBooleanValue } from './route-helpers'
+import { normalizeBooleanValue, studentLocationFields, validateStudentLocationId } from './route-helpers'
 
 type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
 type StudentPayload = {
   full_name: string
+  home_location_id?: string | null
   avatar_url?: string | null
   date_of_birth?: string | null
   dni?: string | null
@@ -473,6 +474,8 @@ function validateCreateBody(body: CreateBody) {
 
   const studentDniError = validateDniField(student.dni, 'El DNI del alumno')
   if (studentDniError) return studentDniError
+  const locationError = validateStudentLocationId(student.home_location_id)
+  if (locationError) return locationError
 
   if (student.division && !STUDENT_DIVISIONS.includes(student.division as any)) {
     return 'La division del alumno es invalida.'
@@ -514,6 +517,7 @@ function studentRowFromPayload(student: StudentPayload, existingAffiliation?: bo
 
   return {
     full_name: normalizeText(student.full_name),
+    ...studentLocationFields(student.home_location_id),
     avatar_url: normalizeNullableText(student.avatar_url),
     date_of_birth: dateOfBirth,
     dni: normalizeOptionalDni(student.dni),
@@ -552,6 +556,13 @@ function getRelationList<T>(value: T | T[] | null | undefined) {
   return Array.isArray(value) ? value : [value]
 }
 
+async function checkStudentLocation(admin: SupabaseClient, locationId: string | null | undefined) {
+  if (!locationId) return null
+  const { data, error } = await admin.from('academy_locations').select('id').eq('id', locationId).maybeSingle()
+  if (error) return NextResponse.json({ error: 'No se pudo verificar la sede.' }, { status: 500 })
+  return data ? null : NextResponse.json({ error: 'La sede seleccionada no existe.' }, { status: 400 })
+}
+
 async function handleCreate(req: Request) {
   const auth = await requireAdminRequest(req)
   if ('error' in auth) return auth.error
@@ -563,6 +574,8 @@ async function handleCreate(req: Request) {
   }
 
   const { admin, actorId } = auth
+  const locationError = await checkStudentLocation(admin, body.student.home_location_id)
+  if (locationError) return locationError
   const createdUserIds: string[] = []
   let createdStudentId: string | null = null
   let stage = 'create:init'
@@ -682,6 +695,8 @@ async function handleUpdate(req: Request) {
   }
 
   const { admin, actorId } = auth
+  const locationError = await checkStudentLocation(admin, body.student.home_location_id)
+  if (locationError) return locationError
   let stage = 'update:load-student'
 
   stage = 'update:select-existing-student'

@@ -14,6 +14,7 @@ import {
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
+import StudentLocationBadge from '@/components/admin/StudentLocationBadge'
 import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import type { MembershipRenewalAlertMap } from '@/lib/services/membershipRenewalAlertService'
@@ -148,8 +149,9 @@ function DesktopStudentTable({
                       >
                         {student.full_name}
                       </Link>
-                      <div className="mt-1.5">
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
                         <StudentStatusBadge student={student} />
+                        <StudentLocationBadge name={student.home_location_name} code={student.home_location_code} />
                       </div>
                     </div>
                   </div>
@@ -231,8 +233,9 @@ function MobileStudentList({
                 <Link href={`/admin/alumnos/${student.id}`} className="block truncate font-bold text-slate-950">
                   {student.full_name}
                 </Link>
-                <div className="mt-1.5">
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <StudentStatusBadge student={student} />
+                  <StudentLocationBadge name={student.home_location_name} code={student.home_location_code} />
                 </div>
               </div>
             </div>

@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
 
@@ -16,6 +17,7 @@ type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
 type StudentFormState = {
   full_name: string
+  home_location_id: string
   avatar_url: string
   date_of_birth: string
   dni: string
@@ -54,6 +56,7 @@ const DISTANCES = [10, 15, 20, 30, 40, 50, 60, 70]
 function emptyStudentForm(): StudentFormState {
   return {
     full_name: '',
+    home_location_id: '',
     avatar_url: '',
     date_of_birth: '',
     dni: '',
@@ -113,6 +116,7 @@ export default function AdminAlumnoEditorPage() {
 
     setStudentForm({
       full_name: data.full_name,
+      home_location_id: data.home_location_id || '',
       avatar_url: data.avatar_url || '',
       date_of_birth: data.date_of_birth || '',
       dni: data.dni || '',
@@ -219,6 +223,7 @@ export default function AdminAlumnoEditorPage() {
           full_name: studentForm.full_name,
           avatar_url: studentForm.avatar_url || null,
           date_of_birth: studentForm.date_of_birth || null,
+          home_location_id: studentForm.home_location_id || null,
           dni: studentForm.dni || null,
           phone: studentForm.phone || null,
           email: studentForm.email || null,
@@ -370,6 +375,7 @@ export default function AdminAlumnoEditorPage() {
                     </div>
 
                     <div className="grid flex-1 gap-4 sm:grid-cols-2">
+                      <StudentLocationSelect value={studentForm.home_location_id} onChange={(value) => setStudentForm((current) => ({ ...current, home_location_id: value }))} disabled={saving} />
                       <div className="grid gap-2 sm:col-span-2">
                         <label className="text-sm text-textsec">Nombre completo</label>
                         <input

@@ -115,6 +115,7 @@ export type StudentClassExpirationSummary = {
 
 export type StudentDetailData = {
   id: string
+  home_location_id?: string | null
   full_name: string
   avatar_url: string | null
   date_of_birth: string | null
@@ -213,6 +214,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
               full_name,
               avatar_url,
               date_of_birth,
+              home_location_id,
               dni,
               phone,
               email,
@@ -355,6 +357,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
 
       return {
         id: typedStudent.id,
+        home_location_id: typedStudent.home_location_id || null,
         full_name: typedStudent.full_name,
         avatar_url: typedStudent.avatar_url,
         date_of_birth: typedStudent.date_of_birth,

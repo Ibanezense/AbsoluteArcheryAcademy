@@ -34,6 +34,7 @@ import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisu
 import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admin/AdminOperationalComponents'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
+import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -120,6 +121,7 @@ type MembershipAssignmentFormState = {
 
 type ProfileFormState = {
   full_name: string
+  home_location_id: string
   avatar_url: string
   gender: string
   email: string
@@ -273,6 +275,7 @@ function getOperationalStatus(data: StudentDetailData) {
 function profileFormFromData(data: StudentDetailData): ProfileFormState {
   return {
     full_name: data.full_name,
+    home_location_id: data.home_location_id || '',
     avatar_url: data.avatar_url || '',
     gender: data.gender || '',
     email: data.email || data.self_account?.email || '',
@@ -560,6 +563,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           accountMode,
           student: {
             full_name: profileForm.full_name.trim(),
+            home_location_id: profileForm.home_location_id || null,
             avatar_url: profileForm.avatar_url || null,
             date_of_birth: profileForm.date_of_birth || null,
             dni: profileForm.dni || null,
@@ -1338,6 +1342,7 @@ function ProfileTab({
             <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-orange-50 text-accent"><UserRound className="h-5 w-5" /></div><div><h3 className="font-black text-slate-950">Datos del alumno</h3><p className="text-xs text-slate-500">Identidad y contacto principal</p></div></div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <FormInput label="Nombre completo" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} />
+              <StudentLocationSelect value={form.home_location_id} onChange={(value) => setForm({ ...form, home_location_id: value })} disabled={saving} />
               <label className="grid gap-2 text-sm font-bold text-slate-700">Género<select className={formControlClass} value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value })}><option value="">Seleccionar</option><option value="damas">Damas</option><option value="varones">Varones</option></select></label>
               <FormInput label="Email" type="email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />
               <FormInput label="Número de teléfono" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />

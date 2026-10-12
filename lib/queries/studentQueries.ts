@@ -5,6 +5,9 @@ import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } 
 
 export type StudentListRow = {
   id: string
+  home_location_id?: string | null
+  home_location_name?: string | null
+  home_location_code?: string | null
   full_name: string
   avatar_url: string | null
   date_of_birth: string | null
@@ -179,6 +182,9 @@ export function mapStudentListRow(
 
   return {
     id: student.id,
+    home_location_id: student.home_location_id || null,
+    home_location_name: (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.name || null,
+    home_location_code: (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.code || null,
     full_name: student.full_name,
     avatar_url: student.avatar_url,
     date_of_birth: student.date_of_birth,
@@ -234,6 +240,8 @@ export function useStudents() {
           .select(`
             id,
             full_name,
+            home_location_id,
+            home_location:academy_locations!students_home_location_id_fkey(name,code),
             avatar_url,
             date_of_birth,
             dni,
