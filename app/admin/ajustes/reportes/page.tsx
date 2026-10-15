@@ -2,27 +2,33 @@
 
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { Download, FileText, Users } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Spinner } from '@/components/ui/Spinner'
 import { supabase } from '@/lib/supabaseClient'
 import { addFixedClubEntryAdmins, type DailyClubEntryRow } from '@/lib/reports/dailyClubEntryReport'
+import { useAcademyLocations } from '@/lib/infrastructureQueries'
+import { calendarDate } from '@/lib/utils/introCalendar'
 
 export default function ReportesPage() {
-  const [dateString, setDateString] = useState<string>(dayjs().format('YYYY-MM-DD'))
+  const [dateString, setDateString] = useState<string>(() => calendarDate(new Date()))
+  const [locationId, setLocationId] = useState('')
+  const { data: locations = [], isLoading: locationsLoading, error: locationsError, refetch: reloadLocations } = useAcademyLocations()
+  const selectedLocation = locations.find((location) => location.id === locationId) || null
   const [isGenerating, setIsGenerating] = useState<boolean>(false)
 
   const {
     data: students = [],
     isLoading,
+    isFetching,
     error,
   } = useQuery({
-    queryKey: ['daily-club-entry-report', dateString],
-    enabled: !!dateString,
+    queryKey: ['daily-club-entry-report', dateString, locationId],
+    enabled: Boolean(dateString && selectedLocation),
     queryFn: async () => {
       const { data, error: reportError } = await supabase.rpc('get_daily_club_entry_report', {
         p_date: dateString,
+        p_location_id: locationId,
       })
 
       if (reportError) throw reportError
@@ -37,52 +43,13 @@ export default function ReportesPage() {
   }, [error])
 
   const handleGenerate = async () => {
-    if (!dateString || students.length === 0) return
+    if (!dateString || !selectedLocation || isFetching || error || locationsError || isGenerating || students.length === 0) return
 
     setIsGenerating(true)
     try {
-      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable'),
-      ])
-      const localFormatDate = dayjs(dateString).format('DD/MM/YYYY')
-      const doc = new jsPDF()
-
-      const tableRows = students.map((student, index) => [
-        (index + 1).toString(),
-        student.name,
-        student.dni || '-',
-      ])
-
-      const rowsPerPage = 32
-      const totalChunks = Math.ceil(tableRows.length / rowsPerPage)
-
-      for (let index = 0; index < totalChunks; index += 1) {
-        if (index > 0) doc.addPage()
-
-        const chunk = tableRows.slice(index * rowsPerPage, (index + 1) * rowsPerPage)
-        const isFirstPage = index === 0
-
-        if (isFirstPage) {
-          doc.setFontSize(20)
-          doc.setTextColor(0)
-          doc.text('Lista de Ingreso al Club', 14, 22)
-          doc.setFontSize(11)
-          doc.setTextColor(100)
-          doc.text(`Fecha: ${localFormatDate}`, 14, 30)
-        }
-
-        autoTable(doc, {
-          startY: isFirstPage ? 40 : 15,
-          head: [['N', 'Nombres Completos', 'DNI']],
-          body: chunk,
-          theme: 'striped',
-          headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 8 },
-          styles: { fontSize: 8, cellPadding: 2 },
-        })
-      }
-
-      doc.save(`ingreso-archery-${dayjs(dateString).format('DD-MM-YYYY')}.pdf`)
+      const { createDailyClubEntryPdf } = await import('@/lib/reports/dailyClubEntryPdf')
+      const { doc, filename } = createDailyClubEntryPdf(students, dateString, selectedLocation)
+      doc.save(filename)
       toast.success('Reporte PDF descargado con exito.')
     } catch (generateError: any) {
       toast.error(generateError?.message || 'Error al generar reporte')
@@ -99,32 +66,43 @@ export default function ReportesPage() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-textpri">Lista de Ingreso Diario</h2>
-          <p className="mt-1 text-sm text-textsec">Generado en PDF para la sede del club.</p>
+          <p className="mt-1 text-sm text-textsec">Selecciona una fecha y una sede. Cada PDF incluye únicamente las reservas de esa sede.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="h-fit space-y-6 rounded-xl border border-line bg-slate-50 p-5">
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-textpri">Selecciona el dia</label>
+            <label htmlFor="report-date" className="block text-sm font-medium text-textpri">Selecciona el día</label>
             <input
               type="date"
+              id="report-date"
+              disabled={isGenerating}
               value={dateString}
               onChange={(event) => setDateString(event.target.value)}
               className="input"
             />
           </div>
 
+          <div className="space-y-3">
+            <label htmlFor="report-location" className="block text-sm font-medium text-textpri">Sede</label>
+            <select id="report-location" className="input" value={locationId} onChange={(event) => setLocationId(event.target.value)} disabled={isGenerating || locationsLoading || Boolean(locationsError)}>
+              <option value="">Selecciona una sede</option>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
+            {locationsError && <p role="alert" className="text-sm text-red-700">No se pudieron cargar las sedes. <button type="button" onClick={() => reloadLocations()} className="underline">Reintentar</button></p>}
+          </div>
+
           <button
             onClick={handleGenerate}
-            disabled={isGenerating || isLoading || !dateString || students.length === 0}
+            disabled={isGenerating || isFetching || !dateString || !selectedLocation || Boolean(error) || Boolean(locationsError) || students.length === 0}
             className="btn w-full justify-center gap-2"
           >
             {isGenerating ? <Spinner /> : <Download size={18} />}
             <span>{isGenerating ? 'Generando PDF...' : 'Descargar PDF'}</span>
           </button>
-          {!isLoading && students.length === 0 && (
-            <p className="text-center text-sm text-textsec">No hay alumnos para la fecha seleccionada.</p>
+          {selectedLocation && !isLoading && !error && students.length === 0 && (
+            <p className="text-center text-sm text-textsec">No hay alumnos para la fecha y sede seleccionadas.</p>
           )}
         </div>
 
@@ -133,11 +111,12 @@ export default function ReportesPage() {
             <Users size={18} className="text-accent" />
             <h3 className="font-medium text-textpri">
               Lista previa
+              {selectedLocation && <span> · {selectedLocation.name}</span>}
               {students.length > 0 && <span className="ml-2 font-normal text-textsec">({students.length})</span>}
             </h3>
           </div>
 
-          {isLoading ? (
+          {!selectedLocation || !dateString ? <p className="py-8 text-center text-sm text-textsec">Selecciona una fecha y una sede para ver la lista.</p> : error ? <p role="alert" className="py-8 text-center text-sm text-red-700">No se pudo cargar la lista. Vuelve a seleccionar la sede o la fecha.</p> : isLoading ? (
             <div className="flex justify-center py-12"><Spinner /></div>
           ) : (
             <div className="max-h-[500px] space-y-2 overflow-y-auto pr-2">
