@@ -35,6 +35,8 @@ import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admi
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
+import GuardianDniInput from '@/components/admin/GuardianDniInput'
+import { apiErrorMessage, normalizeGuardianContact, resolveGuardianContact } from '@/lib/utils/studentGuardianContact'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -131,6 +133,7 @@ type ProfileFormState = {
   guardian_name: string
   guardian_email: string
   guardian_phone: string
+  guardian_dni: string
 }
 
 type SportsFormState = {
@@ -273,6 +276,7 @@ function getOperationalStatus(data: StudentDetailData) {
 }
 
 function profileFormFromData(data: StudentDetailData): ProfileFormState {
+  const contact = resolveGuardianContact(data.guardian_contact, data.guardian)
   return {
     full_name: data.full_name,
     home_location_id: data.home_location_id || '',
@@ -282,9 +286,10 @@ function profileFormFromData(data: StudentDetailData): ProfileFormState {
     phone: data.phone || data.self_account?.phone || '',
     dni: data.dni || '',
     date_of_birth: data.date_of_birth || '',
-    guardian_name: data.guardian?.full_name || '',
-    guardian_email: data.guardian?.email || '',
-    guardian_phone: data.guardian?.phone || '',
+    guardian_name: contact.full_name,
+    guardian_email: contact.email || '',
+    guardian_phone: contact.phone || '',
+    guardian_dni: contact.dni || '',
   }
 }
 
@@ -527,19 +532,15 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       return
     }
 
-    const hasGuardian = Boolean(
-      data.guardian ||
-      profileForm.guardian_name.trim() ||
-      profileForm.guardian_email.trim() ||
-      profileForm.guardian_phone.trim(),
-    )
-
-    if (hasGuardian && (!profileForm.guardian_name.trim() || !profileForm.guardian_email.trim())) {
-      toast.push({ message: 'Para agregar un tutor completa su nombre y email.', type: 'error' })
+    let guardianContact
+    try {
+      guardianContact = normalizeGuardianContact({ full_name: profileForm.guardian_name, email: profileForm.guardian_email, phone: profileForm.guardian_phone, dni: profileForm.guardian_dni })
+    } catch (error) {
+      toast.push({ message: apiErrorMessage(error, 'Revisa los datos del tutor.'), type: 'error' })
       return
     }
 
-    const accountMode = accountModeForData(data, hasGuardian)
+    const accountMode = accountModeForData(data, Boolean(data.guardian))
     if (accountMode !== 'guardian_only' && !profileForm.email.trim()) {
       toast.push({ message: 'El email del alumno es obligatorio porque tiene acceso propio.', type: 'error' })
       return
@@ -563,6 +564,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           accountMode,
           student: {
             full_name: profileForm.full_name.trim(),
+            guardian_contact: guardianContact,
             home_location_id: profileForm.home_location_id || null,
             avatar_url: profileForm.avatar_url || null,
             date_of_birth: profileForm.date_of_birth || null,
@@ -582,11 +584,11 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
             is_active: data.is_active,
             is_country_club_tiabaya_member: data.is_country_club_tiabaya_member,
           },
-          guardian: hasGuardian
+          guardian: data.guardian
             ? {
-                full_name: profileForm.guardian_name.trim(),
-                email: profileForm.guardian_email.trim(),
-                phone: profileForm.guardian_phone || null,
+                full_name: data.guardian.full_name,
+                email: data.guardian.email,
+                phone: data.guardian.phone,
                 dni: data.guardian?.dni || null,
                 relationship: data.guardian?.relationship || 'Tutor',
               }
@@ -594,7 +596,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         }),
       })
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'No se pudo actualizar el alumno.')
+      if (!response.ok) throw new Error(apiErrorMessage(payload, 'No se pudo actualizar el alumno.'))
 
       toast.push({ message: 'Información del alumno actualizada.', type: 'success' })
       await refreshStudentData()
@@ -628,7 +630,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       })
       const payload = await response.json()
 
-      if (!response.ok) throw new Error(payload.error || 'No se pudo eliminar el alumno.')
+      if (!response.ok) throw new Error(apiErrorMessage(payload, 'No se pudo eliminar el alumno.'))
 
       toast.push({ message: 'Alumno eliminado.', type: 'success' })
       router.replace('/admin/alumnos')
@@ -1354,8 +1356,10 @@ function ProfileTab({
           </div>
           <div className="border-t border-slate-200 pt-6">
             <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-blue-600"><UserRound className="h-5 w-5" /></div><div><h3 className="font-black text-slate-950">Tutor responsable</h3><p className="text-xs text-slate-500">Disponible aunque todavía no exista un tutor.</p></div></div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <p className="mb-4 text-xs text-slate-500">Datos del responsable para contacto y emisión de boletas. El correo puede ser el mismo del alumno.</p>
+            <div className="grid gap-4 md:grid-cols-2">
               <FormInput label="Nombre del tutor" value={form.guardian_name} onChange={(value) => setForm({ ...form, guardian_name: value })} />
+              <GuardianDniInput value={form.guardian_dni} onChange={(value) => setForm({ ...form, guardian_dni: value })} />
               <FormInput label="Email del tutor" type="email" value={form.guardian_email} onChange={(value) => setForm({ ...form, guardian_email: value })} />
               <FormInput label="Teléfono del tutor" value={form.guardian_phone} onChange={(value) => setForm({ ...form, guardian_phone: value })} />
             </div>

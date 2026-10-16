@@ -386,7 +386,11 @@ describe('PUT /api/admin/create-student', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
   })
 
-  it('preserves the existing CCT affiliation flag when the PUT payload omits it', async () => {
+  it.each([
+    { contact: undefined, status: 200 },
+    { contact: { full_name: 'Tutor', email: 'cct@example.com', dni: '01234567' }, status: 200 },
+    { contact: { full_name: 'Tutor', email: 'cct@example.com', dni: '123' }, status: 400 },
+  ])('preserves account access while validating optional guardian billing contact: $status', async ({ contact, status }) => {
     const studentSelectMaybeSingle = vi.fn().mockResolvedValue({
       data: {
         id: 'student-1',
@@ -496,12 +500,25 @@ describe('PUT /api/admin/create-student', () => {
             full_name: 'Alumno CCT',
             email: 'cct@example.com',
             is_active: true,
+            guardian_contact: contact,
           },
         }),
       })
     )
 
-    expect(response?.status).toBe(200)
+    expect(response?.status).toBe(status)
+    expect(adminClient.auth.admin.createUser).not.toHaveBeenCalled()
+    if (status === 400) {
+      expect(studentUpdate).not.toHaveBeenCalled()
+      return
+    }
+    if (contact) {
+      expect(studentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        guardian_contact: { full_name: 'Tutor', email: 'cct@example.com', dni: '01234567', phone: null },
+      }))
+    } else {
+      expect(studentUpdate.mock.calls[0][0]).not.toHaveProperty('guardian_contact')
+    }
     expect(studentUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         is_country_club_tiabaya_member: true,

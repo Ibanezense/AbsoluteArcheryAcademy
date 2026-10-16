@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import type { StudentGuardianContact } from '@/lib/utils/studentGuardianContact'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
 import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
@@ -115,6 +116,7 @@ export type StudentClassExpirationSummary = {
 
 export type StudentDetailData = {
   id: string
+  guardian_contact?: StudentGuardianContact | null
   home_location_id?: string | null
   full_name: string
   avatar_url: string | null
@@ -215,6 +217,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
               avatar_url,
               date_of_birth,
               home_location_id,
+              guardian_contact,
               dni,
               phone,
               email,
@@ -358,6 +361,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       return {
         id: typedStudent.id,
         home_location_id: typedStudent.home_location_id || null,
+        guardian_contact: typedStudent.guardian_contact || null,
         full_name: typedStudent.full_name,
         avatar_url: typedStudent.avatar_url,
         date_of_birth: typedStudent.date_of_birth,

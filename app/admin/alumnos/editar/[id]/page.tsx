@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
+import GuardianDniInput from '@/components/admin/GuardianDniInput'
+import { guardianAccessPayload, normalizeGuardianContact, resolveGuardianContact } from '@/lib/utils/studentGuardianContact'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
 
@@ -102,6 +104,7 @@ export default function AdminAlumnoEditorPage() {
 
   const [studentForm, setStudentForm] = useState<StudentFormState>(emptyStudentForm)
   const [guardianForm, setGuardianForm] = useState<GuardianFormState>(emptyGuardianForm)
+  const [guardianAccessEmail, setGuardianAccessEmail] = useState('')
   const [accountMode, setAccountMode] = useState<AccountMode>('guardian_only')
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -113,6 +116,7 @@ export default function AdminAlumnoEditorPage() {
     const data = detailQuery.data
     const hasStudentAccess = !!data.self_account
     const hasGuardianAccess = !!data.guardian
+    setGuardianAccessEmail(data.guardian?.email || '')
 
     setStudentForm({
       full_name: data.full_name,
@@ -135,11 +139,12 @@ export default function AdminAlumnoEditorPage() {
       is_country_club_tiabaya_member: data.is_country_club_tiabaya_member,
     })
 
+    const contact = resolveGuardianContact(data.guardian_contact, data.guardian)
     setGuardianForm({
-      full_name: data.guardian?.full_name || '',
-      email: data.guardian?.email || '',
-      phone: data.guardian?.phone || '',
-      dni: data.guardian?.dni || '',
+      full_name: contact.full_name,
+      email: contact.email || '',
+      phone: contact.phone || '',
+      dni: contact.dni || '',
       relationship: data.guardian?.relationship || 'Tutor',
     })
 
@@ -170,9 +175,9 @@ export default function AdminAlumnoEditorPage() {
   const canSubmit = useMemo(() => {
     if (!studentForm.full_name.trim()) return false
     if (showStudentAccountFields && !studentForm.email.trim()) return false
-    if (showGuardianFields && (!guardianForm.full_name.trim() || !guardianForm.email.trim())) return false
+    if (showGuardianFields && (!guardianForm.full_name.trim() || !(guardianAccessEmail || guardianForm.email).trim())) return false
     return true
-  }, [guardianForm.email, guardianForm.full_name, showGuardianFields, showStudentAccountFields, studentForm.email, studentForm.full_name])
+  }, [guardianAccessEmail, guardianForm.email, guardianForm.full_name, showGuardianFields, showStudentAccountFields, studentForm.email, studentForm.full_name])
 
   async function uploadAvatar(file?: File) {
     if (!file) return
@@ -221,6 +226,7 @@ export default function AdminAlumnoEditorPage() {
         accountMode,
         student: {
           full_name: studentForm.full_name,
+          guardian_contact: normalizeGuardianContact(guardianForm),
           avatar_url: studentForm.avatar_url || null,
           date_of_birth: studentForm.date_of_birth || null,
           home_location_id: studentForm.home_location_id || null,
@@ -241,13 +247,7 @@ export default function AdminAlumnoEditorPage() {
           is_country_club_tiabaya_member: studentForm.is_country_club_tiabaya_member,
         },
         guardian: showGuardianFields
-          ? {
-              full_name: guardianForm.full_name,
-              email: guardianForm.email,
-              phone: guardianForm.phone || null,
-              dni: guardianForm.dni || null,
-              relationship: guardianForm.relationship || 'Tutor',
-            }
+          ? guardianAccessPayload(normalizeGuardianContact(guardianForm)!, detailQuery.data?.guardian, guardianAccessEmail, guardianForm.relationship || 'Tutor')
           : null,
       }
 
@@ -615,12 +615,13 @@ export default function AdminAlumnoEditorPage() {
                       </div>
                     )}
 
-                    {showGuardianFields && (
+                    {(
                       <div className="rounded-2xl border border-white/10 bg-bg/40 p-4">
                         <div className="flex items-center gap-2 text-sm font-medium text-textpri">
                           <ShieldCheck className="h-4 w-4 text-textsec" />
                           Tutor
                         </div>
+                        <p className="mt-2 text-xs text-textsec">Datos del responsable para contacto y boletas.{!showGuardianFields && ' Guardarlos no crea una cuenta de acceso para el tutor.'}</p>
                         <div className="mt-3 grid gap-3">
                           <div className="grid gap-2">
                             <label className="text-sm text-textsec">Nombre del tutor</label>
@@ -631,7 +632,7 @@ export default function AdminAlumnoEditorPage() {
                             />
                           </div>
                           <div className="grid gap-2">
-                            <label className="text-sm text-textsec">Email del tutor</label>
+                            <label className="text-sm text-textsec">Email de contacto del tutor</label>
                             <input
                               className="input"
                               value={guardianForm.email}
@@ -647,15 +648,7 @@ export default function AdminAlumnoEditorPage() {
                                 onChange={(event) => setGuardianForm((current) => ({ ...current, phone: event.target.value }))}
                               />
                             </div>
-                            <div className="grid gap-2">
-                              <label className="text-sm text-textsec">DNI</label>
-                              <input
-                                className="input"
-                                maxLength={8}
-                                value={guardianForm.dni}
-                                onChange={(event) => setGuardianForm((current) => ({ ...current, dni: event.target.value }))}
-                              />
-                            </div>
+                            <GuardianDniInput value={guardianForm.dni} onChange={(value) => setGuardianForm((current) => ({ ...current, dni: value }))} />
                           </div>
                           <div className="grid gap-2">
                             <label className="text-sm text-textsec">Relacion</label>
@@ -665,10 +658,13 @@ export default function AdminAlumnoEditorPage() {
                               onChange={(event) => setGuardianForm((current) => ({ ...current, relationship: event.target.value }))}
                             />
                           </div>
-                          <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs text-textpri">
+                          {showGuardianFields && <label className="grid gap-2 text-sm text-textsec">Email de acceso del tutor
+                            <input className="input" type="email" value={guardianAccessEmail} readOnly={Boolean(detailQuery.data?.guardian)} placeholder="Usa otro correo si el alumno ya tiene acceso con el de contacto" onChange={(event) => setGuardianAccessEmail(event.target.value)} />
+                          </label>}
+                          {showGuardianFields && <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs text-textpri">
                             <KeyRound className="h-3 w-3 text-textsec" />
                             {createdCodes?.guardian_access_code || 'Se generara o reutilizara al guardar'}
-                          </div>
+                          </div>}
                           {createdCodes?.guardian_reused && (
                             <p className="text-xs text-textsec">Se reutilizara la cuenta existente del tutor para este alumno.</p>
                           )}

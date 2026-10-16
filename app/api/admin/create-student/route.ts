@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { buildStudentCategory, STUDENT_DIVISIONS, STUDENT_GENDERS } from '@/lib/utils/studentCategory'
 import { normalizeBooleanValue, studentLocationFields, validateStudentLocationId } from './route-helpers'
+import { normalizeGuardianContact, type StudentGuardianContact } from '@/lib/utils/studentGuardianContact'
 
 type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
 type StudentPayload = {
   full_name: string
+  guardian_contact?: StudentGuardianContact | null
   home_location_id?: string | null
   avatar_url?: string | null
   date_of_birth?: string | null
@@ -474,6 +476,9 @@ function validateCreateBody(body: CreateBody) {
 
   const studentDniError = validateDniField(student.dni, 'El DNI del alumno')
   if (studentDniError) return studentDniError
+  try { normalizeGuardianContact(student.guardian_contact) } catch (error) {
+    return error instanceof Error ? error.message : 'Los datos del tutor son inválidos.'
+  }
   const locationError = validateStudentLocationId(student.home_location_id)
   if (locationError) return locationError
 
@@ -517,6 +522,7 @@ function studentRowFromPayload(student: StudentPayload, existingAffiliation?: bo
 
   return {
     full_name: normalizeText(student.full_name),
+    ...(student.guardian_contact !== undefined ? { guardian_contact: normalizeGuardianContact(student.guardian_contact) } : {}),
     ...studentLocationFields(student.home_location_id),
     avatar_url: normalizeNullableText(student.avatar_url),
     date_of_birth: dateOfBirth,
