@@ -4,7 +4,21 @@ type RpcResponse<T> = {
 }
 
 type RpcClient = {
-  rpc: (...args: any[]) => Promise<RpcResponse<unknown>>
+  rpc: (...args: any[]) => PromiseLike<RpcResponse<unknown>>
+}
+
+export async function adminRescheduleBooking(client: RpcClient, input: {
+  bookingId: string
+  sessionId: string
+  expectedUpdatedAt: string
+}) {
+  const { data, error } = await client.rpc('admin_reschedule_student_booking', {
+    p_booking_id: input.bookingId,
+    p_session_id: input.sessionId,
+    p_expected_updated_at: input.expectedUpdatedAt,
+  })
+  throwIfRpcError(error, 'No se pudo cambiar el horario.')
+  return data
 }
 
 function throwIfRpcError(error: { message?: string } | null, fallbackMessage: string): never | void {

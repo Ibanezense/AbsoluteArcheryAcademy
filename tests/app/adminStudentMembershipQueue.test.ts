@@ -67,7 +67,7 @@ describe('admin student membership queue', () => {
     const hook = source('lib/hooks/useStudentDetail.ts')
 
     expect(hook).toContain('upcomingBookingsError')
-    expect(hook).toMatch(/from\('bookings'\)[\s\S]*sessions!inner\(start_at,end_at\)[\s\S]*eq\('status', 'reserved'\)[\s\S]*gt\('sessions\.start_at'/)
+    expect(hook).toMatch(/from\('bookings'\)[\s\S]*sessions!inner\(start_at,end_at[^)]*\)[\s\S]*eq\('status', 'reserved'\)[\s\S]*gt\('sessions\.start_at'/)
     expect(hook).toContain('bookingsById')
     expect(hook).toContain('upcomingBookings || []')
     expect(hook).toContain('if (upcomingBookingsError) throw upcomingBookingsError')

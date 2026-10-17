@@ -38,6 +38,7 @@ import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
 import GuardianDniInput from '@/components/admin/GuardianDniInput'
 import { apiErrorMessage, normalizeGuardianContact, resolveGuardianContact } from '@/lib/utils/studentGuardianContact'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
+import BookingRescheduleDialog from '@/components/admin/BookingRescheduleDialog'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useStudentDetail, type StudentDetailData, type StudentMembershipSummary } from '@/lib/hooks/useStudentDetail'
@@ -1176,7 +1177,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         />
       )}
 
-      {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} onAdd={() => setBookingOpen(true)} />}
+      {activeTab === 'bookings' && <BookingsTab bookings={data.bookings} onAdd={() => setBookingOpen(true)} onSaved={refreshStudentData} />}
       <AdminQuickBooking isOpen={bookingOpen} onClose={() => setBookingOpen(false)} studentId={data.id} onBooked={refreshStudentData} />
       {activeTab === 'attendance' && (
         <AttendanceTab
@@ -1835,10 +1836,12 @@ function EditorInput({ label, value, onChange, type = 'text' }: { label: string;
   )
 }
 
-function BookingsTab({ bookings, onAdd }: { bookings: StudentDetailData['bookings']; onAdd: () => void }) {
+function BookingsTab({ bookings, onAdd, onSaved }: { bookings: StudentDetailData['bookings']; onAdd: () => void; onSaved: () => Promise<void> }) {
+  const [moveTarget, setMoveTarget] = useState<StudentDetailData['bookings'][number] | null>(null)
   const pendingBookings = selectPendingBookings(bookings)
 
   return (
+    <>
     <SectionShell title="Reservas" description="Reservas activas que aún no se convirtieron en asistencia, cancelación o inasistencia." action={
       <button type="button" onClick={onAdd} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-bold text-white"><Plus className="h-4 w-4" />Agregar reserva</button>
     }>
@@ -1847,15 +1850,17 @@ function BookingsTab({ bookings, onAdd }: { bookings: StudentDetailData['booking
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Horario</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Arco</th><th className="px-4 py-3">Estado</th></tr></thead>
+            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Horario</th><th className="px-4 py-3">Sede</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Arco</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {pendingBookings.map((booking) => (
                 <tr key={booking.id} className="bg-white">
                   <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatDate(booking.start_at)}</td>
                   <td className="whitespace-nowrap px-4 py-4 text-slate-600">{booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'} - {booking.end_at ? dayjs(booking.end_at).format('HH:mm') : '-'}</td>
+                  <td className="px-4 py-4 text-slate-600">{booking.location_name || 'Sin sede'}</td>
                   <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : 'No definida'}</td>
                   <td className="px-4 py-4 text-slate-600">{booking.bow_usage_type || 'No definido'}</td>
                   <td className="px-4 py-4"><OperationalStatusBadge label="Confirmada" tone="warning" /></td>
+                  <td className="px-4 py-4">{booking.start_at && new Date(booking.start_at).getTime() > Date.now() ? <button type="button" onClick={() => setMoveTarget(booking)} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 hover:border-orange-300 hover:bg-orange-50"><CalendarClock className="h-4 w-4" />Cambiar horario</button> : <span className="text-xs text-slate-400">Clase pasada</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -1863,6 +1868,8 @@ function BookingsTab({ bookings, onAdd }: { bookings: StudentDetailData['booking
         </div>
       )}
     </SectionShell>
+    {moveTarget && <BookingRescheduleDialog booking={moveTarget} onClose={() => setMoveTarget(null)} onSaved={onSaved} />}
+    </>
   )
 }
 

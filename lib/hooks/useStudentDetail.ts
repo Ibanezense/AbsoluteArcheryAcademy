@@ -73,6 +73,9 @@ export type StudentBookingSummary = {
   id: string
   session_id: string
   active_membership_id: string | null
+  updated_at?: string
+  location_id?: string | null
+  location_name?: string | null
   credit_kind?: 'normal' | 'recovery'
   status: string
   distance_m: number | null
@@ -305,10 +308,10 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
             .eq('student_id', studentId)
             .order('created_at', { ascending: false })
             .limit(250),
-          loadHistory('bookings', 'id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions(start_at,end_at)', 'created_at'),
+          loadHistory('bookings', 'id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,updated_at,sessions(start_at,end_at,location_id,location:academy_locations(name))', 'created_at'),
           supabase
             .from('bookings')
-            .select('id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,sessions!inner(start_at,end_at)')
+            .select('id,session_id,active_membership_id,credit_kind,status,distance_m,bow_usage_type,bow_poundage,admin_notes,updated_at,sessions!inner(start_at,end_at,location_id,location:academy_locations(name))')
             .eq('student_id', studentId)
             .eq('status', 'reserved')
             .gt('sessions.start_at', new Date().toISOString())
@@ -432,6 +435,9 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
         bookings: [...bookingsById.values()].map((booking) => ({
           id: booking.id,
           session_id: booking.session_id,
+          updated_at: booking.updated_at,
+          location_id: booking.sessions?.location_id || null,
+          location_name: booking.sessions?.location?.name || null,
           active_membership_id: booking.active_membership_id || null,
           credit_kind: booking.credit_kind || 'normal',
           status: booking.status,

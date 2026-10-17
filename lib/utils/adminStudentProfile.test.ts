@@ -17,6 +17,16 @@ const bookings = [
 ] as any[]
 
 describe('student profile selectors', () => {
+  it('sorts pending classes by session date after rescheduling without mutating history', () => {
+    const rows = [
+      { id: 'later', status: 'reserved', start_at: '2026-10-25T10:00:00-05:00' },
+      { id: 'unknown', status: 'reserved', start_at: null },
+      { id: 'earlier', status: 'reserved', start_at: '2026-10-20T10:00:00-05:00' },
+      { id: 'past', status: 'attended', start_at: '2026-10-01T10:00:00-05:00' },
+    ] as any[]
+    expect(selectPendingBookings(rows).map(row => row.id)).toEqual(['earlier', 'later', 'unknown'])
+    expect(rows[0].id).toBe('later')
+  })
   it('includes expired non-recoverable classes in history without counting them as attended', () => {
     const expired = { id: 'expired', status: 'expired_unattended', start_at: '2026-10-31T23:59:59-05:00' } as any
     expect(filterAttendance([...bookings, expired], 'all').map((row) => row.id)).toContain('expired')

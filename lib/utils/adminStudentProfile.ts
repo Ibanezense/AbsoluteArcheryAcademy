@@ -97,7 +97,9 @@ export function filterAttendance(
 }
 
 export function selectPendingBookings(bookings: StudentBookingSummary[]) {
+  const timestamp = (value: string | null) => value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : Infinity
   return bookings.filter((booking) => booking.status === 'reserved')
+    .sort((a, b) => timestamp(a.start_at) - timestamp(b.start_at) || a.id.localeCompare(b.id))
 }
 
 export function buildPaymentDocumentRows(payments: StudentPaymentSummary[]) {

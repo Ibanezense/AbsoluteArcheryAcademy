@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import { adminBookSession, adminCancelBooking, adminCancelSession } from '@/lib/services/adminBookingService'
+import { adminBookSession, adminCancelBooking, adminCancelSession, adminRescheduleBooking } from '@/lib/services/adminBookingService'
 
 describe('adminBookingService', () => {
+  it('moves the same booking with its exact version and surfaces conflicts', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { id: 'same-booking' }, error: null })
+    const input = { bookingId: 'same-booking', sessionId: 'new-session', expectedUpdatedAt: '2026-10-16T12:00:00.123456+00:00' }
+    expect(await adminRescheduleBooking({ rpc }, input)).toEqual({ id: 'same-booking' })
+    expect(rpc).toHaveBeenCalledWith('admin_reschedule_student_booking', {
+      p_booking_id: input.bookingId, p_session_id: input.sessionId, p_expected_updated_at: input.expectedUpdatedAt,
+    })
+    rpc.mockResolvedValue({ data: null, error: { message: 'La reserva cambió. Actualiza el perfil.' } })
+    await expect(adminRescheduleBooking({ rpc }, input)).rejects.toThrow('La reserva cambió')
+  })
   it('bookSession sends expected RPC payload', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: { id: 'booking-1' },
