@@ -1,12 +1,17 @@
 # Spec: Mi progreso
 
-Fecha de inspección: 19 de octubre de 2026, America/Lima. Estado: propuesta para revisión; funcionalidad no implementada. Base de la PWA: `cea6da3`, rama `codex/admin-ux-audit`.
+Fecha de inspección y ajuste: 19 de octubre de 2026, America/Lima. Estado: diseño ajustado tras revisión; funcionalidad no implementada. Base de la PWA inspeccionada: `cea6da3`, rama `codex/admin-ux-audit`.
 
 ## 1. Objetivo y alcance inicial
 
 Permitir al alumno y a su tutor consultar sus controles de entrenamiento, resultados de competencias y evolución deportiva desde la PWA, sin volver a registrar puntajes. La web de la academia conserva la autoridad sobre controles; Tournament Engine (TE), sobre competencias; la PWA conserva alumnos, permisos y distancia asignada.
 
-La primera versión incluye una página Mi progreso, resumen deportivo, historial completo de controles, gráfica y filtros, historial de competencias individuales y vinculación administrativa de identidades. Solo permite leer resultados deportivos. No condiciona este acceso a tener saldo o membresía vigente: se reutiliza la autorización sobre el alumno, sin añadir un requisito de compra.
+La funcionalidad completa conserva ambas fuentes. Se entregará en dos incrementos verificables:
+
+1. **Entrega 1 — Controles completa:** vínculo PWA–registro de controles, resumen deportivo, gráfica, historial completo y filtros, con todos sus estados y pruebas de identidad/permisos. Puede publicarse sin credenciales, bridges, rutas o disponibilidad de Tournament Engine.
+2. **Entrega 2 — Competencias:** ampliar la misma página y ficha administrativa para vincular y consultar TE. Mantener controles funcionando durante su conexión y ante cualquier fallo de competencias.
+
+La entrega 1 no incluye una pestaña de competencias deshabilitada ni mensajes de una fuente que aún no está habilitada. En la entrega 2 aparecen las dos secciones reales. Solo se permite leer resultados deportivos. No se condiciona el acceso a tener saldo o membresía vigente: se reutiliza la autorización sobre el alumno, sin añadir un requisito de compra.
 
 Quedan excluidos objetivos técnicos, recomendaciones, AI Coach, rankings nuevos, cálculo de handicap/puntos compensados, carga manual de puntajes, extracción de Ianseo, sincronización de resultados hacia la liga, detalle de eliminatorias, exportaciones, notificaciones y modo sin conexión. Tampoco se incluyen equipos ni equipos mixtos en el MVP.
 
@@ -86,7 +91,7 @@ Evidencia: `D:/Tournament Engine/api/v1/consumer.mjs`, `src/infrastructure/http/
 | Sincronización persistente de resultados en Supabase | Ofrece disponibilidad sin cada origen, pero añade importadores, reconciliación, bajas, trabajos, auditoría, versiones y recuperación. No es necesaria para el volumen observado ni para el MVP |
 | Lectura SQL directa con tokens Turso de solo lectura | Evita endpoints nuevos, pero acopla la PWA a dos esquemas y concede acceso de base más amplio que un lector deportivo. No se recomienda como contrato operativo inicial |
 
-Flujo: navegador autenticado → API de la PWA → autorización del alumno → enlace confirmado → lector de la fuente → validación/proyección mínima → respuesta privada. Entrenamiento y competencias se solicitan por separado y en paralelo. La PWA solo persistirá vínculos y su auditoría; no una copia canónica de puntajes.
+Flujo: navegador autenticado → API de la PWA → autorización del alumno → enlace confirmado → lector de la fuente → validación/proyección mínima → respuesta privada. En la entrega 1 solo se consulta entrenamiento. Al habilitar la entrega 2, las fuentes se solicitan por separado y en paralelo. La PWA solo persistirá vínculos y su auditoría; no una copia canónica de puntajes.
 
 ### Contratos nuevos necesarios: propuestas, todavía inexistentes
 
@@ -103,8 +108,11 @@ Se propone `student_progress_links` en Supabase, **tabla nueva**, con: ID propio
 - Un alumno puede tener un ID de `aa_academy_students` confirmado y varios `competitor_id` de TE confirmados: TE no garantiza una identidad única entre todos los torneos. No se fusionan IDs de origen.
 - Un mismo ID externo confirmado no puede pertenecer a dos alumnos de reservas. El servidor rechaza esa operación y exige revisión administrativa. Revocar o sustituir conserva auditoría.
 - La búsqueda por nombre solo propone candidatos a un administrador; no confirma una identidad. Nombres iguales, nombres cambiados, distancia o categoría no bastan para vincular. Con evidencia insuficiente, el vínculo queda pendiente.
-- MVP administrativo: confirmar explícitamente los IDs en la ficha del alumno, con evidencia verificable y resumen antes de guardar. La confirmación de TE requiere además su bridge confirmado en el namespace propio. La preparación de ese bridge es una operación del propietario de TE; no se utilizará `addConfirmedBridge` sin adaptarlo, porque hoy fija `as_athlete`.
-- Si se confirma el vínculo PWA pero falta el bridge TE, competencias sigue pendiente; controles puede estar disponible. No presentar ese estado como alumno sin competencias.
+- **Operación administrativa cerrada:** un panel Mi progreso en la ficha existente del alumno, con una fila por fuente y acciones Vincular, Revisar y Desvincular. En la entrega 1 solo existe la fila Controles. Sin consola de sincronización, pantalla de importaciones, emparejamiento masivo ni carga manual de puntajes.
+- Vincular consiste en seleccionar o introducir el ID externo, consultar una vista previa de identidad de origen y confirmar explícitamente una vez con evidencia suficiente. La PWA conserva la decisión administrativa y su auditoría. No exigir al administrador copiar el mismo vínculo en tres interfaces. El nombre ayuda a revisar, pero no decide la vinculación.
+- En la entrega 2 la misma acción coordina el bridge TE del namespace propio y la confirmación local. Se confirma localmente solo después de verificar el bridge; si falla, queda Pendiente con una acción Reintentar. El backend utiliza un comando administrativo de identidad limitado y separado del lector deportivo, a definir en TE. No usar SQL/CLI como operación habitual ni exponer la credencial de ese comando al navegador. `addConfirmedBridge` no sirve tal cual porque fija `as_athlete`.
+- Un reintento no crea otro vínculo ni otro bridge. Si la respuesta de TE se pierde, se consulta el estado antes de repetir. La revocación local corta el acceso inmediatamente aunque la limpieza del bridge de origen requiera reintento; el estado pendiente de esa limpieza queda visible al administrador. No añadir una cola general de trabajos para este flujo.
+- Si el administrador confirma la decisión pero todavía falta verificar el bridge TE, la vinculación efectiva de competencias sigue Pendiente; controles puede estar disponible. No presentar ese estado como alumno sin competencias ni confirmar localmente el acceso antes de verificar el bridge.
 - Reutilizar Supabase Auth, validar el JWT con `auth.getUser` en servidor y llamar `resolve_accessible_student_id` con el cliente del actor antes de leer enlaces o caché. No usar service role para eludir esta validación. Un tutor solo accede a sus alumnos; admin usa el acceso existente y tiene exclusividad para confirmar/revocar vínculos.
 - RLS de tablas nuevas: lectura propia/tutor autorizado; escritura solo administrativa mediante operación auditada. El cliente no puede cambiar `student_id`, fuente, ID externo o confirmador para concederse acceso.
 - React Query se identifica por cuenta, alumno, fuente y revisión del vínculo. Al cambiar alumno no se conserva placeholder del anterior; se cancelan solicitudes pendientes y se ignoran respuestas de otra clave. Al cerrar/cambiar cuenta se limpia la caché privada.
@@ -114,25 +122,29 @@ Se propone `student_progress_links` en Supabase, **tabla nueva**, con: ID propio
 
 ### 5.1 Acceso y disposición
 
-MVP: acceso Mi progreso desde una tarjeta en Inicio. La página usa header con volver, identidad del alumno seleccionado y cambio de alumno para tutores. Se conservan las cuatro acciones inferiores actuales; en Mi progreso ninguna se marca falsamente como sección actual. No es necesario añadir una quinta pestaña estrecha.
+Decisión de acceso: Mi progreso desde una tarjeta en Inicio. La página usa header con volver, identidad del alumno seleccionado y cambio de alumno para tutores. Se conservan las cuatro acciones inferiores actuales; en Mi progreso ninguna se marca falsamente como sección actual. No se añade una quinta pestaña estrecha.
 
-En móvil: resumen, selector Entrenamiento/Competencias y contenido de esa sección en una columna. Filtros de entrenamiento visibles; lista paginada de diez intentos sin cambiar el alcance completo de la gráfica. En escritorio: contenedor adaptable actual de 1120 px; resumen arriba, gráfica y controles de filtrado junto al historial cuando haya espacio. Competencias conserva su sección diferenciada. No mostrar columnas que requieran desplazamiento horizontal en móvil.
+En móvil: resumen y contenido en una columna. La entrega 1 muestra directamente Controles; en la entrega 2 se añade el selector Controles/Competencias, con Controles como vista inicial. Filtros visibles; lista paginada de diez intentos sin cambiar el alcance completo de la gráfica. En escritorio: contenedor adaptable actual de 1120 px; resumen arriba, gráfica/filtros junto al historial cuando haya espacio. Competencias conserva su sección diferenciada. No mostrar columnas que requieran desplazamiento horizontal en móvil.
 
 Gráfica accesible con alternativa de tabla/lista, leyendas, etiquetas y valores que no dependan del color. Un único h1; controles asociados a etiquetas; foco y selección de filtros accesibles por teclado. Todos los estados explican qué puede hacer el alumno sin mostrar errores técnicos.
 
 ### 5.2 Distancia actual y discrepancias
 
-La única distancia de entrenamiento asignada comprobada es `students.current_distance_m`. No se tomará la distancia de liga, la máxima histórica ni una competencia como sustituto.
+La única distancia de entrenamiento asignada comprobada es `students.current_distance_m`. No se tomará la distancia de liga, la máxima histórica ni una competencia como sustituto. La API de progreso relee este campo autorizado en cada revalidación; no acepta como autoridad una distancia del navegador ni conserva un resumen de una asignación anterior en caché.
+
+**Regla de presentación cerrada:** el encabezado utiliza Distancia actual de entrenamiento solo si hay asignación y un último control global válido con distancia inequívoca que coincide con ella. En los demás casos utiliza Distancia asignada o Distancia pendiente de confirmar. Nunca oculta una discrepancia detrás de la etiqueta Actual. La distancia elegida para explorar el historial no cambia ese encabezado ni la asignación.
 
 | Situación | Presentación propuesta |
 | --- | --- |
 | Distancia asignada y último control global coinciden | Mostrar Distancia actual de entrenamiento y resumen de esa distancia |
-| Asignada distinta del último control global | Mostrar Distancia asignada X m y Último control registrado a Y m, con indicación de revisión. No afirmar que Y es una nueva asignación ni modificar X. Mostrar el último control y mejores marcas **en X**, si existen; si no, Sin controles a X m |
-| Asignada sin controles | Mostrar X m como asignación y Sin controles registrados; no fabricar último control |
+| Asignada distinta del último control global | Mostrar Distancia asignada X m y Último control registrado a Y m, con sus fechas y texto Pendiente de revisión. No afirmar que Y es una nueva asignación ni modificar X. Mostrar último control y mejores marcas **en X**, si existen; si no, Sin controles a X m |
+| Asignada sin controles | Mostrar Distancia asignada X m y Sin controles registrados; no fabricar último control ni afirmar que fue corroborada por un control |
 | Sin asignación, con controles | Distancia de entrenamiento pendiente de confirmar; último control global con su distancia como dato histórico. No asignar automáticamente esa distancia |
 | Sin asignación ni controles | Pendiente de asignación y Sin controles; permitir consultar competencias si están vinculadas |
+| Última fecha con distancias diferentes y orden deportivo incierto | Mostrar Distancia asignada X m y las distancias de los controles de esa fecha; no elegir la supuesta última distancia por created_at/ID ni declarar coincidencia validada |
+| Fuente caída o respuesta incompleta | Puede mostrarse la asignación comprobada en PWA; no llamarla Actual basándose en una corroboración deportiva caducada o parcial |
 
-La advertencia de discrepancia es informativa para revisión administrativa: después de avanzar de distancia puede ser normal no tener aún un control allí. No diagnostica un error de origen. Los filtros siempre permiten consultar distancias anteriores.
+La advertencia de discrepancia es informativa: después de avanzar de distancia puede ser normal no tener aún un control allí. No diagnostica un error de origen ni bloquea el historial. El administrador ve el mismo aviso en la ficha y revisa la asignación en su editor existente o corrige el control en la web, según corresponda. Mi progreso no crea un tercer lugar donde editar distancia. La fecha del último control permanece visible aunque sea antigua; Consultado hace un minuto no significa que el alumno haya entrenado hace un minuto.
 
 ### 5.3 Resumen principal
 
@@ -147,11 +159,12 @@ La advertencia de discrepancia es informativa para revisión administrativa: des
 
 ### 5.4 Historial y evolución de entrenamiento
 
-- Consultar todos los intentos válidos del alumno vinculado; filtros por distancia, formato 36/72/todos y rango inclusivo de fechas civiles Lima. La distancia inicial es la asignada; sin ella, solicitar selección entre distancias con controles.
+- Consultar todos los intentos del alumno vinculado; filtros por distancia, formato 36/72/todos y rango inclusivo de fechas civiles Lima. La distancia inicial es la asignada; sin ella, solicitar selección entre distancias con controles. El rango inicial incluye todo el historial y queda visible como Todas las fechas.
+- Formato inicial: 36 flechas; si no tiene controles válidos de 36 en la distancia seleccionada pero sí de 72, abrir 72. Si no tiene ninguno, mantener 36 con estado vacío explícito. Nunca seleccionar un formato por comparar su puntaje con el del otro.
 - La lista de diez por página se calcula después de filtrar. Totales y gráfica representan todos los registros del filtro, no la página cargada. Señalar el intervalo aplicado; sin filtro de fecha, es todo el historial.
 - Una gráfica contiene una distancia y un formato. Si se elige Todos los formatos, mostrar dos gráficas separadas, con escalas 0–360 y 0–720. Nunca una línea combinada, porcentaje normalizado, promedio entre formatos ni suma de intentos independientes.
 - Eje temporal por fecha deportiva. Los intentos de una misma fecha permanecen consultables individualmente; coincidencias de puntos muestran su cantidad y lista accesible. No inventar horas para separarlos. Un solo intento se muestra como punto, no como tendencia.
-- Un control corregido actualiza la misma entidad; una anulación se excluye de último/mejores/gráfica y puede verse en el historial con distintivo Anulado, sin incluir el motivo privado. No mostrar una anulación como cero ni unirla a la serie válida.
+- Un control corregido actualiza la misma entidad; una anulación se excluye de último/mejores/gráfica y permanece en el historial con distintivo Anulado, sin incluir el motivo privado. El conteo distingue intentos totales de controles válidos. No mostrar una anulación como cero ni unirla a la serie válida.
 - Cambiar la distancia asignada cambia el filtro inicial del resumen, no la distancia de los controles previos ni sus mejores marcas históricas.
 
 ### 5.5 Competencias
@@ -174,6 +187,8 @@ El canon permite encuentros por sets y acumulativos, byes y desempates. Su visua
 Propuesta inicial: lectura bajo demanda, caché de origen de cinco minutos, actualización al abrir/reanudar y cada cinco minutos mientras la pantalla esté visible. Revalidación manual con control de frecuencia. Cada fuente tiene su propio límite, timeout y estado. No añadir Cron, cola ni sincronización persistente de puntajes.
 
 La autorización y el vínculo se comprueban antes de toda lectura de servidor, incluidos cache hits. La caché de origen se identifica por fuente, ID externo, contrato y revisión del enlace; nunca por nombre. La respuesta al navegador es `private, no-store`. Un cambio de enlace invalida sus proyecciones.
+
+La distancia asignada se lee separadamente bajo permisos del actor. El resumen derivado usa esa distancia de la misma respuesta, no la de un dashboard anterior. Cambiarla invalida resumen/filtro inicial al revalidar; no obliga a descartar el snapshot histórico válido. Las pruebas cubrirán el cambio con caché de controles caliente y la llegada tardía de una respuesta anterior.
 
 - Controles: snapshot completo por ID de alumno externo. Clave por `(fuente, control.id)`; sustituir por revisión actual, no anexar en cada consulta. Conservar anulados como tales; una respuesta parcial o fallida no borra controles.
 - TE: listar todas las páginas de history para cada ID confirmado, elegir exclusivamente versión publicada actual y consultar snapshots. Agrupar por `(dataset_id, participation_id)` y sus `qualification_id`; guardar versión como procedencia, no como una competencia nueva. Deduplicar repeticiones de IDs, no resultados parecidos. El nonce `snapshot_id` no es clave de identidad.
@@ -198,9 +213,9 @@ La autorización y el vínculo se comprueban antes de toda lectura de servidor, 
 No falta acceso técnico de lectura a las bases para este diseño: ambas se inspeccionaron. Lo que falta para habilitar el producto es:
 
 1. Endpoint privado de controles y política expresa para historial privado del alumno aunque no sea público. La API pública no satisface todo el alcance.
-2. Consumidor/credencial/namespace propios de reservas en TE y contrato mínimo acordado. No puede resolverse copiando un token AS/AP ni llamando a un endpoint supuesto.
-3. Confirmaciones administrativas reales de identidades y bridges; no se vincularon personas durante la inspección.
-4. Política y procedimiento de confirmación/revocación del bridge TE. Debe estar operativo antes de indicar una vinculación completa en PWA.
+2. Para la **entrega 2**, consumidor/credencial/namespace propios de reservas en TE y contrato mínimo acordado. No puede resolverse copiando un token AS/AP ni llamando a un endpoint supuesto. No es dependencia de la entrega 1.
+3. Confirmaciones administrativas reales: vínculo PWA–web para la entrega 1; añadir vínculos/bridges TE en la entrega 2. No se vincularon personas durante la inspección.
+4. Para la entrega 2, comando de identidad TE seguro e idempotente que permita una única confirmación administrativa desde PWA y gestione reintentos/revocación. Debe estar operativo antes de indicar la vinculación de competencias como completa; no bloquea controles.
 5. Procedencia URL: no hay campo reutilizable comprobado. No bloquea mostrar resultados; sí bloquea ofrecer un enlace Origen hasta que exista evidencia en TE.
 
 Las discrepancias entre distancia asignada y último control no bloquean consultar el historial. Deben quedar visibles y resolverse en la administración que ya asigna distancias, sin mutaciones de Mi progreso.
@@ -218,6 +233,12 @@ Las discrepancias entre distancia asignada y último control no bloquean consult
 9. JWT inválido o alumno ajeno produce 401/403 antes de consultar orígenes o reutilizar una caché. RLS impide confirmar vínculos desde el cliente de alumno/tutor.
 10. Correcciones y nuevas publicaciones aparecen tras revalidación, con plazo objetivo de cinco minutos en una pantalla activa y fuentes disponibles. La fecha visible corresponde a una consulta real correcta.
 11. Funciona a 320/390 px y escritorio de 1440 px, con navegación por teclado y alternativa legible a la gráfica. No altera reservas, membresías, liga ni rankings.
+
+### Puertas de aceptación por entrega
+
+**Controles:** cumplir íntegramente los criterios de identidad, permisos, tutor, caché y reglas de entrenamiento sin configurar TE ni crear sus bridges. Probar también nombres iguales, confirmación concurrente, acceso a caché tras revocar, distancia cambiada con caché caliente y último día de orden incierto. La ausencia de TE no genera errores ni solicitudes de red. Esta entrega es una sección utilizable, no un esqueleto de ambas fuentes.
+
+**Competencias:** conservar todas las pruebas anteriores y añadir todos los casos TE y de fallos independientes. Probar además bridge ajeno, confirmación remota fallida, respuesta perdida, reintento idempotente y revocación local con limpieza remota pendiente. No reducir estas pruebas para simplificar la operación del administrador.
 
 ## 9. Qué se hizo en esta tarea
 
