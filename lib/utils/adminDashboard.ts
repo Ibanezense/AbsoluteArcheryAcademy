@@ -68,6 +68,7 @@ export type AdminDashboardData = {
     developing: number
     advanced: number
     competitive: number
+    unclassified?: number
   }
 }
 
@@ -113,6 +114,7 @@ export const emptyAdminDashboardData: AdminDashboardData = {
     developing: 0,
     advanced: 0,
     competitive: 0,
+    unclassified: 0,
   },
 }
 
@@ -234,6 +236,9 @@ export function normalizeAdminDashboardData(raw: unknown): AdminDashboardData {
       developing: toNumber(studentsByLevel.developing),
       advanced: toNumber(studentsByLevel.advanced),
       competitive: toNumber(studentsByLevel.competitive),
+      unclassified: Math.max(0, toNumber(monthly.activeStudents) -
+        toNumber(studentsByLevel.beginner) - toNumber(studentsByLevel.developing) -
+        toNumber(studentsByLevel.advanced) - toNumber(studentsByLevel.competitive)),
     },
   }
 }

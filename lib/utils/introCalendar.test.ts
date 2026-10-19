@@ -12,6 +12,9 @@ const appointment = {
 } satisfies IntroAppointment
 
 describe('intro weekly calendar', () => {
+  it('preserves civil dates rather than moving midnight UTC to the previous Lima day', () => {
+    expect(calendarDate('2026-10-18')).toBe('2026-10-18')
+  })
   it('uses the Lima day even when UTC has crossed midnight', () => {
     expect(calendarDate('2026-10-12T02:00:00Z')).toBe('2026-10-11')
   })

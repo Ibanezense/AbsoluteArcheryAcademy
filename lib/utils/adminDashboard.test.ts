@@ -6,6 +6,15 @@ import {
 } from '@/lib/utils/adminDashboard'
 
 describe('normalizeAdminDashboardData', () => {
+  it('includes unknown and empty levels in the active population without assigning Nivel 1', () => {
+    const dashboard = normalizeAdminDashboardData({ monthly: { activeStudents: 31 }, studentsByLevel: { beginner: 1, developing: 0, advanced: 0, competitive: 0 } })
+    expect(dashboard.studentsByLevel.unclassified).toBe(30)
+    expect(Object.values(dashboard.studentsByLevel).reduce((sum, count) => sum + count, 0)).toBe(31)
+  })
+
+  it('preserves explicit zero unclassified and never derives negative counts', () => {
+    expect(normalizeAdminDashboardData({ monthly: { activeStudents: 0 }, studentsByLevel: { beginner: 1 } }).studentsByLevel.unclassified).toBe(0)
+  })
   it('returns a stable empty dashboard model for missing rpc data', () => {
     const dashboard = normalizeAdminDashboardData(null)
 

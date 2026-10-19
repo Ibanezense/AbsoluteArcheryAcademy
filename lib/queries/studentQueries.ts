@@ -78,6 +78,31 @@ export function buildLastAttendanceByStudent(rows: AttendedBookingRow[]) {
   return latestByStudent
 }
 
+export async function fetchLastAttendanceByStudent(client: Pick<typeof supabase, 'rpc' | 'from'>) {
+  const summary = await client.rpc('get_admin_last_attendance_summary')
+  if (!summary.error) {
+    if (!Array.isArray(summary.data)) throw new Error('No se pudo leer el resumen de asistencias.')
+    return new Map<string, string>(summary.data.map((row: { student_id: string; last_attendance_at: string }) => [row.student_id, row.last_attendance_at]))
+  }
+  // Compatibility until the additive summary RPC is deployed. Do not hide access/network errors.
+  if (!['PGRST202', '42883'].includes(summary.error.code)) throw summary.error
+  const latest = new Map<string, string>()
+  const pageSize = 500
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client.from('bookings')
+      .select('student_id,attendance_marked_at,sessions(start_at)')
+      .eq('status', 'attended').not('student_id', 'is', null)
+      .order('id', { ascending: true }).range(offset, offset + pageSize - 1)
+    if (error) throw error
+    const rows = (data || []) as AttendedBookingRow[]
+    for (const [studentId, attendanceAt] of buildLastAttendanceByStudent(rows)) {
+      const previous = latest.get(studentId)
+      if (!previous || Date.parse(attendanceAt) > Date.parse(previous)) latest.set(studentId, attendanceAt)
+    }
+    if (rows.length < pageSize) return latest
+  }
+}
+
 function dateKey(value: string | null | undefined) {
   if (!value) return null
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
@@ -286,21 +311,14 @@ export function useStudents() {
             )
           `)
           .order('full_name', { ascending: true }),
-        supabase
-          .from('bookings')
-          .select('student_id,attendance_marked_at,sessions(start_at)')
-          .eq('status', 'attended')
-          .not('student_id', 'is', null),
+        fetchLastAttendanceByStudent(supabase),
         supabase.rpc('get_admin_membership_reservation_commitments', { p_student_id: null }),
       ])
 
       if (studentsResult.error) throw studentsResult.error
-      if (attendanceResult.error) throw attendanceResult.error
       if (reservedBookingsResult.error) throw reservedBookingsResult.error
 
-      const lastAttendanceByStudent = buildLastAttendanceByStudent(
-        (attendanceResult.data || []) as AttendedBookingRow[],
-      )
+      const lastAttendanceByStudent = attendanceResult
       const commitmentsByMembershipId = normalizeMembershipCommitments(reservedBookingsResult.data)
 
       return ((studentsResult.data || []) as any[]).map((student) => {

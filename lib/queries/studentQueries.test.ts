@@ -6,7 +6,42 @@ vi.mock('@/lib/supabaseClient', () => ({
   },
 }))
 
-import { buildLastAttendanceByStudent, mapStudentListRow } from '@/lib/queries/studentQueries'
+import { buildLastAttendanceByStudent, fetchLastAttendanceByStudent, mapStudentListRow } from '@/lib/queries/studentQueries'
+
+describe('complete attendance summaries', () => {
+  it('uses the protected aggregate without downloading booking history', async () => {
+    const client = { rpc: vi.fn().mockResolvedValue({ data: [{ student_id: 'a', last_attendance_at: '2026-10-18T15:00:00Z' }], error: null }), from: vi.fn() }
+    const result = await fetchLastAttendanceByStudent(client as any)
+    expect(result.get('a')).toBe('2026-10-18T15:00:00Z')
+    expect(result.has('no-history')).toBe(false)
+    expect(client.from).not.toHaveBeenCalled()
+  })
+
+  it('reads every page on an older database, including a recent attendance after 1000 rows', async () => {
+    const history = Array.from({ length: 1001 }, (_, index) => ({ student_id: 'a', attendance_marked_at: '2026-10-18T20:00:00Z', sessions: { start_at: index === 1000 ? '2026-10-18T15:00:00Z' : '2026-01-01T15:00:00Z' } }))
+    const query: any = { select: () => query, eq: () => query, not: () => query, order: () => query, range: vi.fn((start: number, end: number) => Promise.resolve({ data: history.slice(start, end + 1), error: null })) }
+    const client = { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST202' } }), from: vi.fn(() => query) }
+    const result = await fetchLastAttendanceByStudent(client as any)
+    expect(result.get('a')).toBe('2026-10-18T15:00:00Z')
+    expect(query.range).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not present permission errors or partial reads as no attendance', async () => {
+    const error = { code: '42501', message: 'No autorizado' }
+    const client = { rpc: vi.fn().mockResolvedValue({ data: null, error }), from: vi.fn() }
+    await expect(fetchLastAttendanceByStudent(client as any)).rejects.toEqual(error)
+    expect(client.from).not.toHaveBeenCalled()
+  })
+
+  it('fails the entire summary when a compatibility page fails', async () => {
+    const error = { code: 'network_error' }
+    const rows = Array.from({ length: 500 }, () => ({ student_id: 'a', attendance_marked_at: null, sessions: { start_at: '2026-10-18T15:00:00Z' } }))
+    const query: any = { select: () => query, eq: () => query, not: () => query, order: () => query,
+      range: vi.fn().mockResolvedValueOnce({ data: rows, error: null }).mockResolvedValueOnce({ data: null, error }) }
+    const client = { rpc: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST202' } }), from: vi.fn(() => query) }
+    await expect(fetchLastAttendanceByStudent(client as any)).rejects.toEqual(error)
+  })
+})
 
 describe('mapStudentListRow', () => {
   beforeEach(() => {

@@ -35,6 +35,11 @@ export function useAdminDashboardData() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_admin_dashboard_operational_data')
       if (error) throw error
+      if (!data || typeof data !== 'object' || Array.isArray(data) ||
+        ['today', 'alerts', 'monthly', 'studentsByLevel'].some((key) =>
+          !data[key] || typeof data[key] !== 'object' || Array.isArray(data[key]))) {
+        throw new Error('Datos del resumen no disponibles. Vuelve a intentarlo.')
+      }
       return normalizeAdminDashboardData(data)
     },
     staleTime: 60 * 1000,

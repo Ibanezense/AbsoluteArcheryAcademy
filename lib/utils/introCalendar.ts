@@ -24,6 +24,7 @@ export const INTRO_STATES: { value: IntroState; label: string; color: string; do
 ]
 
 export function calendarDate(value: string | Date): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(value))
 }
 export function shiftDate(date: string, days: number): string {

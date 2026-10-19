@@ -19,7 +19,7 @@ vi.mock('@/lib/services/adminWeekendIntroCapacityService', () => ({
   fetchAdminWeekendIntroCapacity: mocks.fetchCapacity,
 }))
 
-import { useAdminWeekendIntroCapacity } from '@/lib/hooks/useAdminDashboardData'
+import { useAdminDashboardData, useAdminWeekendIntroCapacity } from '@/lib/hooks/useAdminDashboardData'
 
 type CapturedQueryOptions = {
   queryKey: readonly unknown[]
@@ -27,6 +27,29 @@ type CapturedQueryOptions = {
   staleTime: number
   refetchOnWindowFocus: boolean
 }
+
+describe('dashboard source availability', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.useQuery.mockReturnValue({ data: undefined, error: null, refetch: mocks.refetch })
+  })
+
+  it('rejects a missing or malformed response instead of presenting zero totals', async () => {
+    useAdminDashboardData()
+    const options = mocks.useQuery.mock.calls[0][0] as CapturedQueryOptions
+    for (const data of [null, [], {}]) {
+      mocks.rpc.mockResolvedValueOnce({ data, error: null })
+      await expect(options.queryFn()).rejects.toThrow('Datos del resumen no disponibles')
+    }
+  })
+
+  it('accepts a real zero population when the source returns all metric sections', async () => {
+    useAdminDashboardData()
+    const options = mocks.useQuery.mock.calls[0][0] as CapturedQueryOptions
+    mocks.rpc.mockResolvedValueOnce({ data: { today: {}, monthly: { activeStudents: 0 }, alerts: {}, studentsByLevel: {} }, error: null })
+    expect(await options.queryFn()).toMatchObject({ monthly: { activeStudents: 0 } })
+  })
+})
 
 describe('useAdminWeekendIntroCapacity', () => {
   beforeEach(() => {
