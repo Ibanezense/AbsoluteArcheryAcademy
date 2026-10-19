@@ -30,6 +30,8 @@ import { AdminDonutChart, AdminPageHeader } from '@/components/admin/AdminVisual
 import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
 import MembershipGrowthChart from '@/components/admin/MembershipGrowthChart'
 import TrialConversionPanel from '@/components/admin/TrialConversionPanel'
+import { useAdminWeeklySummary } from '@/lib/hooks/useAdminWeeklySummary'
+import { formatWeeklyRange } from '@/lib/utils/adminWeeklySummary'
 import { attendanceHref, administrativeBookingHref } from '@/lib/utils/adminNavigation'
 import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
@@ -245,7 +247,7 @@ function StudentSearchBox() {
   )
 }
 
-function TodayCard({
+function WeeklyCard({
   title,
   value,
   helper,
@@ -282,13 +284,35 @@ function TodayCard({
         <div className="mt-2 flex items-end justify-between gap-3">
           <p className="font-heading text-2xl font-semibold leading-none tracking-tight text-slate-950">{value}</p>
           <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500 sm:inline-flex">
-            Hoy
+            Semana
           </span>
         </div>
         <p className="mt-1 hidden max-w-[12rem] text-xs leading-5 text-slate-500 sm:block">{helper}</p>
       </div>
     </article>
   )
+}
+
+
+function WeeklySummary() {
+  const query = useAdminWeeklySummary()
+  const summary = query.data
+  return <section aria-labelledby="weekly-summary-title" className="space-y-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div><h2 id="weekly-summary-title" className="text-lg font-semibold text-slate-950">Esta semana</h2><p className="mt-1 text-sm text-slate-500">Lunes a domingo · {formatWeeklyRange(query.week.startDate, query.week.endDate)}</p></div>
+      <p className="text-xs text-slate-500">Se actualiza cada lunes · hora de Lima</p>
+    </div>
+    {query.isPending ? <p role="status" className="py-6 text-sm text-slate-500">Cargando resumen semanal…</p> : query.isError || !summary ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p>No pudimos cargar los indicadores de esta semana.</p><button type="button" onClick={() => void query.refetch()} className="mt-2 min-h-11 font-medium underline">Reintentar resumen semanal</button></div> : <>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+        <WeeklyCard title="Reservas de la semana" value={summary.reservations} helper="Alumnos y pruebas, sin canceladas" action="Ver agenda" href="/admin/asistencia" icon={<CalendarDays className="h-5 w-5" />} />
+        <WeeklyCard title="Clases programadas" value={summary.scheduledSessions} helper="Turnos de lunes a domingo" action="Ver turnos" href="/admin/sesiones" icon={<CalendarClock className="h-5 w-5" />} />
+        <WeeklyCard title="Cupos libres esta semana" value={summary.availableSlots ?? 'N/D'} helper="En turnos que aún no comenzaron" action="Nueva reserva" href="/admin/sesiones" icon={<Gauge className="h-5 w-5" />} />
+        <WeeklyCard title="Pendientes de confirmar" value={summary.pendingConfirmations} helper="Pruebas reservadas de esta semana" action="Confirmar" href="/admin/intro" icon={<AlertTriangle className="h-5 w-5" />} tone={summary.pendingConfirmations > 0 ? 'warning' : 'neutral'} />
+        <WeeklyCard title="Asistencias por marcar" value={summary.attendancePending} helper="Reservas de la semana sin asistencia" action="Marcar asistencia" href="/admin/asistencia" icon={<ClipboardCheck className="h-5 w-5" />} tone={summary.attendancePending > 0 ? 'critical' : 'neutral'} />
+      </div>
+      <p className="text-xs leading-5 text-slate-500">Las reservas y los pendientes incluyen la semana completa. Los cupos libres excluyen horarios pasados; N/D indica que falta capacidad configurada.</p>
+    </>}
+  </section>
 }
 
 function AlertTask({
@@ -633,55 +657,7 @@ export default function AdminDashboard() {
 
 
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <SectionHeader title="Hoy" helper={isFetching ? 'Actualizando datos...' : 'Operacion del dia actual.'} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
-            <TodayCard
-              title="Reservas de hoy"
-              value={dashboard.today.reservationsToday}
-              helper="Alumnos y pruebas en agenda"
-              action="Ver agenda"
-              href="/admin/asistencia"
-              icon={<CalendarDays className="h-5 w-5" />}
-            />
-            <TodayCard
-              title="Clases programadas"
-              value={dashboard.today.scheduledSessionsToday}
-              helper="Turnos programados hoy"
-              action="Ver turnos"
-              href="/admin/sesiones"
-              icon={<CalendarClock className="h-5 w-5" />}
-            />
-            <TodayCard
-              title="Cupos libres hoy"
-              value={dashboard.today.availableSlotsToday ?? 'N/D'}
-              helper="Segun capacidad configurada"
-              action="Nueva reserva"
-              href="/admin/sesiones"
-              icon={<Gauge className="h-5 w-5" />}
-            />
-            <TodayCard
-              title="Pendientes de confirmar"
-              value={dashboard.today.pendingConfirmations}
-              helper="Pruebas reservadas por validar"
-              action="Confirmar"
-              href="/admin/intro"
-              icon={<AlertTriangle className="h-5 w-5" />}
-              tone={dashboard.today.pendingConfirmations > 0 ? 'warning' : 'neutral'}
-            />
-            <TodayCard
-              title="Asistencias por marcar"
-              value={dashboard.today.attendancePending}
-              helper="Reservas sin asistencia"
-              action="Marcar asistencia"
-              href="/admin/asistencia"
-              icon={<ClipboardCheck className="h-5 w-5" />}
-              tone={dashboard.today.attendancePending > 0 ? 'critical' : 'neutral'}
-            />
-          </div>
-        </section>
+        <WeeklySummary />
 
         <section className="space-y-3">
           <SectionHeader title="Pendientes importantes" helper="Tareas que requieren seguimiento operativo." />

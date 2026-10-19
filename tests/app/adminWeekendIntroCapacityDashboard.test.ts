@@ -7,7 +7,7 @@ function source(path: string) {
 }
 
 describe('admin weekend intro capacity dashboard', () => {
-  it('places weekly availability after daily work and agenda', () => {
+  it('places weekly availability after the operational summary and agenda', () => {
     const dashboard = source('app/admin/page.tsx')
 
     expect(dashboard).toContain(
@@ -18,7 +18,7 @@ describe('admin weekend intro capacity dashboard', () => {
       dashboard.indexOf('<WeeklyAgenda agenda='),
     )
     expect(dashboard.indexOf('<WeekendIntroCapacity />')).toBeGreaterThan(
-      dashboard.indexOf('<SectionHeader title="Hoy"'),
+      dashboard.indexOf('<WeeklySummary />'),
     )
   })
 
