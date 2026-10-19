@@ -5,6 +5,7 @@ import { getStudentOperationalStatus, type StudentOperationalStatus } from '@/li
 
 export type AdminStudentStatus = StudentOperationalStatus
 export type AdminStudentFilter = 'all' | AdminStudentStatus
+export type AdminStudentSort = 'status' | 'expiry' | 'name'
 
 const STATUS_PRIORITY: Record<AdminStudentStatus, number> = {
   active: 0,
@@ -54,6 +55,7 @@ export function filterAdminStudents(
   query: string,
   filter: AdminStudentFilter,
   now = new Date(),
+  options: { locationId?: string; sort?: AdminStudentSort } = {},
 ) {
   const needle = norm(query)
 
@@ -63,9 +65,18 @@ export function filterAdminStudents(
         .map((value) => norm(value))
         .some((value) => value.includes(needle))
 
-      return matchesQuery && (filter === 'all' || getAdminStudentStatus(student, now) === filter)
+      return matchesQuery
+        && (!options.locationId || student.home_location_id === options.locationId)
+        && (filter === 'all' || getAdminStudentStatus(student, now) === filter)
     })
     .sort((left, right) => {
+      if (options.sort === 'expiry') {
+        const leftEnd = left.membership_end && dayjs(left.membership_end).isValid() ? left.membership_end : '9999-12-31'
+        const rightEnd = right.membership_end && dayjs(right.membership_end).isValid() ? right.membership_end : '9999-12-31'
+        const difference = leftEnd.localeCompare(rightEnd)
+        if (difference) return difference
+      }
+      if (options.sort === 'name' || options.sort === 'expiry') return left.full_name.localeCompare(right.full_name, 'es', { sensitivity: 'base' })
       const statusDifference =
         STATUS_PRIORITY[getAdminStudentStatus(left, now)] -
         STATUS_PRIORITY[getAdminStudentStatus(right, now)]

@@ -16,12 +16,16 @@ describe('reservations from the student profile', () => {
   it('locks the student picker when opened from a profile and calls the success callback', () => {
     const modal = readFileSync('components/AdminQuickBooking.tsx', 'utf8')
     expect(modal).toContain('studentId?: string')
-    expect(modal).toContain('setSelectedStudent(studentId ||')
+    expect(modal).toContain('initialBookingFlow(todayLocalValue(), studentId)')
+    expect(modal).toContain("dispatchFlow({ type: 'reset', date: todayLocalValue(), studentId })")
+    expect(modal).toMatch(/studentId \? students\.filter\(\(student\) => student\.id === studentId\)/)
     expect(modal).toContain('disabled={Boolean(studentId)}')
     expect(modal).toContain('await onBooked?.()')
   })
   it('reloads sessions whenever the profile booking dialog is reopened', () => {
     const modal = readFileSync('components/AdminQuickBooking.tsx', 'utf8')
-    expect(modal.includes('[dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen]')).toBe(true)
+    expect(modal).toMatch(/if \(!isOpen \|\| !selectedStudent\)/)
+    expect(modal).toMatch(/void loadSessions\(\)[\s\S]*?\[dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen(?:, [a-zA-Z]+)*\]/)
+    expect(modal).toContain('return () => { current = false }')
   })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -363,7 +363,7 @@ function SectionShell({ title, description, children, action }: { title: string;
     <AdminContentPanel className="p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-black text-slate-950">{title}</h2>
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
           {description && <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>}
         </div>
         {action}
@@ -384,11 +384,10 @@ function InfoRow({ label, value, danger = false }: { label: string; value: React
 
 function KpiCard({ icon, label, value, helper, tone }: { icon: ReactNode; label: string; value: string | number; helper: string; tone: string }) {
   return (
-    <article className="rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
-      <div className={`grid h-11 w-11 place-items-center rounded-2xl ${tone}`}>{icon}</div>
-      <p className="mt-4 text-sm font-black text-slate-700">{label}</p>
-      <p className="mt-2 font-heading text-4xl font-black leading-none tracking-[-0.055em] text-slate-950">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">{helper}</p>
+    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center gap-2 text-xs text-slate-600"><span className={`rounded-md p-1 ${tone}`}>{icon}</span>{label}</div>
+      <p className="mt-2 break-words text-xl font-semibold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-4 text-slate-500">{helper}</p>
     </article>
   )
 }
@@ -416,19 +415,19 @@ function AccessCodeCard({
     <div className="rounded-[1.15rem] border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-black text-slate-950">{title}</p>
+          <p className="text-sm font-semibold text-slate-950">{title}</p>
           <p className="mt-1 truncate text-xs text-slate-500">{email || phone || 'Sin contacto registrado'}</p>
         </div>
         <KeyRound className="h-5 w-5 text-slate-400" />
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-        <span className="font-mono text-sm font-black tracking-[0.28em] text-slate-950">
+        <span className="font-mono text-sm font-semibold tracking-[0.28em] text-slate-950">
           {isRevealed ? code || 'Sin código' : '••••••'}
         </span>
         <button
           type="button"
           onClick={() => onToggle(accountId)}
-          className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 transition hover:border-accent/40 hover:text-accent"
+          className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:border-accent/40 hover:text-accent"
         >
           {isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           {isRevealed ? 'Ocultar código' : 'Ver código'}
@@ -444,7 +443,7 @@ function StudentDetailSkeleton() {
       <div className="h-24 animate-pulse rounded-[1.5rem] bg-slate-100" />
       <div className="grid gap-4 lg:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-36 animate-pulse rounded-[1.25rem] bg-slate-100" />
+          <div key={index} className="h-36 animate-pulse rounded-xl bg-slate-100" />
         ))}
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
@@ -468,7 +467,12 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const boundaryClock = useLimaBoundaryClock(data?.bookings)
   const serviceDate = getLimaDateKey(boundaryClock)
 
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>('profile')
+  useEffect(() => {
+    const requested = searchParams.get('tab')
+    if (TABS.some((tab) => tab.id === requested)) setActiveTab(requested as TabId)
+  }, [searchParams])
   const [revealedAccessTarget, setRevealedAccessTarget] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [membershipEditor, setMembershipEditor] = useState<MembershipEditorState | null>(null)
@@ -481,6 +485,15 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [studentStatusSaving, setStudentStatusSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [generalActionsOpen, setGeneralActionsOpen] = useState(false)
+  const generalActionsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!generalActionsOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setGeneralActionsOpen(false); generalActionsRef.current?.querySelector('button')?.focus() } }
+    const closeOutside = (event: MouseEvent) => { if (event.target instanceof Node && !generalActionsRef.current?.contains(event.target)) setGeneralActionsOpen(false) }
+    document.addEventListener('keydown', closeOnEscape)
+    document.addEventListener('mousedown', closeOutside)
+    return () => { document.removeEventListener('keydown', closeOnEscape); document.removeEventListener('mousedown', closeOutside) }
+  }, [generalActionsOpen])
   const [membershipMenuId, setMembershipMenuId] = useState<string | null>(null)
   const [assignmentOpen, setAssignmentOpen] = useState(false)
   const [assignmentForm, setAssignmentForm] = useState<MembershipAssignmentFormState>(emptyMembershipAssignment)
@@ -895,7 +908,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         title="Alumno no encontrado"
         description={error instanceof Error ? error.message : 'No se pudo cargar la ficha solicitada.'}
         action={
-          <button type="button" className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white" onClick={() => router.push('/admin/alumnos')}>
+          <button type="button" className="rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white" onClick={() => router.push('/admin/alumnos')}>
             Volver al listado
           </button>
         }
@@ -979,7 +992,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       : null,
     recentNoShows.length > 0
       ? {
-        title: 'No-shows recientes',
+        title: 'Inasistencias recientes',
         description: `${recentNoShows.length} falta(s) en los últimos 14 días.`,
         action: 'Revisar',
         href: '#attendance',
@@ -990,7 +1003,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     !nextBooking
       ? {
         title: 'Sin próxima reserva',
-        description: 'No tiene reservas programadas esta semana.',
+        description: 'No tiene reservas próximas programadas.',
         action: 'Reservar ahora',
         href: '/admin/sesiones',
         tone: 'danger',
@@ -1001,18 +1014,16 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
   const headerActions = (
     <>
-      <button type="button" onClick={() => { setAssignmentOpen(true); setActiveTab('membership') }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white shadow-[0_16px_35px_rgba(249,115,22,0.24)]">
-        <WalletCards className="h-4 w-4" />
-        Asignar membresía
-      </button>
-      <div className="relative">
-        <button type="button" aria-label="Acciones del alumno" aria-expanded={generalActionsOpen} onClick={() => setGeneralActionsOpen((open) => !open)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-accent/40 hover:text-accent">
+      <button type="button" onClick={() => setBookingOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white"><CalendarDays className="h-4 w-4" />Reservar clase</button>
+      <Link href={`/admin/membresias?studentId=${encodeURIComponent(data.id)}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700"><WalletCards className="h-4 w-4" />Renovar</Link>
+      <div ref={generalActionsRef} className="relative">
+        <button type="button" aria-label="Acciones del alumno" aria-expanded={generalActionsOpen} onClick={() => setGeneralActionsOpen((open) => !open)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-accent/40 hover:text-accent">
           Acciones <ChevronDown className="h-4 w-4" />
         </button>
         {generalActionsOpen && (
           <div className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
             <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => { setAssignmentOpen(true); setActiveTab('membership'); setGeneralActionsOpen(false) }}><WalletCards className="h-4 w-4" /> Asignar membresía</button>
-            <Link href="/admin/sesiones" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => setGeneralActionsOpen(false)}><CalendarDays className="h-4 w-4" /> Reservar clase</Link>
+            <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => { setBookingOpen(true); setGeneralActionsOpen(false) }}><CalendarDays className="h-4 w-4" /> Reservar clase</button>
             <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60" onClick={handleToggleManualInactive} disabled={studentStatusSaving}><UserRound className="h-4 w-4" /> {studentStatusSaving ? 'Actualizando…' : manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo'}</button>
             {(data.self_account || !manualInactive) && (
               <button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={handleToggleStudentBlock}><ShieldAlert className="h-4 w-4" /> {accessIsActive ? 'Bloquear alumno' : 'Reactivar acceso'}</button>
@@ -1025,40 +1036,27 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   )
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-4 pb-8">
       <AdminPageHeader
         title={data.full_name}
-        description={`Alumno desde el ${formatDate(data.created_at)} - ID: ${data.id.slice(0, 8).toUpperCase()}`}
+        description={`Alumno desde el ${formatDate(data.created_at)}`}
         actions={headerActions}
       />
 
-      <AdminContentPanel className="p-5 sm:p-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)] xl:items-center">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <Avatar name={data.full_name} url={data.avatar_url} size="lg" className="h-28 w-28 border-4 border-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <OperationalStatusBadge label={statusLabel(operationalStatus)} tone={statusTone(operationalStatus)} />
-                {data.is_country_club_tiabaya_member && <OperationalStatusBadge label="Country Club" tone="info" />}
-              </div>
-              <div className="mt-4 grid gap-2 text-sm text-slate-600">
-                <span><strong className="text-slate-950">Disciplina:</strong> {data.division || 'No definida'}</span>
-                <span><strong className="text-slate-950">Categoría:</strong> {data.category || 'No definida'}</span>
-                <span><strong className="text-slate-950">Nivel:</strong> {data.level || 'No definido'}</span>
-                <span><strong className="text-slate-950">Distancia:</strong> {data.current_distance_m ? `${data.current_distance_m} metros` : 'No definida'}</span>
-                <span><strong className="text-slate-950">Equipo:</strong> {getStudentBowUsage({ hasOwnBow: data.has_own_bow, assignedBow: data.assigned_bow, bowPoundage: data.bow_poundage }).label}</span>
-              </div>
-            </div>
+      <AdminContentPanel className="p-4">
+        <div className="flex items-center gap-3">
+          <Avatar name={data.full_name} url={data.avatar_url} size="md" />
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <OperationalStatusBadge label={statusLabel(operationalStatus)} tone={statusTone(operationalStatus)} />
+            {data.is_country_club_tiabaya_member && <OperationalStatusBadge label="Country Club" tone="info" />}
+            <p className="text-xs text-slate-600">{data.division || 'Disciplina no definida'} · {data.current_distance_m ? `${data.current_distance_m} m` : 'Distancia no definida'}</p>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <KpiCard icon={<WalletCards className="h-5 w-5" />} label="Total abierto" value={data.total_open_classes} helper={`${data.open_membership_count} membresías abiertas`} tone="border border-orange-200 bg-orange-50 text-accent" />
-            <KpiCard icon={<Target className="h-5 w-5" />} label="Clases disponibles" value={data.usable_classes} helper={`Utilizable hoy · ${currentFreeBalance} libres en el ciclo vigente`} tone="border border-emerald-200 bg-emerald-50 text-emerald-600" />
-            <KpiCard icon={<CalendarDays className="h-5 w-5" />} label="Reservas próximas" value={upcomingBookings.length} helper={nextBooking ? `Próxima: ${formatDate(nextBooking.start_at)}` : 'Sin agenda'} tone="border border-blue-200 bg-blue-50 text-blue-600" />
-            <KpiCard icon={<Clock3 className="h-5 w-5" />} label="Vence" value={membershipEndDelta ?? '-'} helper={activeMembership?.end_date ? `${membershipEndDelta === 1 ? 'día' : 'días'} - ${formatDate(activeMembership.end_date)}` : 'Sin fecha'} tone="border border-orange-200 bg-orange-50 text-accent" />
-            <KpiCard icon={<BadgeDollarSign className="h-5 w-5" />} label="Pagos pendientes" value={pendingPayments.length} helper={pendingPayments[0] ? formatMoney(pendingPayments[0].amount, pendingPayments[0].currency) : 'Al dia'} tone="border border-amber-200 bg-amber-50 text-amber-600" />
-            <KpiCard icon={<ShieldAlert className="h-5 w-5" />} label="Inasistencias recientes" value={recentNoShows.length} helper="Últimos 14 días" tone="border border-rose-200 bg-rose-50 text-rose-600" />
-          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <KpiCard icon={<Target className="h-4 w-4" />} label="Clases disponibles" value={data.usable_classes} helper={`${currentFreeBalance} libres en el ciclo vigente`} tone="text-emerald-700" />
+          <KpiCard icon={<CalendarDays className="h-4 w-4" />} label="Clases reservadas" value={upcomingBookings.length} helper={nextBooking ? `Próxima: ${formatDate(nextBooking.start_at)}` : 'Sin reservas próximas'} tone="text-blue-700" />
+          <KpiCard icon={<Clock3 className="h-4 w-4" />} label="Vencimiento" value={activeMembership?.end_date ? formatDate(activeMembership.end_date) : 'Sin fecha'} helper={membershipEndDelta === null ? 'Sin ciclo vigente' : membershipEndDelta < 0 ? 'Ciclo vencido' : `En ${membershipEndDelta} días`} tone="text-orange-700" />
+          <KpiCard icon={<WalletCards className="h-4 w-4" />} label="Total sin consumir" value={data.total_open_classes} helper={`${data.open_membership_count} membresías abiertas; incluye reservas`} tone="text-slate-600" />
         </div>
       </AdminContentPanel>
 
@@ -1069,47 +1067,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
         operationalStatus={operationalStatus}
       />
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-black text-slate-950">Alertas prioritarias</h2>
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-          </div>
-          {alerts.length > 3 && <button className="text-sm font-black text-accent" type="button">Ver todas las alertas</button>}
-        </div>
-        {alerts.length === 0 ? (
-          <AdminContentPanel className="p-5 text-sm font-bold text-slate-500">No hay alertas operativas para este alumno.</AdminContentPanel>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {alerts.slice(0, 3).map((alert) => (
-              <Link
-                key={alert.title}
-                href={alert.href}
-                onClick={() => {
-                  if (alert.href === '#attendance') setActiveTab('attendance')
-                  if (alert.href === '#membership') { setActiveTab('membership'); setAssignmentOpen(true) }
-                }}
-                className={`group rounded-[1.25rem] border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.055)] transition hover:-translate-y-0.5 ${
-                  alert.tone === 'danger'
-                    ? 'border-rose-200 bg-rose-50 text-rose-700'
-                    : 'border-amber-200 bg-amber-50 text-amber-700'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="rounded-2xl bg-white p-3">{alert.icon}</div>
-                  <div className="min-w-0">
-                    <p className="font-black text-slate-950">{alert.title}</p>
-                    <p className="mt-1 text-sm leading-5 text-slate-700">{alert.description}</p>
-                    <span className="mt-5 inline-flex items-center gap-2 text-sm font-black text-accent">
-                      {alert.action} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+
 
       <AdminContentPanel className="overflow-hidden">
         <div role="tablist" aria-label="Secciones del perfil del alumno" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-3">
@@ -1121,8 +1079,19 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
               id={`student-tab-${tab.id}`}
               aria-selected={activeTab === tab.id}
               aria-controls={`student-panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onKeyDown={(event) => {
+                const index = TABS.findIndex((item) => item.id === tab.id)
+                const nextIndex = event.key === 'ArrowRight' ? (index + 1) % TABS.length
+                  : event.key === 'ArrowLeft' ? (index - 1 + TABS.length) % TABS.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null
+                if (nextIndex === null) return
+                event.preventDefault()
+                setActiveTab(TABS[nextIndex].id)
+                document.getElementById(`student-tab-${TABS[nextIndex].id}`)?.focus()
+              }}
               onClick={() => setActiveTab(tab.id)}
-              className={`min-h-12 whitespace-nowrap border-b-2 px-4 text-sm font-black transition ${
+              className={`min-h-12 whitespace-nowrap border-b-2 px-4 text-sm font-semibold transition ${
                 activeTab === tab.id
                   ? 'border-accent text-accent'
                   : 'border-transparent text-slate-500 hover:text-slate-950'
@@ -1133,6 +1102,22 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           ))}
         </div>
       </AdminContentPanel>
+
+      {alerts.length > 0 && <details className="rounded-xl border border-amber-200 bg-amber-50 px-4">
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-amber-900">Alertas prioritarias ({alerts.length})</summary>
+        <div className="divide-y divide-amber-200 pb-2">
+          {alerts.map((alert) => <div key={alert.title} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+            <div className="min-w-0"><p className="font-semibold text-slate-900">{alert.title}</p><p className="text-xs text-slate-600">{alert.description}</p></div>
+            <button type="button" className="min-h-11 text-xs font-semibold text-orange-800 underline" onClick={() => {
+              if (alert.href === '#membership') { setActiveTab('membership'); setAssignmentOpen(true) }
+              else if (alert.href === '#attendance') setActiveTab('attendance')
+              else if (alert.title === 'Pago pendiente') setActiveTab('payments')
+              else if (alert.title === 'Sin próxima reserva' || alert.title === '1 clase disponible') setBookingOpen(true)
+              else router.push(alert.href)
+            }}>{alert.action}</button>
+          </div>)}
+        </div>
+      </details>}
 
       <div role="tabpanel" id={`student-panel-${activeTab}`} aria-labelledby={`student-tab-${activeTab}`}>
         {activeTab === 'profile' && (
@@ -1310,21 +1295,14 @@ function ProfileTab({
   return (
     <div className="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
       <SectionShell title="Perfil del alumno">
-        <div className="flex flex-col items-center text-center">
-          <Avatar name={form.full_name || data.full_name} url={form.avatar_url || null} size="lg" className="h-32 w-32 border-4 border-white shadow-[0_18px_45px_rgba(15,23,42,0.16)]" />
-          <label className="mt-4 inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 transition hover:border-accent/40 hover:text-accent">
-            {uploadingAvatar ? 'Subiendo foto…' : 'Cambiar foto'}
-            <input type="file" accept="image/*" className="hidden" disabled={uploadingAvatar} onChange={(event) => onUploadAvatar(event.target.files?.[0])} />
-          </label>
-          <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-950">{form.full_name || data.full_name}</h2>
-          <div className="mt-3">
-            <OperationalStatusBadge label={statusLabel(operationalStatus)} tone={statusTone(operationalStatus)} />
-          </div>
-        </div>
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700">
+          {uploadingAvatar ? 'Subiendo foto…' : 'Cambiar foto'}
+          <input type="file" accept="image/*" className="hidden" disabled={uploadingAvatar} onChange={(event) => onUploadAvatar(event.target.files?.[0])} />
+        </label>
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Código de acceso</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Código de acceso</p>
           <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="font-mono text-base font-black tracking-[0.25em] text-slate-950">
+            <span className="font-mono text-base font-semibold tracking-[0.25em] text-slate-950">
               {revealed ? account?.access_code || 'Sin código' : '••••••'}
             </span>
             <div className="flex gap-2">
@@ -1342,7 +1320,7 @@ function ProfileTab({
       <SectionShell title="Información general" description="Edita los datos personales y de contacto sin salir de la ficha.">
         <div className="grid gap-6">
           <div>
-            <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-orange-50 text-accent"><UserRound className="h-5 w-5" /></div><div><h3 className="font-black text-slate-950">Datos del alumno</h3><p className="text-xs text-slate-500">Identidad y contacto principal</p></div></div>
+            <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-orange-50 text-accent"><UserRound className="h-5 w-5" /></div><div><h3 className="font-semibold text-slate-950">Datos del alumno</h3><p className="text-xs text-slate-500">Identidad y contacto principal</p></div></div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <FormInput label="Nombre completo" value={form.full_name} onChange={(value) => setForm({ ...form, full_name: value })} />
               <StudentLocationSelect value={form.home_location_id} onChange={(value) => setForm({ ...form, home_location_id: value })} disabled={saving} />
@@ -1356,7 +1334,7 @@ function ProfileTab({
             </div>
           </div>
           <div className="border-t border-slate-200 pt-6">
-            <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-blue-600"><UserRound className="h-5 w-5" /></div><div><h3 className="font-black text-slate-950">Tutor responsable</h3><p className="text-xs text-slate-500">Disponible aunque todavía no exista un tutor.</p></div></div>
+            <div className="mb-4 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-blue-600"><UserRound className="h-5 w-5" /></div><div><h3 className="font-semibold text-slate-950">Tutor responsable</h3><p className="text-xs text-slate-500">Disponible aunque todavía no exista un tutor.</p></div></div>
             <p className="mb-4 text-xs text-slate-500">Datos del responsable para contacto y emisión de boletas. El correo puede ser el mismo del alumno.</p>
             <div className="grid gap-4 md:grid-cols-2">
               <FormInput label="Nombre del tutor" value={form.guardian_name} onChange={(value) => setForm({ ...form, guardian_name: value })} />
@@ -1365,7 +1343,7 @@ function ProfileTab({
               <FormInput label="Teléfono del tutor" value={form.guardian_phone} onChange={(value) => setForm({ ...form, guardian_phone: value })} />
             </div>
           </div>
-          <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-accent px-6 text-sm font-black text-white shadow-[0_14px_30px_rgba(249,115,22,0.22)] disabled:opacity-60" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
+          <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-accent px-6 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(249,115,22,0.22)] disabled:opacity-60" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
         </div>
       </SectionShell>
     </div>
@@ -1404,7 +1382,7 @@ function SportsProfileSection({ data, form, setForm, saving, onSave }: { data: S
         </div>
 
         <div className="border-t border-slate-200 pt-6">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-4"><div><h3 className="font-black text-slate-950">Tipo de arco para reservas</h3><p className="mt-1 text-sm text-slate-500">Cada alumno utiliza exactamente una modalidad.</p></div><span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">Actual: {currentBow.label}</span></div>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-4"><div><h3 className="font-semibold text-slate-950">Tipo de arco para reservas</h3><p className="mt-1 text-sm text-slate-500">Cada alumno utiliza exactamente una modalidad.</p></div><span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Actual: {currentBow.label}</span></div>
           <div className="grid gap-3 md:grid-cols-3">
             {([
               { value: 'own', title: 'Arco propio', helper: 'El alumno lleva su propio equipo.' },
@@ -1413,14 +1391,14 @@ function SportsProfileSection({ data, form, setForm, saving, onSave }: { data: S
             ] as Array<{ value: StudentBowUsageType; title: string; helper: string }>).map((option) => (
               <label key={option.value} className={`cursor-pointer rounded-[1.2rem] border p-4 transition ${form.bow_usage_type === option.value ? 'border-accent bg-orange-50 shadow-[0_12px_30px_rgba(249,115,22,0.12)]' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                 <input type="radio" name="bow-usage-type" className="sr-only" value={option.value} checked={form.bow_usage_type === option.value} onChange={() => setForm({ ...form, bow_usage_type: option.value })} />
-                <div className="flex items-center gap-3"><span className={`grid h-5 w-5 place-items-center rounded-full border ${form.bow_usage_type === option.value ? 'border-accent' : 'border-slate-300'}`}>{form.bow_usage_type === option.value && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}</span><span className="font-black text-slate-950">{option.title}</span></div>
+                <div className="flex items-center gap-3"><span className={`grid h-5 w-5 place-items-center rounded-full border ${form.bow_usage_type === option.value ? 'border-accent' : 'border-slate-300'}`}>{form.bow_usage_type === option.value && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}</span><span className="font-semibold text-slate-950">{option.title}</span></div>
                 <p className="mt-3 text-sm leading-5 text-slate-500">{option.helper}</p>
               </label>
             ))}
           </div>
         </div>
 
-        <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-accent px-6 text-sm font-black text-white disabled:opacity-60" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
+        <div className="flex justify-end border-t border-slate-200 pt-5"><button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-accent px-6 text-sm font-semibold text-white disabled:opacity-60" onClick={onSave} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
       </div>
     </SectionShell>
   )
@@ -1434,7 +1412,7 @@ function PaymentsAndLedgerSection({ data }: { data: StudentDetailData }) {
           <div key={payment.id} className="grid gap-3 rounded-2xl border border-slate-200 p-3 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_auto_auto] sm:items-center">
             <span className="text-slate-500">{formatDate(payment.paid_at)}</span>
             <span className="font-bold text-slate-700">{payment.notes || payment.payment_method || 'Pago de membresia'}</span>
-            <span className="font-black text-slate-950">{formatMoney(payment.amount, payment.currency)}</span>
+            <span className="font-semibold text-slate-950">{formatMoney(payment.amount, payment.currency)}</span>
             <OperationalStatusBadge label={statusLabel(payment.payment_status)} tone={statusTone(payment.payment_status)} />
           </div>
         ))}
@@ -1499,11 +1477,11 @@ function LegacyMembershipTab({
               {renewalWarning}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(activeMembership))}>
+              <button type="button" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(activeMembership))}>
                 <Edit3 className="h-4 w-4" />
                 Editar membresia
               </button>
-              <Link href="/admin/membresias" className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
+              <Link href="/admin/membresias" className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-semibold text-white">
                 <Plus className="h-4 w-4" />
                 Renovar membresia
               </Link>
@@ -1513,29 +1491,29 @@ function LegacyMembershipTab({
           <EmptyOperationalState
             title="Sin membresia activa"
             description="El alumno no puede reservar hasta que tenga un ciclo activo con saldo."
-            action={<Link href="/admin/membresias" className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white">Asignar plan</Link>}
+            action={<Link href="/admin/membresias" className="rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white">Asignar plan</Link>}
           />
         )}
       </SectionShell>
 
-      <SectionShell title="Historial de membresias" action={<button type="button" className="text-sm font-black text-accent" onClick={() => setActiveTab('payments')}>Ver pagos</button>}>
+      <SectionShell title="Historial de membresias" action={<button type="button" className="text-sm font-semibold text-accent" onClick={() => setActiveTab('payments')}>Ver pagos</button>}>
         {memberships.length === 0 ? (
           <EmptyOperationalState title="Sin historial" description="No hay membresias registradas para este alumno." />
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Membresia</th><th className="px-4 py-3">Inicio</th><th className="px-4 py-3">Finalizacion</th><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Tipo de pago</th><th className="px-4 py-3">Importe</th><th className="px-4 py-3">Acciones</th></tr></thead>
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Membresia</th><th className="px-4 py-3">Inicio</th><th className="px-4 py-3">Finalizacion</th><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Tipo de pago</th><th className="px-4 py-3">Importe</th><th className="px-4 py-3">Acciones</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 {memberships.map((membership) => (
                   <tr key={membership.id} className="bg-white align-top">
-                    <td className="px-4 py-4"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases</p></td>
+                    <td className="px-4 py-4"><p className="font-semibold text-slate-950">{membership.custom_name}</p><p className="mt-1 text-xs text-slate-500">{membership.classes_remaining} de {membership.classes_total} clases</p></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.start_date)}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDate(membership.end_date)}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-500">{membership.membership_code || 'Código pendiente'}</td>
                     <td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(membership.status)} tone={statusTone(membership.status)} /></td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-600">{payments.find((payment) => payment.student_membership_id === membership.id)?.payment_method || 'Sin registro'}</td>
                     <td className="whitespace-nowrap px-4 py-4 font-bold text-slate-950">{formatMoney(membership.total_amount, membership.currency)}</td>
-                    <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>Informacion y cambios</button>{isPersistedMembership(membership) && <button type="button" className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipPreviewingId === membership.id || membershipDeletingId === membership.id} aria-busy={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}>{membershipPreviewingId === membership.id ? 'Verificando...' : membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar membresia'}</button>}</div></td>
+                    <td className="px-4 py-4"><div className="flex flex-wrap gap-2"><button type="button" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700" onClick={() => setMembershipEditor(membershipEditorFromSummary(membership))}>Informacion y cambios</button>{isPersistedMembership(membership) && <button type="button" className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60" onClick={() => handleDeleteMembership(membership)} disabled={membershipPreviewingId === membership.id || membershipDeletingId === membership.id} aria-busy={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}>{membershipPreviewingId === membership.id ? 'Verificando...' : membershipDeletingId === membership.id ? 'Eliminando...' : 'Eliminar membresia'}</button>}</div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1548,10 +1526,10 @@ function LegacyMembershipTab({
         <AdminContentPanel className="p-5 sm:p-6 xl:col-span-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-black text-slate-950">Editar membresia</h2>
+              <h2 className="text-lg font-semibold text-slate-950">Editar membresia</h2>
               <p className="mt-1 text-sm text-slate-500">Cambios manuales protegidos por RPC admin y validaciones de backend.</p>
             </div>
-            <button type="button" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={() => setMembershipEditor(null)}>
+            <button type="button" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => setMembershipEditor(null)}>
               Cerrar
             </button>
           </div>
@@ -1581,10 +1559,10 @@ function LegacyMembershipTab({
             </label>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white" onClick={handleSaveMembership} disabled={membershipSaving}>
+            <button type="button" className="rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white" onClick={handleSaveMembership} disabled={membershipSaving}>
               {membershipSaving ? 'Guardando...' : 'Guardar membresia'}
             </button>
-            <button type="button" className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700" onClick={() => setMembershipEditor(null)}>
+            <button type="button" className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700" onClick={() => setMembershipEditor(null)}>
               Cancelar
             </button>
           </div>
@@ -1650,17 +1628,17 @@ function MembershipTab({
         title="Membresías"
         description="Historial completo de ciclos, documentos y condiciones comerciales del alumno."
         action={
-          <button type="button" onClick={() => setAssignmentOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white shadow-[0_14px_30px_rgba(249,115,22,0.2)]">
+          <button type="button" onClick={() => setAssignmentOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-accent px-5 text-sm font-semibold text-white shadow-[0_14px_30px_rgba(249,115,22,0.2)]">
             <Plus className="h-4 w-4" /> Asignar membresía
           </button>
         }
       >
         {memberships.length === 0 ? (
-          <EmptyOperationalState title="Sin membresías" description="Asigna el primer plan para habilitar reservas y saldo de clases." action={<button type="button" onClick={() => setAssignmentOpen(true)} className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white">Asignar membresía</button>} />
+          <EmptyOperationalState title="Sin membresías" description="Asigna el primer plan para habilitar reservas y saldo de clases." action={<button type="button" onClick={() => setAssignmentOpen(true)} className="rounded-2xl bg-accent px-5 py-3 text-sm font-semibold text-white">Asignar membresía</button>} />
         ) : (
           <div className="overflow-x-auto rounded-[1.2rem] border border-slate-200 bg-white">
             <table className="min-w-[1080px] w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80 text-[0.7rem] font-black uppercase tracking-[0.1em] text-slate-500">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-slate-500">
                 <tr>
                   <th className="px-5 py-4">Membresía</th>
                   <th className="px-5 py-4">Fecha de inicio</th>
@@ -1679,10 +1657,10 @@ function MembershipTab({
                   const availableClasses = availableClassesById[membership.id] || 0
                   return (
                     <tr key={membership.id} className="group bg-white transition hover:bg-slate-50/70">
-                      <td className="px-5 py-5"><p className="font-black text-slate-950">{membership.custom_name}</p><p className="mt-1 font-mono text-xs font-bold text-orange-700">{membership.membership_code || 'Código pendiente'}</p><p className="mt-1 text-xs text-slate-500">{availableClasses} libres de {membership.classes_remaining} restantes · {membership.classes_total} totales</p></td>
+                      <td className="px-5 py-5"><p className="font-semibold text-slate-950">{membership.custom_name}</p><p className="mt-1 font-mono text-xs font-bold text-orange-700">{membership.membership_code || 'Código pendiente'}</p><p className="mt-1 text-xs text-slate-500">{availableClasses} libres de {membership.classes_remaining} restantes · {membership.classes_total} totales</p></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.start_date)}</td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{formatDate(membership.end_date)}</td>
-                      <td className="whitespace-nowrap px-5 py-5 font-mono text-xs font-black text-blue-600">{display.documentNumber}</td>
+                      <td className="whitespace-nowrap px-5 py-5 font-mono text-xs font-semibold text-blue-600">{display.documentNumber}</td>
                       <td className="px-5 py-5"><div className="flex flex-wrap gap-2"><OperationalStatusBadge label={statusLabel(queueStatus)} tone={statusTone(queueStatus)} />{display.frozen && <OperationalStatusBadge label="Congelada" tone="info" />}</div></td>
                       <td className="px-5 py-5"><OperationalStatusBadge label={membership.membership_origin === 'gift' ? 'Obsequio' : 'Pagada'} tone={membership.membership_origin === 'gift' ? 'info' : 'neutral'} /></td>
                       <td className="whitespace-nowrap px-5 py-5 font-semibold text-slate-700">{display.paymentType}</td>
@@ -1705,7 +1683,7 @@ function MembershipTab({
                             {isPersistedMembership(membership) && (
                               <button
                                 type="button"
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-black text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
                                 onClick={() => handleDeleteMembership(membership)}
                                 disabled={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}
                                 aria-busy={membershipPreviewingId === membership.id || membershipDeletingId === membership.id}
@@ -1765,7 +1743,7 @@ function MembershipActionDialog({ editor, plans, saving, frozen, onChange, onClo
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
       <div role="dialog" aria-modal="true" aria-label={titles[editor.action]} className="w-full max-w-xl rounded-[1.5rem] border border-slate-200 bg-white p-6 shadow-[0_32px_90px_rgba(15,23,42,0.28)]" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-accent">Membresía</p><h3 className="mt-2 text-xl font-black text-slate-950">{titles[editor.action]}</h3><p className="mt-1 text-sm text-slate-500">{editor.custom_name}</p></div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Membresía</p><h3 className="mt-2 text-xl font-semibold text-slate-950">{titles[editor.action]}</h3><p className="mt-1 text-sm text-slate-500">{editor.custom_name}</p></div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500"><X className="h-4 w-4" /></button></div>
         <div className="mt-6 grid gap-4">
           {editor.action === 'info' && <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2"><ReadOnlyField label="Plan" value={editor.custom_name} /><ReadOnlyField label="Estado" value={statusLabel(editor.status)} /><ReadOnlyField label="Clases" value={`${editor.classes_remaining} de ${editor.classes_total}`} /><ReadOnlyField label="Importe" value={formatMoney(Number(editor.total_amount), editor.currency)} /><ReadOnlyField label="Facturación" value={editor.billing_date ? formatDate(editor.billing_date) : 'Sin fecha'} /><ReadOnlyField label="Descuento" value={getMembershipDisplayFields({ id: editor.id, document_number: null, payment_type: editor.payment_type, billing_date: editor.billing_date, discount_type: editor.discount_type, discount_value: Number(editor.discount_value || 0), frozen_at: frozen ? new Date().toISOString() : null }).discountLabel} /></div>}
           {editor.action === 'cancel' && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-700">La membresía dejará de estar disponible para reservas. Esta acción conserva el historial y los pagos asociados.</div>}
@@ -1785,7 +1763,7 @@ function MembershipActionDialog({ editor, plans, saving, frozen, onChange, onClo
           </div>}
           {editor.action === 'freeze' && frozen && <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-700">Al reactivar, el alumno podrá volver a crear reservas con el saldo disponible.</div>}
         </div>
-        <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700">Cerrar</button>{editor.action !== 'info' && <button type="button" onClick={onSave} disabled={saving} className={`rounded-2xl px-5 py-3 text-sm font-black text-white disabled:opacity-60 ${editor.action === 'cancel' ? 'bg-rose-600' : 'bg-accent'}`}>{saving ? 'Guardando…' : editor.action === 'cancel' ? 'Cancelar membresía' : 'Guardar cambios'}</button>}</div>
+        <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700">Cerrar</button>{editor.action !== 'info' && <button type="button" onClick={onSave} disabled={saving} className={`rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-60 ${editor.action === 'cancel' ? 'bg-rose-600' : 'bg-accent'}`}>{saving ? 'Guardando…' : editor.action === 'cancel' ? 'Cancelar membresía' : 'Guardar cambios'}</button>}</div>
       </div>
     </div>
   )
@@ -1807,14 +1785,14 @@ function MembershipAssignmentDrawer({ open, studentName, plans, plansLoading, fo
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-[2px]" onMouseDown={onClose}>
       <aside role="dialog" aria-modal="true" aria-label={`Asignar membresía a ${studentName}`} className="absolute inset-y-0 right-0 flex w-full max-w-[560px] flex-col bg-white shadow-[-28px_0_80px_rgba(15,23,42,0.22)]" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-accent">Nueva venta</p><h2 className="mt-1 text-xl font-black text-slate-950">Asignar membresía a: {studentName}</h2></div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500"><X className="h-4 w-4" /></button></div>
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Nueva venta</p><h2 className="mt-1 text-xl font-semibold text-slate-950">Asignar membresía a: {studentName}</h2></div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 text-slate-500"><X className="h-4 w-4" /></button></div>
         <div className="flex-1 space-y-7 overflow-y-auto px-6 py-6">
-          <section><h3 className="text-lg font-black text-slate-950">Información del alumno</h3><p className="mt-1 text-sm text-slate-500">La membresía se asignará directamente a esta ficha.</p><ReadOnlyField label="Alumno seleccionado" value={studentName} /></section>
-          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-black text-slate-950">Detalles de membresía</h3><div className="mt-4 grid gap-4"><EditorInput label="Fecha de inicio" type="date" value={form.start_date} onChange={(value) => onChange({ ...form, start_date: value, billing_date: form.billing_date || value })} /><label className="grid gap-2 text-sm font-bold text-slate-700">Plan de membresía<select className={formControlClass} value={form.membership_plan_id} onChange={(event) => onChange({ ...form, membership_plan_id: event.target.value })} disabled={plansLoading}><option value="">{plansLoading ? 'Cargando planes…' : 'Seleccionar plan'}</option>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatMoney(plan.base_price, plan.currency)}</option>)}</select></label></div></section>
-          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-black text-slate-950">Información de pago</h3><div className="mt-4 grid gap-4"><PaymentTypeSelect value={form.payment_type} onChange={(value) => onChange({ ...form, payment_type: value })} /><label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-black text-slate-700"><input type="checkbox" className="h-5 w-5 accent-orange-500" checked={form.payment_received} onChange={(event) => onChange({ ...form, payment_received: event.target.checked, payment_amount: event.target.checked && !form.payment_amount ? String(total) : form.payment_amount })} /> Pago recibido</label>{form.payment_received && <EditorInput label="Cantidad recibida" type="number" value={form.payment_amount} onChange={(value) => onChange({ ...form, payment_amount: value })} />}<div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-2 text-sm font-bold text-slate-700">Descuento<select className={formControlClass} value={form.discount_type} onChange={(event) => onChange({ ...form, discount_type: event.target.value as MembershipAssignmentFormState['discount_type'], discount_value: event.target.value === 'none' ? '' : form.discount_value })}><option value="none">Sin descuento</option><option value="amount">Monto</option><option value="percentage">Porcentaje</option></select></label><EditorInput label="Valor del descuento" type="number" value={form.discount_value} onChange={(value) => onChange({ ...form, discount_value: value })} /></div><EditorInput label="Fecha de facturación" type="date" value={form.billing_date} onChange={(value) => onChange({ ...form, billing_date: value })} /></div></section>
-          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-black text-slate-950">Resumen de precios</h3><div className="mt-4 grid gap-2 rounded-[1.2rem] bg-slate-950 p-5 text-sm text-white"><div className="flex justify-between"><span className="text-slate-400">Precio base</span><strong>{formatMoney(basePrice, selectedPlan?.currency)}</strong></div><div className="flex justify-between"><span className="text-slate-400">Descuento</span><strong>- {formatMoney(discountAmount, selectedPlan?.currency)}</strong></div><div className="mt-2 flex justify-between border-t border-white/10 pt-4 text-lg"><span className="font-black">Total</span><strong className="text-orange-300">{formatMoney(total, selectedPlan?.currency)}</strong></div><div className="mt-2 text-xs text-slate-400">Finalización estimada: {endDate}</div></div></section>
+          <section><h3 className="text-lg font-semibold text-slate-950">Información del alumno</h3><p className="mt-1 text-sm text-slate-500">La membresía se asignará directamente a esta ficha.</p><ReadOnlyField label="Alumno seleccionado" value={studentName} /></section>
+          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-semibold text-slate-950">Detalles de membresía</h3><div className="mt-4 grid gap-4"><EditorInput label="Fecha de inicio" type="date" value={form.start_date} onChange={(value) => onChange({ ...form, start_date: value, billing_date: form.billing_date || value })} /><label className="grid gap-2 text-sm font-bold text-slate-700">Plan de membresía<select className={formControlClass} value={form.membership_plan_id} onChange={(event) => onChange({ ...form, membership_plan_id: event.target.value })} disabled={plansLoading}><option value="">{plansLoading ? 'Cargando planes…' : 'Seleccionar plan'}</option>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatMoney(plan.base_price, plan.currency)}</option>)}</select></label></div></section>
+          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-semibold text-slate-950">Información de pago</h3><div className="mt-4 grid gap-4"><PaymentTypeSelect value={form.payment_type} onChange={(value) => onChange({ ...form, payment_type: value })} /><label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700"><input type="checkbox" className="h-5 w-5 accent-orange-500" checked={form.payment_received} onChange={(event) => onChange({ ...form, payment_received: event.target.checked, payment_amount: event.target.checked && !form.payment_amount ? String(total) : form.payment_amount })} /> Pago recibido</label>{form.payment_received && <EditorInput label="Cantidad recibida" type="number" value={form.payment_amount} onChange={(value) => onChange({ ...form, payment_amount: value })} />}<div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-2 text-sm font-bold text-slate-700">Descuento<select className={formControlClass} value={form.discount_type} onChange={(event) => onChange({ ...form, discount_type: event.target.value as MembershipAssignmentFormState['discount_type'], discount_value: event.target.value === 'none' ? '' : form.discount_value })}><option value="none">Sin descuento</option><option value="amount">Monto</option><option value="percentage">Porcentaje</option></select></label><EditorInput label="Valor del descuento" type="number" value={form.discount_value} onChange={(value) => onChange({ ...form, discount_value: value })} /></div><EditorInput label="Fecha de facturación" type="date" value={form.billing_date} onChange={(value) => onChange({ ...form, billing_date: value })} /></div></section>
+          <section className="border-t border-slate-200 pt-6"><h3 className="text-lg font-semibold text-slate-950">Resumen de precios</h3><div className="mt-4 grid gap-2 rounded-[1.2rem] bg-slate-950 p-5 text-sm text-white"><div className="flex justify-between"><span className="text-slate-400">Precio base</span><strong>{formatMoney(basePrice, selectedPlan?.currency)}</strong></div><div className="flex justify-between"><span className="text-slate-400">Descuento</span><strong>- {formatMoney(discountAmount, selectedPlan?.currency)}</strong></div><div className="mt-2 flex justify-between border-t border-white/10 pt-4 text-lg"><span className="font-semibold">Total</span><strong className="text-orange-300">{formatMoney(total, selectedPlan?.currency)}</strong></div><div className="mt-2 text-xs text-slate-400">Finalización estimada: {endDate}</div></div></section>
         </div>
-        <div className="flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-5"><button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700">Cancelar</button><button type="button" onClick={onSubmit} disabled={saving || !form.membership_plan_id} className="rounded-2xl bg-accent px-6 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? 'Asignando…' : 'Asignar membresía'}</button></div>
+        <div className="flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-5"><button type="button" onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700">Cancelar</button><button type="button" onClick={onSubmit} disabled={saving || !form.membership_plan_id} className="rounded-2xl bg-accent px-6 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Asignando…' : 'Asignar membresía'}</button></div>
       </aside>
     </div>
   )
@@ -1850,7 +1828,7 @@ function BookingsTab({ bookings, onAdd, onSaved }: { bookings: StudentDetailData
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Horario</th><th className="px-4 py-3">Sede</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Arco</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Horario</th><th className="px-4 py-3">Sede</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Arco</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {pendingBookings.map((booking) => (
                 <tr key={booking.id} className="bg-white">
@@ -1942,7 +1920,7 @@ function AttendanceTab({
       <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
         {selectedMembership && (
           <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-slate-700">
-            <p className="font-black text-slate-950">{selectedMembership.membership_code} · {selectedMembership.custom_name}</p>
+            <p className="font-semibold text-slate-950">{selectedMembership.membership_code} · {selectedMembership.custom_name}</p>
             <p className="mt-1">{getAttendanceMembershipIdentity(selectedMembership.id, memberships).period}</p>
             <p className="mt-2">Clases normales: {selectedMembership.classes_total} otorgadas · {selectedMembership.classes_used} consumidas · {selectedMembership.classes_remaining} restantes.</p>
             <p className="mt-1">Historial: {normalSummary.attended} asistidas · {normalSummary.noShow} inasistencias. Las cancelaciones no consumen clases.</p>
@@ -1972,7 +1950,7 @@ function AttendanceTab({
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Distancia</th><th className="px-4 py-3">Membresía</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Nota</th><th className="px-4 py-3">Acción</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1982,7 +1960,7 @@ function AttendanceTab({
                     <td className="px-4 py-4 text-slate-600">{booking.source === 'weekly' || booking.source === 'expiry' ? '-' : booking.start_at ? dayjs(booking.start_at).format('HH:mm') : '-'}</td>
                     <td className="px-4 py-4 text-slate-600">{booking.distance_m ? `${booking.distance_m} m` : '-'}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-slate-700">
-                      <p className={`font-black ${getAttendanceMembershipIdentity(booking.active_membership_id, memberships).needsReview ? 'text-amber-700' : ''}`}>{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).code}</p>
+                      <p className={`font-semibold ${getAttendanceMembershipIdentity(booking.active_membership_id, memberships).needsReview ? 'text-amber-700' : ''}`}>{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).code}</p>
                       <p className="mt-1 text-xs text-slate-500">{getAttendanceMembershipIdentity(booking.active_membership_id, memberships).period}</p>
                       <p className="mt-1 text-xs text-slate-500">{booking.credit_kind === 'recovery' ? 'Recuperación' : 'Clase normal'}</p>
                     </td>
@@ -1992,7 +1970,7 @@ function AttendanceTab({
                       {booking.status === 'no_show' ? (
                         <button
                           type="button"
-                          className="whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+                          className="whitespace-nowrap rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
                           onClick={() => {
                             setReversalTarget(booking)
                             setReason('')
@@ -2021,12 +1999,12 @@ function AttendanceTab({
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 id="reverse-no-show-title" className="text-xl font-black text-slate-950">Revertir inasistencia</h3>
+                <h3 id="reverse-no-show-title" className="text-xl font-semibold text-slate-950">Revertir inasistencia</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">Se devolverá una clase a la membresía {getAttendanceMembershipIdentity(reversalTarget.active_membership_id, memberships).code} ({formatAttendanceMembershipMonth(reversalTarget.active_membership_id, memberships)}) y el registro dejará de aparecer en el historial.</p>
               </div>
               <button type="button" aria-label="Cerrar" className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" onClick={closeReversalDialog} disabled={isReversing}><X className="h-5 w-5" /></button>
             </div>
-            <label className="mt-5 block text-sm font-black text-slate-800" htmlFor="attendance-reversal-reason">Motivo de la reversión</label>
+            <label className="mt-5 block text-sm font-semibold text-slate-800" htmlFor="attendance-reversal-reason">Motivo de la reversión</label>
             <textarea
               id="attendance-reversal-reason"
               className="mt-2 min-h-28 w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
@@ -2037,8 +2015,8 @@ function AttendanceTab({
               required
             />
             <div className="mt-5 flex justify-end gap-3">
-              <button type="button" className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700" onClick={closeReversalDialog} disabled={isReversing}>Cancelar</button>
-              <button type="button" className="rounded-2xl bg-rose-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50" onClick={handleReverseNoShow} disabled={isReversing || !reason.trim()}>
+              <button type="button" className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700" onClick={closeReversalDialog} disabled={isReversing}>Cancelar</button>
+              <button type="button" className="rounded-2xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" onClick={handleReverseNoShow} disabled={isReversing || !reason.trim()}>
                 {isReversing ? 'Revirtiendo...' : 'Confirmar reversión'}
               </button>
             </div>
@@ -2050,7 +2028,7 @@ function AttendanceTab({
 }
 
 function AttendanceKpi({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return <div className={`rounded-2xl p-4 ${tone}`}><p className="text-xs font-black uppercase tracking-wide">{label}</p><p className="mt-2 text-3xl font-black">{value}</p></div>
+  return <div className={`rounded-2xl p-4 ${tone}`}><p className="text-xs font-semibold uppercase tracking-wide">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></div>
 }
 
 function PaymentsTab({ payments }: { payments: StudentDetailData['payments'] }) {
@@ -2061,7 +2039,7 @@ function PaymentsTab({ payments }: { payments: StudentDetailData['payments'] }) 
         {documents.length === 0 ? (
           <EmptyOperationalState title="Sin registros de pago" description="No hay documentos o pagos registrados para este alumno." />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Estado</th></tr></thead><tbody className="divide-y divide-slate-100">{documents.map((document) => <tr key={document.id} className="bg-white"><td className="px-4 py-4 font-black text-blue-600">{document.reference}</td><td className="px-4 py-4 text-slate-600">{formatDateTime(document.date)}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(document.status)} tone={statusTone(document.status)} /></td></tr>)}</tbody></table>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500"><tr><th className="px-4 py-3">Referencia</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Estado</th></tr></thead><tbody className="divide-y divide-slate-100">{documents.map((document) => <tr key={document.id} className="bg-white"><td className="px-4 py-4 font-semibold text-blue-600">{document.reference}</td><td className="px-4 py-4 text-slate-600">{formatDateTime(document.date)}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(document.status)} tone={statusTone(document.status)} /></td></tr>)}</tbody></table>
           </div>
         )}
       </SectionShell>
@@ -2070,7 +2048,7 @@ function PaymentsTab({ payments }: { payments: StudentDetailData['payments'] }) 
         {payments.length === 0 ? (
           <EmptyOperationalState title="Sin transacciones" description="No hay transacciones registradas para este alumno." />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-black uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Cantidad</th><th className="px-4 py-3">Método de pago</th><th className="px-4 py-3">Acción</th><th className="px-4 py-3">Documento</th></tr></thead><tbody className="divide-y divide-slate-100">{payments.map((payment) => <tr key={payment.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDateTime(payment.paid_at)}</td><td className="px-4 py-4 font-black text-slate-950">{formatMoney(payment.amount, payment.currency)}</td><td className="px-4 py-4 text-slate-600">{payment.payment_method || 'No definido'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(payment.payment_status)} tone={statusTone(payment.payment_status)} /></td><td className="px-4 py-4 font-bold text-blue-600">Pago {payment.id.slice(0, 8).toUpperCase()}</td></tr>)}</tbody></table></div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Cantidad</th><th className="px-4 py-3">Método de pago</th><th className="px-4 py-3">Acción</th><th className="px-4 py-3">Documento</th></tr></thead><tbody className="divide-y divide-slate-100">{payments.map((payment) => <tr key={payment.id} className="bg-white"><td className="whitespace-nowrap px-4 py-4 text-slate-600">{formatDateTime(payment.paid_at)}</td><td className="px-4 py-4 font-semibold text-slate-950">{formatMoney(payment.amount, payment.currency)}</td><td className="px-4 py-4 text-slate-600">{payment.payment_method || 'No definido'}</td><td className="px-4 py-4"><OperationalStatusBadge label={statusLabel(payment.payment_status)} tone={statusTone(payment.payment_status)} /></td><td className="px-4 py-4 font-bold text-blue-600">Pago {payment.id.slice(0, 8).toUpperCase()}</td></tr>)}</tbody></table></div>
         )}
       </SectionShell>
     </div>

@@ -7,6 +7,13 @@ function source(path: string) {
 }
 
 describe('admin students compact list', () => {
+  it('exposes site and expiry filters without hiding student search', () => {
+    const page = source('app/admin/alumnos/page.tsx')
+    expect(page).toContain('AdminFilterBar')
+    expect(page).toContain('Filtrar por sede')
+    expect(page).toContain('Próximo vencimiento')
+    expect(page).not.toContain('block truncate font-bold text-slate-950')
+  })
   it('renders the approved desktop columns and mobile list from one filtered collection', () => {
     const page = source('app/admin/alumnos/page.tsx')
 

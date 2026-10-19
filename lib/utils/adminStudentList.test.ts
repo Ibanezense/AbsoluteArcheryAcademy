@@ -86,6 +86,22 @@ describe('getAdminStudentStatus', () => {
 })
 
 describe('filterAdminStudents', () => {
+  it('combines search, status and site without requiring phone or avatar', () => {
+    const students = [
+      { ...baseStudent, id: 'one', full_name: 'Ana Uno', phone: null, home_location_id: 'tiabaya' },
+      { ...baseStudent, id: 'two', full_name: 'Ana Dos', home_location_id: 'umacollo' },
+    ]
+    expect(filterAdminStudents(students, 'ana', 'active', now, { locationId: 'tiabaya' }).map((row) => row.id)).toEqual(['one'])
+  })
+
+  it('sorts by membership expiry with undated students last and name as tie breaker', () => {
+    const students = [
+      { ...baseStudent, full_name: 'Sin fecha', membership_end: null },
+      { ...baseStudent, full_name: 'Tarde', membership_end: '2026-07-30' },
+      { ...baseStudent, full_name: 'Pronto', membership_end: '2026-07-20' },
+    ]
+    expect(filterAdminStudents(students, '', 'all', now, { sort: 'expiry' }).map((row) => row.full_name)).toEqual(['Pronto', 'Tarde', 'Sin fecha'])
+  })
   it.each(['ana', '12345678', '999111222'])('matches the search value %s', (query) => {
     expect(filterAdminStudents([baseStudent], query, 'all')).toHaveLength(1)
   })

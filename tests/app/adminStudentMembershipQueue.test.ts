@@ -89,8 +89,11 @@ describe('admin student membership queue', () => {
   it('renders total and current balances plus each cycle queue status', () => {
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
-    expect(page).toContain('Total abierto')
-    expect(page).toContain('Utilizable hoy')
+    expect(page).toContain('Total sin consumir')
+    expect(page).toContain('Clases disponibles')
+    expect(page).toContain('libres en el ciclo vigente')
+    expect(page).toContain('value={data.total_open_classes}')
+    expect(page).toContain('value={data.usable_classes}')
     expect(page).toContain('En consumo')
     expect(page).toContain('Programada')
     expect(page).toContain('En espera')

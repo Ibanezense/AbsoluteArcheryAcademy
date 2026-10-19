@@ -39,6 +39,11 @@ const students: QuickBookingStudent[] = [
 ]
 
 describe('admin quick booking helpers', () => {
+  it('keeps an empty date out of availability queries', () => {
+    expect(getAdminQuickBookingDateRange('', new Date('2026-10-18T12:00:00-05:00'))).toEqual({
+      fromDate: '9999-12-31', toDate: '0001-01-01', minDate: '2026-10-11',
+    })
+  })
   it('loads November when October bookings move to November 1', () => {
     const now = new Date('2026-10-05T15:00:00-05:00')
     expect(getAdminQuickBookingDateRange('2026-11-01', now)).toEqual({

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { bookingFlowReducer, initialBookingFlow } from '@/lib/utils/adminQuickBookingFlow'
 import Avatar from '@/components/ui/Avatar'
 import { useAdminBookSession, useAdminStudents, type AdminStudent } from '@/lib/adminBookingQueries'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -11,7 +12,6 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Clock3,
   Search,
   ShieldAlert,
@@ -62,19 +62,9 @@ function formatDateLabel(value?: string | null) {
   })
 }
 
-function formatDateTimeLabel(value?: string | null) {
-  if (!value) return 'Por definir'
-  return new Date(value).toLocaleDateString('es-PE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
 function formatTimeRange(startAt?: string | null, endAt?: string | null) {
   if (!startAt || !endAt) return 'Por definir'
-  return `${new Date(startAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} - ${new Date(endAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`
+  return `${new Date(startAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' })} - ${new Date(endAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' })}`
 }
 
 function studentStatusLabel(status: AdminStudent['status']) {
@@ -149,16 +139,23 @@ function AlertIcon({ tone }: { tone: AlertItem['tone'] }) {
 }
 
 export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked }: Props) {
-  const [selectedStudent, setSelectedStudent] = useState('')
-  const [selectedDate, setSelectedDate] = useState(todayLocalValue)
+  const [flow, dispatchFlow] = useReducer(bookingFlowReducer, undefined, () => initialBookingFlow(todayLocalValue(), studentId))
+  const { studentId: selectedStudent, date: selectedDate, sessionId: selectedSession, forceBooking, step } = flow
+  const setSelectedStudent = (value: string) => dispatchFlow({ type: 'student', value })
+  const setSelectedDate = (value: string) => dispatchFlow({ type: 'date', value })
+  const setSelectedSession = (value: string) => dispatchFlow({ type: 'session', value })
+  const setForceBooking = (value: boolean) => dispatchFlow({ type: 'force', value })
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const submittingRef = useRef(false)
   const [studentSearch, setStudentSearch] = useState('')
-  const [selectedSession, setSelectedSession] = useState('')
   const [adminNotes, setAdminNotes] = useState('')
-  const [forceBooking, setForceBooking] = useState(false)
   const [sessions, setSessions] = useState<AvailableSession[]>([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [sessionsError, setSessionsError] = useState(false)
+  const [retrySessions, setRetrySessions] = useState(0)
 
-  const { data: students = [], isLoading: studentsLoading } = useAdminStudents()
+  const { data: students = [], isLoading: studentsLoading, isError: studentsError, refetch: retryStudents } = useAdminStudents()
   const bookSessionMutation = useAdminBookSession()
   const toast = useToast()
   const dateRange = useMemo(() => getAdminQuickBookingDateRange(selectedDate), [selectedDate])
@@ -174,25 +171,42 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
   useEffect(() => {
     if (!isOpen) return
 
-    setSelectedStudent(studentId || '')
-    setSelectedDate(todayLocalValue())
+    dispatchFlow({ type: 'reset', date: todayLocalValue(), studentId })
     setStudentSearch('')
-    setSelectedSession('')
     setAdminNotes('')
-    setForceBooking(false)
     setSessions([])
   }, [isOpen, studentId])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const frame = requestAnimationFrame(() => dialogRef.current?.focus())
+    return () => {
+      cancelAnimationFrame(frame)
+      document.body.style.overflow = previousOverflow
+      previousFocus?.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+    if (isOpen) dialogRef.current?.focus()
+  }, [step, isOpen])
 
   useEffect(() => {
     let current = true
     const loadSessions = async () => {
       if (!isOpen || !selectedStudent) {
         setSessions([])
+        setSessionsLoading(false)
         return
       }
 
       try {
         setSessionsLoading(true)
+        setSessionsError(false)
         if (dateRange.fromDate > dateRange.toDate) {
           setSessions([])
           return
@@ -217,7 +231,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
         } else if (current) setSessions([])
       } catch (loadError) {
         console.error('Error loading available sessions for admin booking:', loadError)
-        if (current) setSessions([])
+        if (current) { setSessions([]); setSessionsError(true) }
       } finally {
         if (current) setSessionsLoading(false)
       }
@@ -225,7 +239,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
 
     void loadSessions()
     return () => { current = false }
-  }, [dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen])
+  }, [dateRange.fromDate, dateRange.toDate, selectedStudent, isOpen, retrySessions])
 
   const sessionsByDate = useMemo(() => groupAdminBookingSessions(sessions), [sessions])
 
@@ -243,7 +257,6 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
   }, [selectedSession, sessionsForSelectedDate])
 
   const selectedSessionData = sessions.find((session) => session.session_id === selectedSession) || null
-  const selectedOccupancy = selectedSessionData ? occupancyLabel(selectedSessionData) : null
 
   const alerts = useMemo<AlertItem[]>(() => {
     const items: AlertItem[] = []
@@ -304,7 +317,8 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
     || (selectedSessionData.spots_for_student <= 0 && !forceBooking)
 
   const handleBooking = async () => {
-    if (!selectedStudent || !selectedSession) return
+    if (blockingReservation || submittingRef.current || bookSessionMutation.isPending) return
+    submittingRef.current = true
 
     try {
       await bookSessionMutation.mutateAsync({
@@ -323,36 +337,52 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
       }
     } catch (error: any) {
       toast.push({ message: error?.message || 'No se pudo crear la reserva.', type: 'error' })
+    } finally {
+      submittingRef.current = false
     }
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[110] bg-slate-950/18 backdrop-blur-[2px]" onClick={onClose}>
-      <div className="flex min-h-full items-center justify-center p-3 md:p-6" onClick={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[110] bg-slate-950/18 backdrop-blur-[2px]" onClick={() => { if (!bookSessionMutation.isPending) onClose() }}>
+      <div className="flex h-[100dvh] min-w-0 items-center justify-center p-2 sm:p-6" onClick={(event) => event.stopPropagation()}>
         <div
+          ref={dialogRef}
+          tabIndex={-1}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !bookSessionMutation.isPending) { event.stopPropagation(); onClose() }
+            if (event.key !== 'Tab') return
+            const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex="0"]') || []).filter((element) => element.getClientRects().length > 0)
+            const first = focusable[0]
+            const last = focusable[focusable.length - 1]
+            if (!first) { event.preventDefault(); return }
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus() }
+            else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) { event.preventDefault(); first.focus() }
+          }}
           role="dialog"
           aria-modal="true"
           aria-label="Reserva rapida"
-          className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_32px_90px_rgba(15,23,42,0.18)]"
+          className="flex max-h-[calc(100dvh-1rem)] min-w-0 w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_32px_90px_rgba(15,23,42,0.18)]"
         >
-          <div className="border-b border-slate-200 px-5 py-4 sm:px-7">
+          {studentsError && <div role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><p>No pudimos cargar los alumnos.</p><button type="button" className="btn-outline mt-2" onClick={() => retryStudents()}>Reintentar alumnos</button></div>}
+          <div className="shrink-0 border-b border-slate-200 px-4 py-3 sm:px-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded-2xl border border-orange-200 bg-orange-50 text-accent">
+                <div className="hidden h-10 w-10 shrink-0 place-items-center sm:grid rounded-2xl border border-orange-200 bg-orange-50 text-accent">
                   <CalendarDays className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-[0.7rem] font-black uppercase tracking-[0.2em] text-accent">Reserva rapida</p>
-                  <h2 className="mt-1 text-2xl font-black tracking-[-0.03em] text-slate-950">Crea una reserva manual para un alumno</h2>
-                  <p className="mt-1 text-sm text-slate-500">Selecciona alumno, fecha y turno con validacion operativa visible.</p>
+                  <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-accent">Reserva rapida</p>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Reservar una clase</h2>
+                  <p className="mt-1 text-sm text-slate-500">Selecciona el alumno y un turno disponible.</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                disabled={bookSessionMutation.isPending}
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Cerrar reserva rapida"
               >
                 <X className="h-5 w-5" />
@@ -360,19 +390,23 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
             </div>
           </div>
 
-          <div className="overflow-y-auto px-5 py-5 sm:px-7">
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-              <div className="space-y-6">
-                <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                  <p className="text-lg font-black tracking-[-0.02em] text-slate-950">1. Alumno</p>
+          <ol aria-label="Pasos de la reserva" className="grid shrink-0 grid-cols-3 gap-1 border-b border-slate-200 px-3 py-2 text-xs xl:hidden">
+            {['Alumno', 'Fecha y turno', 'Confirmación'].map((label, index) => <li key={label} aria-current={step === index ? 'step' : undefined} className={`rounded-lg px-2 py-2 text-center ${step === index ? 'bg-orange-50 font-semibold text-orange-800' : 'text-slate-500'}`}>{index + 1}. {label}</li>)}
+          </ol>
+          <div ref={scrollRef} className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="min-w-0 space-y-4">
+                <section className={`${step === 0 ? 'block' : 'hidden'} min-w-0 rounded-xl border border-slate-200 bg-white p-4 xl:block`}>
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">1. Alumno</p>
                   {!studentId && <div className="relative mt-4">
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
                       id="student-search"
+                      aria-label="Buscar alumno"
                       type="search"
                       value={studentSearch}
                       onChange={(event) => setStudentSearch(event.target.value)}
-                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+                      className="h-12 min-w-0 max-w-full w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
                       placeholder="Buscar por nombre, DNI o telefono"
                       disabled={studentsLoading}
                     />
@@ -392,7 +426,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                             setSelectedSession('')
                             setForceBooking(false)
                           }}
-                          className={`rounded-[1.4rem] border p-4 text-left transition ${
+                          className={`min-w-0 rounded-xl border p-4 text-left transition ${
                             isSelected
                               ? 'border-emerald-300 bg-emerald-50/70 shadow-[0_12px_30px_rgba(34,197,94,0.12)]'
                               : 'border-slate-200 bg-white hover:border-orange-200 hover:shadow-[0_14px_35px_rgba(15,23,42,0.06)]'
@@ -403,7 +437,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                  <p className="truncate text-base font-black tracking-[-0.02em] text-slate-950">{student.full_name}</p>
+                                  <p className="break-words text-sm font-semibold tracking-[-0.02em] text-slate-950">{student.full_name}</p>
                                   <p className="mt-1 text-sm text-slate-500">{student.membership_type || 'Sin membresia activa'}</p>
                                 </div>
                                 <span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusToneClass(student.status)}`}>
@@ -411,7 +445,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                                 </span>
                               </div>
 
-                              <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+                              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 sm:grid-cols-3">
                                 <div>
                                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Clases disponibles</p>
                                   <p className="mt-1 font-semibold text-slate-900">{student.classes_remaining}</p>
@@ -432,20 +466,22 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                     })}
                   </div>
 
-                  {!studentsLoading && availableStudents.length === 0 && (
+
+                  {!studentsLoading && !studentsError && availableStudents.length === 0 && (
                     <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
                       No encontramos alumnos con ese criterio.
                     </div>
                   )}
                 </section>
 
-                <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                  <p className="text-lg font-black tracking-[-0.02em] text-slate-950">2. Fecha</p>
+                <section className={`${step === 1 ? 'block' : 'hidden'} min-w-0 rounded-xl border border-slate-200 bg-white p-4 xl:block`}>
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Fecha y turno</p>
                   <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="relative flex-1">
+                    <div className="relative min-w-0 flex-1">
                       <CalendarDays className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
                         id="booking-date"
+                        aria-label="Fecha de la reserva"
                         type="date"
                         value={selectedDate}
                         min={dateRange.minDate}
@@ -454,12 +490,12 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                           setSelectedSession('')
                           setForceBooking(false)
                         }}
-                        className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+                        className="h-12 min-w-0 max-w-full w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
                         disabled={!selectedStudent}
                       />
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                      Mes operativo: <span className="font-bold text-slate-950">{new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' })}</span>
+                      Mes operativo: <span className="font-bold text-slate-950">{selectedMonth ? new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' }) : 'Selecciona una fecha'}</span>
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
@@ -467,15 +503,15 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                   </p>
                 </section>
 
-                <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <section className={`${step === 1 ? 'block' : 'hidden'} min-w-0 rounded-xl border border-slate-200 bg-white p-4 xl:block`}>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-lg font-black tracking-[-0.02em] text-slate-950">3. Turno</p>
+                    <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Turnos disponibles</p>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                       {sessionsForSelectedDate.length} turnos
                     </span>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     {sessionsForSelectedDate.map((session) => {
                       const selected = selectedSession === session.session_id
                       const occupancy = occupancyLabel(session)
@@ -490,16 +526,16 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                               setForceBooking(false)
                             }
                           }}
-                          className={`rounded-[1.4rem] border bg-white p-4 text-left transition ${
+                          className={`min-w-0 rounded-xl border bg-white p-4 text-left transition ${
                             selected
                               ? 'border-accent shadow-[0_16px_40px_rgba(249,115,22,0.16)]'
                               : 'border-slate-200 hover:border-orange-200 hover:shadow-[0_14px_35px_rgba(15,23,42,0.06)]'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className={`h-4 w-4 rounded-full border ${selected ? 'border-accent bg-accent' : 'border-slate-300 bg-white'}`} />
-                              <p className="text-lg font-black tracking-[-0.03em] text-slate-950">
+                              <p className="text-sm font-semibold tracking-tight text-slate-950">
                                 {formatTimeRange(session.start_at, session.end_at)}
                               </p>
                             </div>
@@ -508,10 +544,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
 
                           <div className="mt-4 space-y-2 text-sm text-slate-600">
                             <p className="font-bold text-slate-950">{session.location_name || 'Sede no disponible'}</p>
-                            <div className="flex items-center justify-between">
-                              <span>disponibilidad libre segun el equipo del alumno</span>
-                              <span className="font-semibold text-slate-950">{equipmentAvailabilityText(session)}</span>
-                            </div>
+                            <p className="font-medium text-slate-700">{equipmentAvailabilityText(session)}</p>
                             <div className="flex items-center justify-between">
                               <span>{session.distance_m} m</span>
                               <span>{session.bow_usage_type === 'shared_inventory' ? 'Equipo academia' : 'Equipo definido'}</span>
@@ -533,12 +566,13 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                     })}
                   </div>
 
-                  {!sessionsLoading && selectedStudent && sessionsForSelectedDate.length === 0 && (
+                  {!sessionsLoading && !sessionsError && selectedStudent && sessionsForSelectedDate.length === 0 && (
                     <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
-                      No hay turnos visibles para {formatDateLabel(selectedDate)}.
+                      {selectedDate ? `No hay turnos visibles para ${formatDateLabel(selectedDate)}.` : 'Selecciona una fecha para consultar los turnos.'}
                     </div>
                   )}
 
+                  {sessionsError && <div role="alert" className="mt-4 rounded-xl border border-rose-200 p-4 text-sm text-rose-800">No pudimos consultar los turnos. <button type="button" onClick={() => setRetrySessions((value) => value + 1)} className="min-h-11 font-semibold underline">Reintentar</button></div>}
                   {sessionsLoading && (
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
                       Cargando turnos del alumno para este rango...
@@ -546,10 +580,11 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                   )}
                 </section>
 
-                <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                  <p className="text-lg font-black tracking-[-0.02em] text-slate-950">4. Notas y opciones</p>
+                <section className={`${step === 2 ? 'block' : 'hidden'} min-w-0 rounded-xl border border-slate-200 bg-white p-4 xl:block`}>
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Notas y opciones</p>
                   <textarea
                     id="admin-notes"
+                    aria-label="Observaciones internas"
                     rows={4}
                     value={adminNotes}
                     onChange={(event) => setAdminNotes(event.target.value)}
@@ -573,9 +608,9 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                 </section>
               </div>
 
-              <div className="space-y-6">
-                <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
-                  <p className="text-lg font-black tracking-[-0.02em] text-slate-950">Resumen de la reserva</p>
+              <div className={`${step === 2 ? 'block' : 'hidden'} min-w-0 space-y-4 xl:block`}>
+                <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Resumen de la reserva</p>
                   <div className="mt-5 space-y-4 text-sm">
                     <SummaryRow icon={<UserRound className="h-4 w-4" />} label="Alumno" value={selectedStudentData?.full_name || 'Por seleccionar'} />
                     <SummaryRow icon={<CheckCircle2 className="h-4 w-4" />} label="Estado" value={selectedStudentData ? studentStatusLabel(selectedStudentData.status) : 'Sin validar'} badgeClass={selectedStudentData ? statusToneClass(selectedStudentData.status) : undefined} />
@@ -596,7 +631,7 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                         <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-700" />
                       )}
                       <div>
-                        <p className={`font-black ${blockingReservation ? 'text-amber-800' : 'text-emerald-800'}`}>
+                        <p className={`font-semibold ${blockingReservation ? 'text-amber-800' : 'text-emerald-800'}`}>
                           {blockingReservation ? 'Requiere atencion antes de confirmar' : 'Reserva permitida'}
                         </p>
                         <p className={`mt-1 text-sm ${blockingReservation ? 'text-amber-800/80' : 'text-emerald-800/80'}`}>
@@ -609,8 +644,8 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                   </div>
                 </section>
 
-                <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
-                  <p className="text-lg font-black tracking-[-0.02em] text-slate-950">Alertas</p>
+                <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
+                  <p className="text-lg font-semibold tracking-[-0.02em] text-slate-950">Alertas</p>
                   <div className="mt-4 space-y-3">
                     {alerts.map((alert, index) => (
                       <div
@@ -624,40 +659,27 @@ export default function AdminQuickBooking({ isOpen, onClose, studentId, onBooked
                   </div>
                 </section>
 
-                <section className="rounded-[1.6rem] border border-slate-200 bg-slate-50/70 p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-slate-500">Seleccion actual</p>
-                    {selectedOccupancy && (
-                      <span className={`rounded-full border px-3 py-1 text-xs font-bold ${selectedOccupancy.className}`}>
-                        {selectedOccupancy.label}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-3 text-base font-black tracking-[-0.02em] text-slate-950">
-                    {selectedSessionData ? formatDateTimeLabel(selectedSessionData.start_at) : 'Sin turno elegido'}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {selectedSessionData ? `${formatTimeRange(selectedSessionData.start_at, selectedSessionData.end_at)} · ${selectedSessionData.distance_m} m` : 'El resumen lateral se completa en tiempo real al elegir un turno.'}
-                  </p>
-                </section>
+
               </div>
             </div>
           </div>
 
-          <div className="sticky bottom-0 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="sticky bottom-0 shrink-0 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
+            <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => { if (window.matchMedia('(min-width: 1280px)').matches || step === 0) onClose(); else dispatchFlow({ type: 'back' }) }}
+                disabled={bookSessionMutation.isPending}
                 className="h-12 rounded-2xl border border-slate-200 px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
-                Cancelar
+                <span className="xl:hidden">{step > 0 ? 'Volver' : 'Cancelar'}</span><span className="hidden xl:inline">Cancelar</span>
               </button>
+              {step < 2 && <button type="button" className="h-12 rounded-xl bg-accent px-5 text-sm font-semibold text-white disabled:bg-slate-300 xl:hidden" disabled={!selectedStudent || (step === 1 && (!selectedSession || sessionsLoading || sessionsError))} onClick={() => dispatchFlow({ type: 'next' })}>Continuar</button>}
               <button
                 type="button"
                 onClick={handleBooking}
-                disabled={blockingReservation || bookSessionMutation.isPending}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-6 text-sm font-black text-white shadow-[0_16px_34px_rgba(249,115,22,0.24)] transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                disabled={blockingReservation || sessionsLoading || sessionsError || bookSessionMutation.isPending}
+                className={`${step === 2 ? 'inline-flex' : 'hidden'} xl:inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-accent px-6 text-sm font-semibold text-white shadow-[0_16px_34px_rgba(249,115,22,0.24)] transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none`}
               >
                 <CalendarDays className="h-4 w-4" />
                 {bookSessionMutation.isPending ? 'Creando reserva...' : 'Crear reserva'}
@@ -682,7 +704,7 @@ function SummaryRow({
   badgeClass?: string
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
       <div className="flex min-w-0 items-center gap-2 text-slate-500">
         {icon}
         <span>{label}</span>
@@ -692,7 +714,7 @@ function SummaryRow({
           {value}
         </span>
       ) : (
-        <span className="text-right font-semibold text-slate-950">{value}</span>
+        <span className="min-w-0 max-w-full break-words text-right font-semibold text-slate-950">{value}</span>
       )}
     </div>
   )

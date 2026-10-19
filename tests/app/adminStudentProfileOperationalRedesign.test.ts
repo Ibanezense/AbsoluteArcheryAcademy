@@ -7,6 +7,15 @@ function source(path: string) {
 }
 
 describe('admin student profile operational redesign', () => {
+  it('keeps a compact summary, contextual booking and useful alerts after the tabs', () => {
+    const page = source('app/admin/alumnos/[id]/page.tsx')
+    expect(page.indexOf('role="tablist"')).toBeLessThan(page.indexOf('Alertas prioritarias'))
+    expect(page).not.toContain('No hay alertas operativas para este alumno.')
+    expect(page).not.toContain('Ver todas las alertas')
+    expect(page).toContain('Clases reservadas')
+    expect(page).toContain('searchParams.get(\'tab\')')
+    expect(page.match(/<Avatar /g)).toHaveLength(1)
+  })
   it('uses the approved admin visual system and tabbed operational sections', () => {
     const page = source('app/admin/alumnos/[id]/page.tsx')
 
@@ -14,9 +23,9 @@ describe('admin student profile operational redesign', () => {
     expect(page).toContain('AdminContentPanel')
     expect(page).toContain('Alertas prioritarias')
     expect(page).toContain('Clases disponibles')
-    expect(page).toContain('Reservas próximas')
-    expect(page).toContain('Pagos pendientes')
-    expect(page).toContain('No-shows recientes')
+    expect(page).toContain('Clases reservadas')
+    expect(page).toContain('Pago pendiente')
+    expect(page).toContain('Inasistencias recientes')
     expect(page).toContain("'profile'")
     expect(page).toContain("'membership'")
     expect(page).toContain("'bookings'")

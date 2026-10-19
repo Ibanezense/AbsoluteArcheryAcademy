@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -11,6 +11,7 @@ import {
   Search,
   UserPlus,
 } from 'lucide-react'
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar'
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
@@ -23,6 +24,7 @@ import {
   getAdminStudentStatus,
   type AdminStudentFilter,
   type AdminStudentStatus,
+  type AdminStudentSort,
 } from '@/lib/utils/adminStudentList'
 
 const statusOptions: Array<[AdminStudentFilter, string]> = [
@@ -121,7 +123,7 @@ function DesktopStudentTable({
     <div className="hidden md:block">
       <table className="w-full table-fixed border-collapse text-left">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black uppercase tracking-[0.08em] text-slate-500">
+          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
             <th className="w-[28%] px-5 py-3.5">Alumno</th>
             <th className="w-[14%] px-4 py-3.5">Teléfono</th>
             <th className="w-[20%] px-4 py-3.5">Membresía</th>
@@ -139,13 +141,13 @@ function DesktopStudentTable({
 
             return (
               <tr key={student.id} className="group bg-white transition-colors hover:bg-orange-50/35">
-                <td className="px-5 py-4 align-middle">
+                <td className="px-5 py-3 align-middle">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar name={student.full_name} url={student.avatar_url} size="md" />
                     <div className="min-w-0">
                       <Link
                         href={`/admin/alumnos/${student.id}`}
-                        className="block truncate font-bold text-slate-950 transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                        className="block break-words font-semibold text-slate-950 transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
                       >
                         {student.full_name}
                       </Link>
@@ -156,7 +158,7 @@ function DesktopStudentTable({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-4 align-middle text-sm">
+                <td className="px-4 py-3 align-middle text-sm">
                   {student.phone ? (
                     <a href={`tel:${student.phone}`} className="font-semibold text-slate-700 hover:text-accent">
                       {student.phone}
@@ -165,7 +167,7 @@ function DesktopStudentTable({
                     <span className="text-slate-400">Sin teléfono</span>
                   )}
                 </td>
-                <td className="px-4 py-4 align-middle text-sm">
+                <td className="px-4 py-3 align-middle text-sm">
                   <MembershipCell student={student} />
                   <MembershipRenewalAlertAction
                     studentName={student.full_name}
@@ -175,19 +177,19 @@ function DesktopStudentTable({
                     className="mt-2"
                   />
                 </td>
-                <td className="px-4 py-4 align-middle text-sm">
+                <td className="px-4 py-3 align-middle text-sm">
                   <span className={lastAttendance ? 'font-semibold text-slate-700' : 'text-slate-400'}>
                     {lastAttendance || 'Sin asistencias'}
                   </span>
                 </td>
-                <td className="px-4 py-4 align-middle text-sm">
+                <td className="px-4 py-3 align-middle text-sm">
                   <span className="font-semibold text-slate-700">{membershipEnd || 'Sin vencimiento'}</span>
                 </td>
-                <td className="px-4 py-4 align-middle">
+                <td className="px-4 py-3 align-middle">
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       href={`/admin/alumnos/editar/${student.id}`}
-                      className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
+                      className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
                       aria-label={`Editar a ${student.full_name}`}
                       title="Editar"
                     >
@@ -195,7 +197,7 @@ function DesktopStudentTable({
                     </Link>
                     <Link
                       href={`/admin/alumnos/${student.id}`}
-                      className="grid h-9 w-9 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
+                      className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
                       aria-label={`Ver perfil de ${student.full_name}`}
                       title="Ver perfil"
                     >
@@ -230,7 +232,7 @@ function MobileStudentList({
             <div className="flex items-start gap-3">
               <Avatar name={student.full_name} url={student.avatar_url} size="md" />
               <div className="min-w-0 flex-1">
-                <Link href={`/admin/alumnos/${student.id}`} className="block truncate font-bold text-slate-950">
+                <Link href={`/admin/alumnos/${student.id}`} className="block break-words font-semibold text-slate-950">
                   {student.full_name}
                 </Link>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -240,17 +242,16 @@ function MobileStudentList({
               </div>
             </div>
 
-            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl bg-slate-50/80 p-3.5">
-              <MobileDetail label="Teléfono" value={student.phone || 'Sin teléfono'} />
-              <MobileDetail
-                label="Membresía"
-                value={student.open_membership_count > 1
-                  ? `${student.total_open_classes} clases en ${student.open_membership_count} membresías`
-                  : student.membership_name || 'Sin membresía'}
-              />
-              <MobileDetail label="Última asistencia" value={lastAttendance || 'Sin asistencias'} />
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <MobileDetail label="Clases disponibles" value={`${student.classes_remaining} clases`} />
               <MobileDetail label="Vencimiento de membresía" value={membershipEnd || 'Sin vencimiento'} />
             </dl>
+            <details className="mt-2 text-xs text-slate-600">
+              <summary className="min-h-11 cursor-pointer py-3 font-medium">Contacto y asistencia</summary>
+              <p className="pb-2">{student.membership_name || 'Sin membresía'} · {student.phone || 'Sin teléfono'}</p>
+              <p className="pb-2">Última asistencia: {lastAttendance || 'Sin asistencias'}</p>
+              {student.open_membership_count > 1 && <p>{student.total_open_classes} clases sin consumir en {student.open_membership_count} membresías</p>}
+            </details>
 
             <MembershipRenewalAlertAction
               studentName={student.full_name}
@@ -281,7 +282,7 @@ function MobileDetail({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{label}</dt>
-      <dd className="mt-1 truncate text-xs font-semibold text-slate-700">{value}</dd>
+      <dd className="mt-1 break-words text-xs font-semibold text-slate-700">{value}</dd>
     </div>
   )
 }
@@ -307,18 +308,27 @@ function StudentListSkeleton() {
 
 export default function AdminAlumnosPage() {
   const [query, setQuery] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
+  const [sort, setSort] = useState<AdminStudentSort>('status')
   const [statusFilter, setStatusFilter] = useState<AdminStudentFilter>('all')
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('status')
+    if (statusOptions.some(([value]) => value === requested)) setStatusFilter(requested as AdminStudentFilter)
+  }, [])
   const { data: students = [], isLoading, isError, refetch } = useStudents()
   const studentIds = useMemo(() => students.map((student) => student.id), [students])
   const { data: renewalAlerts = {} } = useMembershipRenewalAlerts(studentIds)
 
   const filteredStudents = useMemo(
-    () => filterAdminStudents(students, query, statusFilter),
-    [query, statusFilter, students],
+    () => filterAdminStudents(students, query, statusFilter, new Date(), { locationId: locationFilter, sort }),
+    [query, statusFilter, students, locationFilter, sort],
   )
 
+  const locations = useMemo(() => Array.from(new Map(students.filter((student) => student.home_location_id).map((student) => [student.home_location_id!, student.home_location_name || 'Sede sin nombre'])).entries()).sort((a, b) => a[1].localeCompare(b[1], 'es')), [students])
+  const activeFilters = Number(statusFilter !== 'all') + Number(Boolean(locationFilter)) + Number(sort !== 'status')
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <AdminPageHeader
         title="Alumnos"
         description="Gestiona perfiles, membresías y asistencia desde una sola lista."
@@ -341,16 +351,24 @@ export default function AdminAlumnosPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar por nombre, DNI o teléfono"
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-950 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-accent/50 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-950 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-accent/50 focus:bg-white focus:ring-4 focus:ring-orange-100"
               />
             </label>
 
-            <label className="relative block sm:w-52">
+            <p className="whitespace-nowrap text-xs font-semibold text-slate-500 lg:ml-auto">
+              Mostrando <span className="font-semibold text-slate-950">{filteredStudents.length}</span> de {students.length} alumnos
+            </p>
+          </div>
+        </div>
+        <div className="p-3 sm:p-4">
+          <AdminFilterBar activeCount={activeFilters} onClear={() => { setStatusFilter('all'); setLocationFilter(''); setSort('status') }}>
+            <div className="grid gap-3 sm:grid-cols-3">
+            <label className="relative block min-w-0">
               <span className="sr-only">Filtrar alumnos por estado</span>
               <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as AdminStudentFilter)}
-                className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 pr-10 text-sm font-bold text-slate-700 outline-none transition focus:border-accent/50 focus:ring-4 focus:ring-orange-100"
+                className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 pr-10 text-sm font-bold text-slate-700 outline-none transition focus:border-accent/50 focus:ring-4 focus:ring-orange-100"
               >
                 {statusOptions.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
@@ -359,10 +377,18 @@ export default function AdminAlumnosPage() {
               <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </label>
 
-            <p className="whitespace-nowrap text-xs font-semibold text-slate-500 lg:ml-auto">
-              Mostrando <span className="font-black text-slate-950">{filteredStudents.length}</span> de {students.length} alumnos
-            </p>
-          </div>
+              <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Sede
+                <select aria-label="Filtrar por sede" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800">
+                  <option value="">Todas las sedes</option>{locations.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                </select>
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Orden
+                <select aria-label="Ordenar alumnos" value={sort} onChange={(event) => setSort(event.target.value as AdminStudentSort)} className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800">
+                  <option value="status">Estado y nombre</option><option value="expiry">Próximo vencimiento</option><option value="name">Nombre</option>
+                </select>
+              </label>
+            </div>
+          </AdminFilterBar>
         </div>
 
         {isLoading ? (
@@ -370,10 +396,10 @@ export default function AdminAlumnosPage() {
         ) : isError ? (
           <div className="grid min-h-64 place-items-center px-5 py-12 text-center">
             <div>
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-rose-50 text-rose-600">
                 <CalendarClock className="h-5 w-5" />
               </div>
-              <h2 className="mt-4 font-heading text-xl font-black text-slate-950">No pudimos cargar los alumnos.</h2>
+              <h2 className="mt-4 font-heading text-xl font-semibold text-slate-950">No pudimos cargar los alumnos.</h2>
               <p className="mt-1 text-sm text-slate-500">Revisa la conexión e inténtalo nuevamente.</p>
               <button type="button" onClick={() => refetch()} className="btn-outline btn-sm mt-4">
                 Reintentar
@@ -383,10 +409,10 @@ export default function AdminAlumnosPage() {
         ) : filteredStudents.length === 0 ? (
           <div className="grid min-h-64 place-items-center px-5 py-12 text-center">
             <div>
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-slate-100 text-slate-500">
                 {query ? <Search className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
               </div>
-              <h2 className="mt-4 font-heading text-xl font-black text-slate-950">No encontramos alumnos con estos filtros.</h2>
+              <h2 className="mt-4 font-heading text-xl font-semibold text-slate-950">No encontramos alumnos con estos filtros.</h2>
               <p className="mt-1 text-sm text-slate-500">Prueba con otra búsqueda o cambia el estado seleccionado.</p>
             </div>
           </div>

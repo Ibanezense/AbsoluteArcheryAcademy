@@ -32,6 +32,11 @@ export function getAdminQuickBookingDateRange(selectedDateOrMonth: string, now =
   minDateValue.setHours(0, 0, 0, 0)
   minDateValue.setDate(minDateValue.getDate() - 7)
 
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) {
+    // An inverted range prevents the availability request while the date is empty.
+    return { fromDate: '9999-12-31', toDate: '0001-01-01', minDate: toLocalDateInputValue(minDateValue) }
+  }
+
   const from = monthStart < minDateValue ? minDateValue : monthStart
 
   return {

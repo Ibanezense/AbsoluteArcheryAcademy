@@ -22,7 +22,7 @@ describe('admin quick booking redesign', () => {
   it('keeps a two-column desktop layout with summary and sticky footer actions', () => {
     const modal = source('components/AdminQuickBooking.tsx')
 
-    expect(modal).toContain('xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]')
+    expect(modal).toContain('xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]')
     expect(modal).toContain('Resumen de la reserva')
     expect(modal).toContain('Alertas')
     expect(modal).toContain('sticky bottom-0')
