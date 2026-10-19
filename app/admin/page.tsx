@@ -28,6 +28,7 @@ import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalR
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { AdminDonutChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
+import MembershipGrowthChart from '@/components/admin/MembershipGrowthChart'
 import { attendanceHref, administrativeBookingHref } from '@/lib/utils/adminNavigation'
 import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
@@ -722,6 +723,8 @@ export default function AdminDashboard() {
           </div>
         </section>
 
+        <MembershipGrowthChart />
+
         <AdminMembershipRenewalRequests />
 
         <WeeklyAgenda agenda={dashboard.weeklyAgenda} today={today} />
@@ -741,9 +744,9 @@ export default function AdminDashboard() {
               icon={<Users className="h-5 w-5" />}
             />
             <MonthlyMetric
-              title="Nuevos alumnos"
+              title="Fichas creadas"
               value={dashboard.monthly.newStudentsThisMonth}
-              helper="Altas del mes"
+              helper="Registros creados este mes"
               icon={<UserPlus className="h-5 w-5" />}
             />
             <MonthlyMetric
