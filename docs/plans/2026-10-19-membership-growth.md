@@ -24,3 +24,7 @@ Se consideran membresías de origen paid, incluso becas; se excluyen gift, draft
 6. Guardar evidencia y commit. Sin desplegar ni cambiar esquema de producción.
 
 Ajuste por evidencia real: un ciclo tiene vencimiento anterior a inicio. El cálculo estricto lo detectó al revisar navegador. Se aísla la historia completa del alumno inconsistente y se muestra aviso de datos parciales con enlace a su ficha. Prueba añadida y datos conservados sin modificaciones.
+
+## Ampliación solicitada: tres series
+
+El usuario solicita nuevos, renovaron y no renovaron. Se añade renewed al cálculo mensual y a las tres barras/tarjetas. Renovación: un ciclo posterior que amplía la cobertura de la continuidad anterior, con inicio hasta siete días tras su vencimiento; contado en el mes de inicio del siguiente ciclo, una vez por alumno/mes. No se cuentan ciclos duplicados o contenidos, futuros sin empezar, obsequios o cancelados. Una vuelta fuera del plazo sigue siendo reactivación, visible en tabla y criterio auxiliar. Nuevas pruebas cubren estas fronteras antes del cambio. No se altera la consulta, las membresías ni la base.

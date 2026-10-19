@@ -40,3 +40,11 @@ Se detectó un ciclo cuyo inicio es 01/08/2026 y fin 07/07/2026. El gráfico exc
 La tabla del navegador coincide con la consulta SQL independiente: marzo 26/0/1, julio 4/9/3, septiembre 0/9/4 y octubre 4/3/1, con tres alumnos todavía en plazo en octubre. Totales 12 meses: 58 nuevos, 45 eventos de no renovación y 22 reactivaciones; últimos 6 meses: 27/41/20. Son cifras parciales por la exclusión señalada y acumuladas por mes. No son un saldo de alumnos activos.
 
 Revisión local a 360 × 800: documento y contenido de 345 px, sin desbordamiento horizontal. A 1440 × 1000: 1425/1425 px. Selector 6/12 meses y tabla accesible comprobados. Capturas privadas output/admin-ux-after/11-evolucion-desktop.png y 12-evolucion-mobile.png; no incluidas en Git.
+
+## Ampliación a tres barras
+
+A petición del usuario, las series son Nuevos (verde), Renovaron (azul) y No renovaron (rojo). Las tarjetas, leyenda, descripción accesible y tabla reflejan las tres cifras. Reactivados se conserva en tabla y ayuda como categoría auxiliar.
+
+Renovaron cuenta alumnos con un ciclo posterior que extiende cobertura dentro de la continuidad de siete días, por mes del inicio de ese ciclo, no por fecha de pago anticipado. Un alumno cuenta una vez por mes. Se ignoran duplicados y ciclos contenidos. Al coincidir el inicio se procesa primero la cobertura más larga, incluida fecha final abierta; los identificadores no pueden cambiar la cifra. Se añadieron pruebas de múltiples renovaciones del mismo mes, día siete, reactivación tardía, ciclo futuro, duplicado, obsequio y empates de fecha con identificadores intercambiados.
+
+Validación de tres series: suite completa 144 archivos/759 pruebas, TypeScript y compilación aprobados. Navegador y SQL independiente coinciden en renovaciones: marzo6, abril11, mayo1, junio10, julio17, agosto23, septiembre21 y octubre14. Últimos12meses suman103 renovaciones mensuales y últimos6meses86; no se interpreta como alumnos únicos del periodo. Se comprobaron tres series SVG y ancho documento/contenido345/345px a360×800. Evidencia privada: output/admin-ux-after/13-evolucion-tres-series-desktop.png. Sin publicación ni modificaciones de datos.

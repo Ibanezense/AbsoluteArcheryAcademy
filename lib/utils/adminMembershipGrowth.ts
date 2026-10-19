@@ -10,6 +10,7 @@ export type GrowthMembership = {
 export type MembershipGrowthMonth = {
   month: string
   newStudents: number
+  renewed: number
   notRenewed: number
   reactivated: number
   pending: number
@@ -36,7 +37,7 @@ export function buildMembershipGrowth(memberships: GrowthMembership[], asOf: str
   const months = Array.from({ length: count }, (_, index) => {
     const start = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() - count + index + 1, 1, 12))
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 12)).toISOString().slice(0, 10)
-    return { month: start.toISOString().slice(0, 7), newStudents: new Set<string>(), notRenewed: new Set<string>(), reactivated: new Set<string>(), pending: new Set<string>(), provisional: asOf <= addDays(end, 7) }
+    return { month: start.toISOString().slice(0, 7), newStudents: new Set<string>(), renewed: new Set<string>(), notRenewed: new Set<string>(), reactivated: new Set<string>(), pending: new Set<string>(), provisional: asOf <= addDays(end, 7) }
   })
   const byMonth = new Map(months.map(month => [month.month, month]))
   const byStudent = new Map<string, GrowthMembership[]>()
@@ -54,13 +55,16 @@ export function buildMembershipGrowth(memberships: GrowthMembership[], asOf: str
     byStudent.set(membership.student_id, rows)
   }
   for (const [studentId, rows] of byStudent) {
-    rows.sort((a, b) => a.start_date.localeCompare(b.start_date) || a.id.localeCompare(b.id))
+    rows.sort((a, b) => a.start_date.localeCompare(b.start_date) || (b.end_date ?? '9999-12-31').localeCompare(a.end_date ?? '9999-12-31') || a.id.localeCompare(b.id))
     if (rows[0].start_date <= asOf) byMonth.get(rows[0].start_date.slice(0, 7))?.newStudents.add(studentId)
     const episodes: Array<{ start: string; end: string | null }> = []
     for (const membership of rows) {
       const previous = episodes[episodes.length - 1]
       if (previous && (previous.end === null || membership.start_date <= addDays(previous.end, 7))) {
-        if (previous.end !== null && (membership.end_date === null || membership.end_date > previous.end)) previous.end = membership.end_date
+        if (previous.end !== null && (membership.end_date === null || membership.end_date > previous.end)) {
+          if (membership.start_date <= asOf) byMonth.get(membership.start_date.slice(0, 7))?.renewed.add(studentId)
+          previous.end = membership.end_date
+        }
       } else {
         episodes.push({ start: membership.start_date, end: membership.end_date })
       }
@@ -73,7 +77,7 @@ export function buildMembershipGrowth(memberships: GrowthMembership[], asOf: str
       else month?.pending.add(studentId)
     })
   }
-  return months.map(month => ({ month: month.month, newStudents: month.newStudents.size, notRenewed: month.notRenewed.size, reactivated: month.reactivated.size, pending: month.pending.size, provisional: month.provisional }))
+  return months.map(month => ({ month: month.month, newStudents: month.newStudents.size, renewed: month.renewed.size, notRenewed: month.notRenewed.size, reactivated: month.reactivated.size, pending: month.pending.size, provisional: month.provisional }))
 }
 
 export function buildMembershipGrowthReport(history: GrowthMembership[], asOf: string, count = 12) {

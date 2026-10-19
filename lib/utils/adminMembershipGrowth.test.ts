@@ -4,6 +4,32 @@ const membership = (student: string, start: string, end: string | null, patch = 
 const month = (rows: GrowthMembership[], date = '2026-03-10', key = '2026-01') => buildMembershipGrowth(rows, date, 3).find(row => row.month === key)!
 
 describe('membership growth business definitions', () => {
+  it('counts continuous renewals in the month the next cycle starts, once per student', () => {
+    const rows = [membership('a', '2026-01-01', '2026-01-15'), membership('a', '2026-01-16', '2026-01-25'), membership('a', '2026-01-26', '2026-02-28')]
+    expect(month(rows)).toMatchObject({ newStudents: 1, renewed: 1, notRenewed: 0 })
+  })
+  it('counts a seventh-day renewal but keeps late reactivations separate', () => {
+    const base = membership('a', '2026-01-01', '2026-01-31')
+    expect(month([base, membership('a', '2026-02-07', '2026-03-31')], '2026-03-10', '2026-02')).toMatchObject({ renewed: 1, reactivated: 0 })
+    expect(month([base, membership('a', '2026-02-08', '2026-03-31')], '2026-03-10', '2026-02')).toMatchObject({ renewed: 0, reactivated: 1 })
+  })
+  it('does not count prepaid future starts as renewals before their month arrives', () => {
+    expect(month([membership('a', '2026-01-01', '2026-03-10'), membership('a', '2026-03-11', '2026-04-10')], '2026-03-10', '2026-03').renewed).toBe(0)
+  })
+  it('does not count duplicate or contained cycles as new renewals', () => {
+    const rows = [membership('a', '2026-01-01', '2026-02-28'), membership('a', '2026-01-01', '2026-02-28'), membership('a', '2026-01-15', '2026-01-31')]
+    expect(month(rows).renewed).toBe(0)
+  })
+  it('does not depend on identifiers when cycles share a start date', () => {
+    for (const [shortId, longId] of [['a', 'b'], ['b', 'a']]) {
+      const rows = [membership('a', '2026-01-01', '2026-01-31', { id: shortId }), membership('a', '2026-01-01', '2026-02-28', { id: longId })]
+      expect(month(rows).renewed).toBe(0)
+    }
+  })
+  it('ignores gift and cancelled cycles when counting renewals', () => {
+    const base = membership('a', '2026-01-01', '2026-01-31')
+    expect(month([base, membership('a', '2026-02-01', '2026-03-31', { membership_origin: 'gift' })], '2026-03-10', '2026-02').renewed).toBe(0)
+  })
   it('counts first membership starts, not subsequent renewals or gifts', () => {
     const rows = [membership('a', '2025-12-01', '2025-12-31'), membership('a', '2026-01-01', '2026-01-31'), membership('b', '2026-01-03', '2026-01-20'), membership('c', '2026-01-01', '2026-01-31', { membership_origin: 'gift' })]
     expect(month(rows).newStudents).toBe(1)
