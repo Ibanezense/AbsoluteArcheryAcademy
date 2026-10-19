@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 
 export type NextBooking = {
@@ -10,38 +10,19 @@ export type NextBooking = {
 }
 
 export function useNextBooking(studentId?: string | null) {
-  const [booking, setBooking] = useState<NextBooking | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchNextBooking = useCallback(async () => {
-    if (!studentId) {
-      setBooking(null)
-      setError(null)
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      const { data, error: rpcError } = await supabase.rpc('get_my_next_booking', {
-        p_student_id: studentId,
-      })
-
-      if (rpcError) throw rpcError
-      setBooking(data as NextBooking | null)
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Error al cargar')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [studentId])
-
-  useEffect(() => {
-    fetchNextBooking()
-  }, [fetchNextBooking])
-
-  return { booking, isLoading, error, refetch: fetchNextBooking }
+  const query = useQuery({
+    queryKey: ['student-next-booking', studentId],
+    enabled: !!studentId,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_my_next_booking', { p_student_id: studentId })
+      if (error) throw error
+      return data as NextBooking | null
+    },
+  })
+  return {
+    booking: query.data ?? null,
+    isLoading: query.isLoading,
+    error: query.error ? (query.error.message || 'Error al cargar') : null,
+    refetch: query.refetch,
+  }
 }

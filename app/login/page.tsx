@@ -96,7 +96,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-[calc(100vh-2.5rem)] flex-col justify-center">
       <div className="mb-6 flex items-center gap-3">
-        <button onClick={() => history.back()} className="btn-ghost !px-3" type="button">
+        <button aria-label="Volver" onClick={() => history.back()} className="btn-ghost !px-3" type="button">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
@@ -112,9 +112,10 @@ export default function LoginPage() {
 
         <form onSubmit={signIn} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm text-textsec">Codigo de acceso</label>
+            <label htmlFor="access-code" className="text-sm text-textsec">Código de acceso</label>
             <input
               className="input text-center text-lg font-semibold uppercase tracking-[0.35em]"
+              id="access-code"
               placeholder="ABC123"
               value={accessCode}
               onChange={(event) => setAccessCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}

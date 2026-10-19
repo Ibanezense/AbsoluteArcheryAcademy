@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import Link from 'next/link'
 import dayjs from 'dayjs'
 import { CalendarPlus, ChevronRight, Target } from 'lucide-react'
@@ -15,13 +17,16 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
   const { booking, isLoading, error, refetch } = useNextBooking(studentId)
   const [isCancelling, setIsCancelling] = useState(false)
   const toast = useToast()
+  const confirm = useConfirm()
+  const queryClient = useQueryClient()
+  const actionInProgress = useRef(false)
 
   async function handleCancelBooking() {
-    if (!booking?.booking_id) return
-    if (!confirm('La reserva se cancelará y el crédito quedará disponible inmediatamente.')) return
-
+    if (!booking?.booking_id || actionInProgress.current) return
+    actionInProgress.current = true
+    setIsCancelling(true)
     try {
-      setIsCancelling(true)
+      if (!await confirm('La reserva se cancelará y el crédito quedará disponible inmediatamente.', { title: 'Cancelar reserva', confirmLabel: 'Sí, cancelar reserva', cancelLabel: 'Conservar reserva', tone: 'warning' })) return
 
       const { error: cancelError } = await supabase.rpc('cancel_booking', {
         p_booking: booking.booking_id,
@@ -30,10 +35,14 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
       if (cancelError) throw cancelError
 
       toast.push({ message: 'Reserva cancelada correctamente.', type: 'info' })
+      for (const key of ['student-booking-history', 'student-booking-agenda', 'student-booking-detail', 'student-dashboard', 'student-week-overview', 'student-next-booking']) {
+        queryClient.invalidateQueries({ queryKey: [key] })
+      }
       await refetch()
     } catch (cancelError: any) {
       toast.push({ message: cancelError?.message || 'No se pudo cancelar la reserva.', type: 'error' })
     } finally {
+      actionInProgress.current = false
       setIsCancelling(false)
     }
   }
@@ -54,6 +63,7 @@ export function NextBookingWidget({ studentId }: { studentId?: string | null }) 
     return (
       <StudentCard variant="danger" className="p-5">
         <p className="text-sm font-medium text-danger">{error}</p>
+        <button type="button" onClick={() => void refetch()} className="mt-2 text-sm font-bold text-accent">Reintentar</button>
       </StudentCard>
     )
   }

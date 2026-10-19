@@ -19,7 +19,9 @@ describe('multisite student experience', () => {
   it('uses a weekly Tiabaya agenda without membership-card selection', () => {
     const bookingPage = source('app/reservar/page.tsx')
     expect(bookingPage).toContain('Agenda semanal')
-    expect(bookingPage).toContain('Tiabaya')
+    expect(bookingPage).toContain('session.location_name')
+    expect(bookingPage).toContain('session.location_address')
+    expect(source('lib/services/studentBookingService.ts')).toContain('get_student_booking_agenda')
     expect(bookingPage).toContain('Reservar este turno')
     expect(bookingPage).not.toContain('Calendario de turnos')
     expect(bookingPage).not.toContain('<ClassCardsBoard')
@@ -27,7 +29,8 @@ describe('multisite student experience', () => {
   })
 
   it('labels student cancellations as final with immediate credit release', () => {
-    const reservations = source('app/mis-reservas/page.tsx')
+    expect(source('app/mis-reservas/page.tsx')).toContain('StudentBookingHistory')
+    const reservations = source('components/student/StudentBookingHistory.tsx')
     expect(reservations).toContain('Cancelación del alumno')
     expect(reservations).toContain('La cancelación liberará el cupo y el crédito inmediatamente')
     expect(reservations).not.toContain('pendiente de revisión')

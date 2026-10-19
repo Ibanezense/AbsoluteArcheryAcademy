@@ -1,0 +1,26 @@
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',false);
+DO $$DECLARE p jsonb; q jsonb; BEGIN
+p:=student_get_booking_history('00000000-0000-0000-0000-000000000001');
+IF (p->>'total')::int<>30 OR jsonb_array_length(p->'rows')<>10 THEN RAISE EXCEPTION 'complete event totals/pagination'; END IF;
+q:=student_get_booking_history('00000000-0000-0000-0000-000000000001','history',NULL,'all',2,10);
+IF p->'summary'<>q->'summary' OR (p->'summary'->>'currentCancelled')::int<>2 THEN RAISE EXCEPTION 'unstable or mixed plan summary'; END IF;
+IF EXISTS(SELECT 1 FROM jsonb_array_elements(p->'rows') a JOIN jsonb_array_elements(q->'rows') b ON a->>'booking_id'=b->>'booking_id') THEN RAISE EXCEPTION 'duplicate records across pages'; END IF;
+IF (p->'summary'->>'upcoming')::int<>2 OR (p->'summary'->>'attended')::int<>2 THEN RAISE EXCEPTION 'upcoming or reversed attendance totals wrong'; END IF;
+q:=student_get_booking_history('00000000-0000-0000-0000-000000000001','upcoming');
+IF (q->>'total')::int<>2 OR (q->'rows'->0->>'start_at')::timestamptz>(q->'rows'->1->>'start_at')::timestamptz THEN RAISE EXCEPTION 'upcoming ordering/partition wrong'; END IF;
+p:=student_get_booking_history('00000000-0000-0000-0000-000000000001','history',NULL,'cancelled',3,10);
+IF (p->>'total')::int<>24 OR jsonb_array_length(p->'rows')<>4 THEN RAISE EXCEPTION 'tail page not filtered before pagination'; END IF;
+IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p->'rows') a WHERE a->>'cancellation_source'='student' AND a->>'cancellation_resolution'='justified') THEN RAISE EXCEPTION 'cancellation detail lost'; END IF;
+p:=student_get_booking_history('00000000-0000-0000-0000-000000000001','history','2025-01-01','attended');
+IF (p->>'total')::int<>2 OR jsonb_array_length(p->'rows')<>2 THEN RAISE EXCEPTION 'status/month must filter before pagination'; END IF;
+p:=student_get_booking_history('00000000-0000-0000-0000-000000000001','history','2025-01-01','expired_unattended');
+IF (p->>'total')::int<>3 THEN RAISE EXCEPTION 'normal and recovery expiry Lima boundary'; END IF;
+BEGIN PERFORM student_get_booking_history('00000000-0000-0000-0000-000000000002'); RAISE EXCEPTION 'forbidden access permitted'; EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'No tienes acceso a este alumno' THEN RAISE; END IF; END;
+BEGIN PERFORM student_get_booking_history('00000000-0000-0000-0000-000000000001','history',NULL,'all',0,10); RAISE EXCEPTION 'invalid page accepted'; EXCEPTION WHEN OTHERS THEN IF SQLERRM<>'Filtros o paginación inválidos' THEN RAISE; END IF; END;
+END$$;
+SELECT set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000001',false);
+DO $$ BEGIN IF (student_get_booking_history('00000000-0000-0000-0000-000000000001')->>'total')::int<>30 THEN RAISE EXCEPTION 'guardian cannot read linked student'; END IF; END$$;
+RESET ROLE; SET ROLE anon;
+DO $$BEGIN BEGIN PERFORM student_get_booking_history('00000000-0000-0000-0000-000000000001'); RAISE EXCEPTION 'anon permitted'; EXCEPTION WHEN insufficient_privilege THEN NULL; END; END$$;
+RESET ROLE;

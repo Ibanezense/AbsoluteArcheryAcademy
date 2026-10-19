@@ -237,6 +237,7 @@ describe('membership renewal cache synchronization', () => {
       membershipRenewalAlertKeys.all,
       studentKeys.all,
       ['student-dashboard'],
+      ['student-pending-renewal'],
     ])
   })
 })

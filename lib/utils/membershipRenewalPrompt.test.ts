@@ -57,7 +57,7 @@ describe('membership renewal prompt controller', () => {
     })).toBe(false)
   })
 
-  it('lets manual opening bypass dismissal but never missing readiness or alert', () => {
+  it('lets an authorized manual opening work without an automatic alert', () => {
     const visibleAlert = getVisibleRenewalAlert(alert('expired'))
 
     expect(shouldOpenMembershipRenewalPrompt({
@@ -70,12 +70,18 @@ describe('membership renewal prompt controller', () => {
       ...readyPrompt,
       alert: null,
       manualOpen: true,
-    })).toBe(false)
+    })).toBe(true)
     expect(shouldOpenMembershipRenewalPrompt({
       ...readyPrompt,
       alert: visibleAlert,
       queryReady: false,
       manualOpen: true,
+    })).toBe(true)
+    expect(shouldOpenMembershipRenewalPrompt({
+      ...readyPrompt, alert: null, contextReady: false, manualOpen: true,
+    })).toBe(false)
+    expect(shouldOpenMembershipRenewalPrompt({
+      ...readyPrompt, alert: null, isAdmin: true, manualOpen: true,
     })).toBe(false)
   })
 

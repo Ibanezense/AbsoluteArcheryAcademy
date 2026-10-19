@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useId, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { useDialogFocus } from '@/lib/hooks/useDialogFocus'
 
 type ConfirmTone = 'default' | 'warning' | 'danger'
 type ConfirmOptions = {
@@ -33,6 +34,17 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setState(null)
   }, [state])
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(!!state, dialogRef)
+  useEffect(() => {
+    if (!state) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') handle(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [state, handle])
+
   const confirmButtonClass =
     state?.opts?.tone === 'warning'
       ? 'bg-warning text-black hover:brightness-110'
@@ -52,7 +64,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           className="fixed inset-0 z-50 flex items-center justify-center"
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => handle(false)} />
-          <div className="z-10 mx-4 w-full max-w-lg rounded-2xl border border-line bg-card p-5 shadow-card">
+          <div ref={dialogRef} tabIndex={-1} className="z-10 mx-4 max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-card p-5 shadow-card">
             <h3 id={titleId} className="text-lg font-semibold text-textpri">{state.opts?.title ?? 'Confirmar'}</h3>
             <p id={messageId} className="mt-3 whitespace-pre-line rounded-xl border border-line bg-bg/70 p-4 text-sm leading-6 text-textpri">
               {state.message}

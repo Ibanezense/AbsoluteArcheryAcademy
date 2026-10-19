@@ -9,13 +9,15 @@ function source(path: string) {
 }
 
 describe('student mobile redesign', () => {
-  it('keeps the student shell mobile-only with dark header and bottom nav', () => {
+  it('adapts the student shell to desktop while keeping login compact', () => {
     const layout = source('app/LayoutWrapper.tsx')
     const header = source('components/student/MobileStudentHeader.tsx')
     const nav = source('components/StudentBottomNav.tsx')
 
     expect(layout).toContain('max-w-[430px]')
-    expect(layout).not.toContain('sm:max-w-2xl')
+    expect(layout).toContain('max-w-[1120px]')
+    expect(nav).toContain('Mis reservas')
+    expect(nav).toContain('getStudentTab(pathname)')
     expect(header).toContain('bg-[#020B14]')
     expect(header).toContain('AA%20ACADEMY%20logo%20blanco.png')
     expect(header).toContain('LogOut')
@@ -40,8 +42,9 @@ describe('student mobile redesign', () => {
     const reservar = source('app/reservar/page.tsx')
 
     expect(reservar).toContain('Agenda semanal')
-    expect(reservar).toContain('Tiabaya')
-    expect(reservar).toContain('get_available_multisite_sessions_for_student')
+    expect(reservar).toContain('session.location_name')
+    expect(reservar).toContain('fetchStudentBookingAgenda')
+    expect(source('lib/services/studentBookingService.ts')).toContain('get_student_booking_agenda')
     expect(reservar).toContain('book_session_multisite')
     expect(reservar).toContain('Reservar este turno')
     expect(reservar).toContain('Equipo propio')
@@ -54,14 +57,19 @@ describe('student mobile redesign', () => {
   it('adds reservation tabs and membership account filters', () => {
     const reservations = source('app/mis-reservas/page.tsx')
     const memberships = source('app/membresias/page.tsx')
+    const history = source('components/student/StudentBookingHistory.tsx')
 
     expect(reservations).toContain('Próximas')
     expect(reservations).toContain('Historial')
-    expect(reservations).toContain('Cancelar reserva')
+    expect(reservations).toContain('StudentBookingHistory')
+    expect(history).toContain('Cancelar reserva')
     expect(memberships).toContain('Estado de cuenta')
     expect(memberships).toContain('Vigencia del plan')
-    expect(memberships).toContain('Resumen de uso')
-    expect(memberships).toContain('Cargar más historial')
+    expect(memberships).toContain('Uso del plan mostrado')
+    expect(memberships).toContain('StudentBookingHistory')
+    expect(history).toContain('Mes del historial')
+    expect(history).toContain('Anterior')
+    expect(history).toContain('Siguiente')
   })
 
   it('renders the canonical dashboard membership status across student surfaces', () => {

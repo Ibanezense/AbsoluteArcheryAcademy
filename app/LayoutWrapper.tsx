@@ -19,10 +19,10 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
     return <>{children}</>
   }
 
-  // Vista estudiante: contenedor móvil centrado
+  // Las pantallas de alumnos aprovechan el ancho disponible en escritorio.
   return (
     <>
-      <main className="mx-auto min-h-screen w-full max-w-[430px] overflow-x-hidden bg-bg pb-[96px] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]">
+      <main className={`mx-auto min-h-screen w-full ${showStudentNav ? 'max-w-[1120px]' : 'max-w-[430px]'} bg-bg pb-[96px] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]`}>
         {children}
       </main>
       {showStudentNav && (

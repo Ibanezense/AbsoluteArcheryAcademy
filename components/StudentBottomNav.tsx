@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React, { memo, type ComponentType } from 'react'
-import { CalendarPlus, Home, Ticket, type LucideProps } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Home, Ticket, type LucideProps } from 'lucide-react'
 
-export type StudentTab = 'inicio' | 'reservar' | 'membresias'
+import { getStudentTab, type StudentTab } from '@/lib/utils/studentNavigation'
+export type { StudentTab } from '@/lib/utils/studentNavigation'
 
 type Item = {
   key: StudentTab
@@ -38,25 +39,22 @@ const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProp
 const items: readonly Item[] = [
   { key: 'inicio', href: '/', Icon: Home, label: 'Inicio' },
   { key: 'reservar', href: '/reservar', Icon: CalendarPlus, label: 'Reservar' },
+  { key: 'reservas', href: '/mis-reservas', Icon: CalendarDays, label: 'Mis reservas' },
   { key: 'membresias', href: '/membresias', Icon: Ticket, label: 'Membresías' },
 ]
 
 const StudentBottomNav = memo(function StudentBottomNav() {
   const pathname = usePathname()
 
-  const active: StudentTab = (() => {
-    if (pathname.startsWith('/reservar')) return 'reservar'
-    if (pathname.startsWith('/membresias')) return 'membresias'
-    return 'inicio'
-  })()
+  const active = getStudentTab(pathname)
 
   return (
     <nav
       role="navigation"
-      aria-label="Student bottom navigation"
+      aria-label="Navegación del alumno"
       className="fixed inset-x-0 bottom-0 z-40 bg-[#020B14] pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-14px_30px_rgba(2,11,20,0.24)]"
     >
-      <div className="mx-auto flex max-w-[430px] items-center px-6">
+      <div className="mx-auto flex max-w-[1120px] items-center px-2 md:px-8">
         {items.map((item) => (
           <NavItem
             key={item.key}

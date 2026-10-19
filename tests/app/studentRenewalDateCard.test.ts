@@ -33,13 +33,13 @@ describe('student renewal date card', () => {
     expect(homeSource).toContain("orange: 'warning'")
     expect(homeSource).toContain("neutral: 'neutral'")
     expect(homeSource).toContain("const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'")
-    expect(homeSource).toContain('<StudentCard variant={cardVariant} className="min-h-[132px] p-4">')
+    expect(homeSource).toContain('<StudentCard variant={cardVariant} className="min-h-[120px] p-4">')
     expect(homeSource).toContain('<p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>')
   })
 
   it('selects one StudentCard background variant instead of combining it with the default', () => {
     expect(homeSource).not.toContain('emphasisCardClasses')
-    expect(homeSource).not.toContain('className={`min-h-[132px] p-4 ${emphasizedCard}`}')
+    expect(homeSource).not.toContain('className={`min-h-[120px] p-4 ${emphasizedCard}`}')
     expect(studentCardSource).toContain("neutral: 'border-slate-200 bg-slate-50 shadow-card'")
   })
 })

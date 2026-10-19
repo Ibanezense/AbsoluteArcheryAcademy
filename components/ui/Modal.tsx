@@ -1,5 +1,6 @@
 'use client'
-import React, { useEffect, useId } from 'react'
+import React, { useEffect, useId, useRef } from 'react'
+import { useDialogFocus } from '@/lib/hooks/useDialogFocus'
 
 interface ModalProps {
   isOpen: boolean
@@ -10,6 +11,8 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(isOpen, dialogRef)
 
   useEffect(() => {
     if (!isOpen) return
@@ -35,6 +38,8 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
       <div
         // Contenedor del modal
         role="dialog"
+        ref={dialogRef}
+        tabIndex={-1}
         aria-modal="true"
         aria-labelledby={titleId}
         className="bg-card rounded-2xl border border-white/10 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"

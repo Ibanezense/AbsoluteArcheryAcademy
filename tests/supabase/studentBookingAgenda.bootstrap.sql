@@ -1,0 +1,21 @@
+-- Disposable schema only; actual capacity helper is loaded from the core migration by the runner.
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+GRANT USAGE ON SCHEMA auth TO authenticated,anon,service_role;
+CREATE TABLE students(id uuid PRIMARY KEY, self_profile_id uuid, full_name text, operational_status text DEFAULT 'active', current_distance_m int DEFAULT 10, has_own_bow boolean DEFAULT true, assigned_bow boolean DEFAULT false, bow_poundage int DEFAULT 20);
+CREATE TABLE student_guardians(student_id uuid,guardian_profile_id uuid);
+CREATE TABLE profiles(id uuid,role text);
+CREATE FUNCTION can_access_student(p_student_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT EXISTS(SELECT FROM students s WHERE s.id=p_student_id AND s.self_profile_id=auth.uid()) OR EXISTS(SELECT FROM student_guardians WHERE student_id=p_student_id AND guardian_profile_id=auth.uid()) OR EXISTS(SELECT FROM profiles WHERE id=auth.uid() AND role='admin') $$;
+CREATE FUNCTION resolve_accessible_student_id(p_student_id uuid) RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$ BEGIN IF auth.uid() IS NULL OR NOT public.can_access_student(p_student_id) THEN RAISE EXCEPTION 'No tienes acceso'; END IF; RETURN p_student_id; END $$;
+CREATE TABLE academy_locations(id uuid PRIMARY KEY,code text,name text,address text,capacity_policy text);
+CREATE TABLE sessions(id uuid PRIMARY KEY,start_at timestamptz,end_at timestamptz,status text DEFAULT 'scheduled',location_id uuid,booking_mode text DEFAULT 'flexible',physical_capacity int DEFAULT 10);
+CREATE TABLE student_memberships(id uuid PRIMARY KEY,student_id uuid,status text DEFAULT 'active',start_date date,end_date date,classes_remaining int DEFAULT 10,weekly_class_target int DEFAULT 2,purchase_id uuid,created_at timestamptz DEFAULT now());
+CREATE TABLE membership_recovery_credits(id uuid PRIMARY KEY,student_membership_id uuid,classes_remaining int,created_at timestamptz DEFAULT now());
+CREATE TABLE membership_freezes(id uuid PRIMARY KEY,membership_purchase_id uuid,status text,start_date date,end_date date);
+CREATE TABLE bookings(id uuid PRIMARY KEY,student_id uuid,session_id uuid,status text,active_membership_id uuid,credit_kind text DEFAULT 'normal',recovery_credit_id uuid,group_type text,distance_m int,bow_usage_type text,bow_poundage int);
+CREATE TABLE booking_cancellations(id uuid,booking_id uuid,review_status text,resolution text,cancellation_source text);
+CREATE TABLE session_distance_allocations(session_id uuid,slot_capacity int,targets int);
+CREATE TABLE session_equipment_allocations(session_id uuid,draw_weight_lbs int,quantity int);
+CREATE TABLE academy_bows(id uuid,pool_type text,operational_status text,draw_weight_lbs int,assigned_student_id uuid);
+CREATE TABLE booking_resource_claims(session_id uuid,academy_bow_id uuid,resource_type text,released_at timestamptz,booking_id uuid);

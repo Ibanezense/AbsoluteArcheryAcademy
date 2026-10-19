@@ -15,7 +15,7 @@ describe('phase 1 UX and operational safeguards', () => {
     expect(detail).toContain('Puedes cancelar desde la app hasta el inicio de la clase.')
     expect(detail).toContain('Esta reserva ya no está activa.')
     expect(detail).toContain(
-      'La reserva se cancelará y el crédito quedará disponible inmediatamente.'
+      'La reserva se cancelará y el crédito comprometido quedará disponible.'
     )
     expect(detail).not.toContain('mientras la clase no haya finalizado')
   })

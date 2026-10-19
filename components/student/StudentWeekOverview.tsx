@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { getLimaWeek } from '@/lib/utils/adminWeeklySummary'
+import { getLimaReferenceDate } from '@/lib/utils/weekendIntroCapacity'
 import dayjs from 'dayjs'
 import { CalendarDays, MapPin } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
@@ -33,21 +35,22 @@ function sourceLabel(item: WeekClass) {
 }
 
 export function StudentWeekOverview({ studentId }: { studentId: string }) {
-  const [overview, setOverview] = useState<WeekOverview | null>(null)
-
-  useEffect(() => {
-    let active = true
-    const load = async () => {
+  const referenceDate = getLimaReferenceDate(new Date())
+  const week = getLimaWeek(new Date())
+  const query = useQuery({
+    queryKey: ['student-week-overview', studentId, week.startDate],
+    queryFn: async () => {
       const { data, error } = await supabase.rpc('get_student_week_overview', {
         p_student_id: studentId,
-        p_reference_date: dayjs().format('YYYY-MM-DD'),
+        p_reference_date: referenceDate,
       })
-      if (active && !error) setOverview(data as WeekOverview)
-    }
-    void load()
-    return () => { active = false }
-  }, [studentId])
-
+      if (error) throw error
+      return data as WeekOverview
+    },
+  })
+  const overview = query.data
+  if (query.isLoading) return <StudentCard className="p-4 text-sm text-textsec"><p role="status">Cargando tu semana…</p></StudentCard>
+  if (query.error) return <StudentCard className="p-4 text-sm"><p>No pudimos cargar tu semana.</p><button type="button" onClick={() => void query.refetch()} className="mt-2 font-bold text-accent">Reintentar</button></StudentCard>
   if (!overview) return null
 
   return (
@@ -55,7 +58,7 @@ export function StudentWeekOverview({ studentId }: { studentId: string }) {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-black tracking-[-0.03em]">Mi semana</h2>
-          <p className="text-xs text-textsec">{overview.weekly_completed} de {overview.weekly_target || '—'} clases programadas</p>
+          <p className="text-xs text-textsec">{overview.weekly_completed} de {overview.weekly_target || '—'} cupos normales ocupados esta semana</p>
         </div>
         <p className="text-right text-xs font-bold text-textsec">
           {overview.normal_classes_remaining} normales · {overview.recovery_classes_remaining} recuperación

@@ -6,7 +6,8 @@ const source = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
 
 describe('immediate cancellation experience', () => {
   it('tells the student that cancellation immediately frees the class credit', () => {
-    const reservations = source('app/mis-reservas/page.tsx')
+    expect(source('app/mis-reservas/page.tsx')).toContain('StudentBookingHistory')
+    const reservations = source('components/student/StudentBookingHistory.tsx')
 
     expect(reservations).toContain('liberará el cupo y el crédito inmediatamente')
     expect(reservations).toContain('Reserva cancelada. El crédito está disponible nuevamente.')

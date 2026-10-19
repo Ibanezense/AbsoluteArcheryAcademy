@@ -79,13 +79,15 @@ export function shouldOpenMembershipRenewalPrompt(input: {
   dismissed: boolean
   manualOpen: boolean
 }) {
+  if (!input.contextReady || input.isAdmin) return false
+  if (input.manualOpen) return true
   return input.contextReady
     && input.queryReady
     && !input.isAdmin
     && !!input.alert
     && !!input.dismissalKey
     && input.checkedDismissalKey === input.dismissalKey
-    && (input.manualOpen || !input.dismissed)
+    && !input.dismissed
 }
 
 function isFiniteNumber(value: unknown): value is number {

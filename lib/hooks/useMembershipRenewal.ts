@@ -40,6 +40,23 @@ export function invalidateMembershipRenewalCaches(
   queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all })
   queryClient.invalidateQueries({ queryKey: studentKeys.all })
   queryClient.invalidateQueries({ queryKey: ['student-dashboard'] })
+  queryClient.invalidateQueries({ queryKey: ['student-pending-renewal'] })
+}
+
+export function useStudentPendingRenewal(studentId: string | null) {
+  return useQuery({
+    queryKey: ['student-pending-renewal', studentId],
+    enabled: !!studentId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('student_membership_renewal_requests')
+        .select('id,status,requested_at')
+        .eq('student_id', studentId!)
+        .in('status', ['pending_payment', 'pending_validation'])
+        .order('requested_at', { ascending: false }).limit(1).maybeSingle()
+      if (error) throw error
+      return data as { id: string; status: string; requested_at: string } | null
+    },
+  })
 }
 
 export function useMembershipRenewalOptions(studentId: string | null, enabled: boolean) {

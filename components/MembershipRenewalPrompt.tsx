@@ -9,6 +9,7 @@ import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import {
   useMembershipRenewalOptions,
   useRequestMembershipRenewal,
+  useStudentPendingRenewal,
   type MembershipRenewalOption,
 } from '@/lib/hooks/useMembershipRenewal'
 import {
@@ -110,6 +111,7 @@ export default function MembershipRenewalPrompt() {
   const shouldLoadOptions = isOpen
   const optionsQuery = useMembershipRenewalOptions(activeStudentId, shouldLoadOptions)
   const requestMutation = useRequestMembershipRenewal()
+  const pendingQuery = useStudentPendingRenewal(activeStudentId)
 
   const { options: validatedOptions, malformed: optionsMalformed } = useMemo(
     () => getValidatedRenewalOptions(optionsQuery.data),
@@ -133,7 +135,6 @@ export default function MembershipRenewalPrompt() {
 
     setDismissed(getDismissedRenewalPrompt(() => window.localStorage, dismissalKey))
     setCheckedDismissalKey(dismissalKey)
-    setManualOpen(false)
     setSubmitted(false)
     setSelectedPlanId('')
   }, [dismissalKey])
@@ -158,14 +159,13 @@ export default function MembershipRenewalPrompt() {
     if (typeof window === 'undefined') return
 
     function handleManualOpen() {
-      if (!visibleAlert) return
       setSubmitted(false)
       setManualOpen(true)
     }
 
     window.addEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
     return () => window.removeEventListener(OPEN_MEMBERSHIP_RENEWAL_EVENT, handleManualOpen)
-  }, [visibleAlert])
+  }, [])
 
   useEffect(() => {
     if (!selectedPlanId && options[0]) {
@@ -220,7 +220,7 @@ export default function MembershipRenewalPrompt() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-textsec">
-            {promptCopy?.message}
+            {promptCopy?.message || 'Elige tu siguiente plan. La academia revisará la solicitud y validará el pago antes de activar tu membresía.'}
           </p>
 
           {optionsQuery.isLoading && (
@@ -237,7 +237,7 @@ export default function MembershipRenewalPrompt() {
 
           {!optionsQuery.isLoading && !optionsQuery.error && !optionsMalformed && options.length === 0 && (
             <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-              Ya existe una solicitud de renovacion pendiente o no hay planes activos disponibles.
+              {pendingQuery.data ? (pendingQuery.data.status === 'pending_validation' ? 'Tu solicitud está pendiente de validación por la academia.' : 'Tu solicitud está pendiente de pago. Envía tu comprobante a soporte.') : pendingQuery.error ? 'No pudimos verificar si tienes una solicitud pendiente. Contacta con soporte.' : 'No hay planes disponibles para solicitar en este momento.'}
             </div>
           )}
 

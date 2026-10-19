@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dayjs from 'dayjs'
-import { CalendarClock, CalendarPlus, ChevronRight, Headphones, Medal, Target, Ticket } from 'lucide-react'
+import { CalendarClock, CalendarPlus, ChevronRight, Medal, Target, Ticket } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 import Avatar from '@/components/ui/Avatar'
 import { NextBookingWidget } from '@/components/ui/NextBookingWidget'
@@ -13,8 +13,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard, StudentNotice } from '@/components/student/StudentCard'
+import StudentRenewalActions from '@/components/student/StudentRenewalActions'
 import { StudentWeekOverview } from '@/components/student/StudentWeekOverview'
-import { useBookingHistory } from '@/lib/hooks/useBookingHistory'
+import { useStudentBookingHistory } from '@/lib/hooks/useStudentBookingHistory'
 import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
@@ -37,12 +38,9 @@ function StudentHomeContent() {
     loading: dashboardLoading,
     error: dashboardError,
   } = useStudentDashboard(activeStudentId)
-  const {
-    bookings: history,
-    isLoading: historyLoading,
-    hasMore: hasMoreHistory,
-    loadMoreBookings,
-  } = useBookingHistory(activeStudentId)
+  const historyQuery = useStudentBookingHistory(activeStudentId)
+  const history = historyQuery.data?.rows || []
+  const historyLoading = historyQuery.isLoading
   const { booking: nextBooking } = useNextBooking(activeStudentId)
 
   useEffect(() => {
@@ -56,12 +54,6 @@ function StudentHomeContent() {
       router.replace('/hub')
     }
   }, [account?.role, students.length, activeStudentId, router])
-
-  useEffect(() => {
-    if (activeStudentId && history.length === 0 && !historyLoading && hasMoreHistory) {
-      loadMoreBookings()
-    }
-  }, [activeStudentId, history.length, historyLoading, hasMoreHistory, loadMoreBookings])
 
   const loading = contextLoading || dashboardLoading
   const error = contextError || dashboardError
@@ -131,7 +123,7 @@ function StudentHomeContent() {
     <div className="min-h-screen bg-[#F7F8FA] text-textpri">
       <MobileStudentHeader showLogo />
 
-      <div className="space-y-4 px-4 py-5">
+      <div className="space-y-4 px-4 py-5 md:px-8 md:py-6">
         {account?.role === 'guardian' && activeStudent && students.length > 1 && (
           <StudentCard className="flex items-center justify-between gap-4 p-4">
             <div className="min-w-0">
@@ -147,24 +139,24 @@ function StudentHomeContent() {
         <StudentCard className="relative overflow-hidden">
           <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_88%_26%,rgba(249,115,22,0.14),transparent_28%),linear-gradient(105deg,#FFF3E9,#FFFFFF)]" />
           <Target className="absolute right-6 top-6 h-28 w-28 text-accent/10" strokeWidth={1.2} />
-          <div className="relative flex items-center gap-4 p-4 pt-8">
+          <div className="relative flex items-center gap-3 p-4">
             <div className="shrink-0 rounded-full border-4 border-white bg-white shadow-card">
               <Avatar
                 url={dashboard.avatar_url}
                 name={dashboard.full_name || 'Alumno'}
                 size="lg"
-                className="!h-24 !w-24 !text-3xl"
+                className="!h-14 !w-14 !text-xl"
               />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[1.7rem] font-black leading-tight tracking-[-0.04em] text-slate-900">
+              <h1 className="break-words text-[1.35rem] font-black leading-tight tracking-[-0.04em] text-slate-900">
                 {dashboard.full_name || 'Alumno'}
               </h1>
               <p className="mt-1 text-sm font-medium text-textsec">
                 {dashboard.age ? `${dashboard.age} años` : 'Alumno'}
                 {dashboard.current_distance_m ? `  ·  Distancia: ${dashboard.current_distance_m}m` : ''}
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <StatusBadge status={dashboard.student_is_active ? 'active' : 'expired'} label={dashboard.student_is_active ? 'Activo' : 'Inactivo'} />
                 <StatusBadge status={membershipBadge.status} label={membershipBadge.label} />
               </div>
@@ -180,7 +172,12 @@ function StudentHomeContent() {
           </div>
         </StudentCard>
 
-        <div className="grid grid-cols-2 gap-3">
+        <Link href="/reservar" className="btn min-h-[56px] w-full rounded-2xl text-lg font-extrabold shadow-[0_12px_24px_rgba(249,115,22,0.25)]">
+          <CalendarPlus className="h-7 w-7" />
+          Reservar clase
+        </Link>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <QuickMetric
             icon={<CalendarPlus className="h-5 w-5" />}
             label="Clases disponibles"
@@ -212,20 +209,14 @@ function StudentHomeContent() {
           />
         </div>
 
-        <Link href="/reservar" className="btn min-h-[56px] w-full rounded-2xl text-lg font-extrabold shadow-[0_12px_24px_rgba(249,115,22,0.25)]">
-          <CalendarPlus className="h-7 w-7" />
-          Reservar clase
-        </Link>
 
-        <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
           <QuickAction href="/mis-reservas" icon={<CalendarPlus className="h-7 w-7" />} title="Mis reservas" subtitle="Ver y gestionar" />
           <QuickAction href="/membresias" icon={<Ticket className="h-7 w-7" />} title="Mi membresía" subtitle="Historial y plan" accent="violet" />
-          <button type="button" disabled className="rounded-2xl border border-line bg-white p-4 text-left opacity-70 shadow-card">
-            <Headphones className="mb-2 h-7 w-7 text-blue-600" />
-            <p className="font-bold">Soporte</p>
-            <p className="text-xs text-textsec">Ayuda y contacto</p>
-          </button>
+
         </div>
+
+        {activeStudentId && <StudentRenewalActions studentId={activeStudentId} />}
 
         <StudentNotice>
           Puedes cancelar desde la app hasta el inicio de la clase.
@@ -247,7 +238,8 @@ function StudentHomeContent() {
             <Link href="/membresias" className="text-sm font-bold text-accent">Ver historial</Link>
           </div>
           <StudentCard className="divide-y divide-line overflow-hidden">
-            {recentHistory.length === 0 && !historyLoading && (
+            {historyQuery.error && <div className="p-5 text-sm text-danger">No pudimos cargar la actividad. <button type="button" onClick={() => void historyQuery.refetch()} className="font-bold text-accent">Reintentar</button></div>}
+            {recentHistory.length === 0 && !historyLoading && !historyQuery.error && (
               <div className="p-5 text-sm text-textsec">Aún no hay actividad reciente.</div>
             )}
             {recentHistory.map((booking) => (
@@ -317,10 +309,10 @@ function QuickMetric({
   const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'
 
   return (
-    <StudentCard variant={cardVariant} className="min-h-[132px] p-4">
-      <div className={`mb-4 grid h-10 w-10 place-items-center rounded-full ${toneClasses[tone]}`}>{icon}</div>
+    <StudentCard variant={cardVariant} className="min-h-[120px] p-4">
+      <div className={`mb-2 grid h-8 w-8 place-items-center rounded-full ${toneClasses[tone]}`}>{icon}</div>
       <p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>
-      <p className={`mt-3 text-[1.45rem] font-black leading-tight tracking-[-0.04em] ${emphasizedText || 'text-slate-950'}`}>{value}</p>
+      <p className={`mt-2 break-words text-[1.25rem] font-black leading-tight tracking-[-0.04em] ${emphasizedText || 'text-slate-950'}`}>{value}</p>
       <p className={`mt-1 text-sm font-medium leading-tight ${emphasizedText || 'text-textsec'}`}>{detail}</p>
     </StudentCard>
   )
