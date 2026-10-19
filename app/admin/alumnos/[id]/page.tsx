@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PendingMembershipPayments } from '@/components/admin/PendingMembershipPayments'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -1176,7 +1177,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
           refreshStudentData={refreshStudentData}
         />
       )}
-      {activeTab === 'payments' && <PaymentsTab payments={data.payments} />}
+      {activeTab === 'payments' && <div className="grid min-w-0 gap-5"><PendingMembershipPayments studentId={data.id} /><PaymentsTab payments={data.payments} /></div>}
         {activeTab === 'sports' && (
           <SportsProfileSection
             data={data}

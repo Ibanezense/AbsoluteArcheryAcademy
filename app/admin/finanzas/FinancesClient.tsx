@@ -18,6 +18,7 @@ import {
   Target,
   X,
 } from 'lucide-react'
+import { PendingMembershipPayments } from '@/components/admin/PendingMembershipPayments'
 import { AdminFilterBar } from '@/components/admin/AdminFilterBar'
 import { formatAdminMoney, paymentMethodLabel } from '@/lib/utils/adminPresentation'
 import { getLimaDateKey } from '@/lib/utils/membershipCycles'
@@ -687,7 +688,7 @@ export default function FinancesClient() {
 
   return (
     <div className="space-y-6">
-
+      <PendingMembershipPayments onCollected={() => void loadFinances()} />
 
       {loading ? (
         <FinanceSkeleton />
