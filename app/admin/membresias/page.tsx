@@ -341,7 +341,7 @@ function MembershipTabs({
 
   return (
     <AdminContentPanel className="p-2">
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -453,6 +453,8 @@ function MembershipSaleForm({
 }) {
   const currentRemaining = currentMembership?.classes_remaining ?? selectedStudent?.classes_remaining ?? 0
   const actionLabel = 'Crear membresia'
+  const [studentSearch, setStudentSearch] = useState('')
+  const matchingStudents = activeStudents.filter((student) => student.id === form.student_id || student.full_name.toLocaleLowerCase('es').includes(studentSearch.trim().toLocaleLowerCase('es')))
 
   return (
     <AdminContentPanel className="overflow-hidden p-0">
@@ -461,21 +463,21 @@ function MembershipSaleForm({
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-orange-200">Asignacion de ciclos</p>
-            <h2 className="mt-2 font-heading text-3xl font-black tracking-[-0.055em]">Nueva membresia</h2>
+            <h2 className="mt-2 font-heading text-3xl font-black tracking-[-0.055em] text-white">Nueva membresia</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
               Cada ciclo conserva sus propias fechas y saldo. El consumo siempre comienza por el ciclo mas antiguo disponible.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-orange-100">
-            FIFO · ciclo antiguo primero
+          <div className="rounded-2xl border border-slate-600 bg-slate-800 px-4 py-3 text-sm font-bold text-orange-100">
+            Se usan primero las clases del ciclo más antiguo
           </div>
         </div>
       </div>
 
-      <fieldset disabled={isSaving} className="grid gap-5 p-5 sm:p-6 disabled:opacity-70">
-        <div className="grid gap-2" role="group" aria-label="Tipo de membresia">
+      <fieldset disabled={isSaving} className="grid min-w-0 grid-cols-1 gap-5 p-5 sm:p-6 disabled:opacity-70">
+        <div className="grid min-w-0 grid-cols-1 gap-2" role="group" aria-label="Tipo de membresia">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Tipo de membresia</p>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
             {([
               ['paid', 'Membresia pagada'],
               ['gift', 'Obsequio'],
@@ -495,25 +497,26 @@ function MembershipSaleForm({
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <label className="grid gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Paso 1 · Alumno</span>
+            <input aria-label="Buscar alumno para la venta" placeholder="Buscar alumno por nombre" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} className="input" />
             <select
-              className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               value={form.student_id}
               onChange={(event) => onPatch({ student_id: event.target.value })}
             >
               <option value="">Selecciona un alumno</option>
-              {activeStudents.map((student) => (
+              {matchingStudents.map((student) => (
                 <option key={student.id} value={student.id}>{student.full_name}</option>
               ))}
             </select>
           </label>
 
-          {form.origin === 'paid' && <label className="grid gap-2">
+          {form.origin === 'paid' && <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Paso 2 · Plan</span>
             <select
-              className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               value={form.membership_plan_id}
               onChange={(event) => onPatch({ membership_plan_id: event.target.value })}
             >
@@ -525,9 +528,9 @@ function MembershipSaleForm({
           </label>}
         </div>
 
-        <div className="grid gap-4 rounded-[1.35rem] border border-orange-100 bg-orange-50/50 p-4 sm:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-4 rounded-[1.35rem] border border-orange-100 bg-orange-50/50 p-4 sm:grid-cols-3">
           {form.origin === 'paid' ? (
-            <label className="grid gap-2">
+            <label className="grid min-w-0 grid-cols-1 gap-2">
               <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Cantidad de periodos</span>
               <input
                 type="number"
@@ -535,18 +538,18 @@ function MembershipSaleForm({
                 max={12}
                 value={form.period_count}
                 onChange={(event) => onPatch({ period_count: event.target.value })}
-                className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+                className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               />
             </label>
           ) : (
             <>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Clases de obsequio</span>
-                <input type="number" min={1} value={form.gift_classes} onChange={(event) => onPatch({ gift_classes: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
+                <input type="number" min={1} value={form.gift_classes} onChange={(event) => onPatch({ gift_classes: event.target.value })} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Fin del obsequio</span>
-                <input type="date" value={form.gift_end_date} onChange={(event) => onPatch({ gift_end_date: event.target.value })} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
+                <input type="date" value={form.gift_end_date} onChange={(event) => onPatch({ gift_end_date: event.target.value })} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" />
               </label>
             </>
           )}
@@ -555,22 +558,22 @@ function MembershipSaleForm({
           </div>
         </div>
 
-        <div className="grid gap-4 rounded-[1.35rem] border border-slate-200 bg-slate-50 p-4 xl:grid-cols-5">
-          <label className="grid gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 rounded-[1.35rem] border border-slate-200 bg-slate-50 p-4 xl:grid-cols-5">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Paso 3 · Inicio</span>
             <input
               type="date"
-              className="h-12 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               value={form.start_date}
               onChange={(event) => onPatch({ start_date: event.target.value })}
             />
           </label>
 
           {form.origin === 'paid' && <>
-          <label className="grid gap-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Descuento</span>
             <select
-              className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               value={form.discount_type}
               onChange={(event) => onPatch({
                 discount_type: event.target.value as AssignmentFormState['discount_type'],
@@ -583,37 +586,37 @@ function MembershipSaleForm({
             </select>
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Valor descuento</span>
             <input
               type="number"
               min={0}
               step="0.01"
-              className="h-12 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100 disabled:text-slate-400"
+              className="h-12 min-w-0 max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100 disabled:text-slate-400"
               value={form.discount_value}
               onChange={(event) => onPatch({ discount_value: event.target.value })}
               disabled={form.discount_type === 'none'}
             />
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pago total del lote</span>
             <input
               type="number"
               min={0}
               step="0.01"
-              className="h-12 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
               value={form.payment_amount}
               onChange={(event) => onPatch({ payment_amount: event.target.value })}
             />
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Metodo de pago</span>
             <select
               value={form.payment_type}
               onChange={(event) => onPatch({ payment_type: event.target.value as MembershipPaymentType })}
-              className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+              className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
             >
               <option value="manual">Manual</option>
               <option value="cash">Efectivo</option>
@@ -625,10 +628,10 @@ function MembershipSaleForm({
           </label>
           </>}
 
-          <label className="grid gap-2">
+          <label className="grid min-w-0 grid-cols-1 gap-2">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Moneda</span>
             <input
-              className="h-12 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-500"
+              className="h-12 min-w-0 max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-500"
               value={selectedPlan?.currency || 'PEN'}
               disabled
             />
@@ -636,7 +639,7 @@ function MembershipSaleForm({
         </div>
 
         {form.origin === 'paid' && (
-          <div className="grid gap-4 rounded-[1.35rem] border border-blue-100 bg-blue-50/50 p-4 xl:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-4 rounded-[1.35rem] border border-blue-100 bg-blue-50/50 p-4 xl:grid-cols-2">
             <div>
               <p className="text-sm font-black text-slate-950">Horarios fijos de Umacollo</p>
               <p className="mt-1 text-xs leading-5 text-slate-500">Selecciona hasta dos. Se aplican a todos los ciclos y consumen clases normales.</p>
@@ -666,8 +669,8 @@ function MembershipSaleForm({
         )}
 
         <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Las clases pendientes vencen al finalizar el periodo y no se recuperan.</p>
-        <div className="grid gap-4 xl:grid-cols-[1fr_0.85fr]">
-          <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[1fr_0.85fr]">
+          <div className="grid min-w-0 grid-cols-1 gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 text-sm font-black text-slate-950">
               <Sparkles className="h-4 w-4 text-accent" />
               Vista previa
@@ -677,7 +680,7 @@ function MembershipSaleForm({
                 Completa los datos para ver los ciclos antes de confirmar.
               </p>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid min-w-0 grid-cols-1 gap-3">
                 {cyclePreview.map((cycle) => (
                   <article key={cycle.cycleNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-3">
@@ -689,7 +692,7 @@ function MembershipSaleForm({
                     <p className="mt-2 text-xs text-slate-500">{formatDate(cycle.startDate)} — {formatDate(cycle.endDate)} · {formatMoney(cycle.amount, selectedPlan?.currency)}</p>
                   </article>
                 ))}
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                   <SummaryLine label="Precio por ciclo" value={formatMoney(form.origin === 'gift' ? 0 : finalAmount, selectedPlan?.currency)} />
                   <SummaryLine label="Total combinado" value={formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)} accent />
                 </div>
@@ -697,7 +700,7 @@ function MembershipSaleForm({
             )}
           </div>
 
-          <div className="grid gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
+          <div className="grid min-w-0 grid-cols-1 gap-3 rounded-[1.35rem] border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-3">
               {selectedStudent ? (
                 <Avatar name={selectedStudent.full_name} url={selectedStudent.avatar_url} size="md" />
@@ -711,7 +714,7 @@ function MembershipSaleForm({
                 <p className="text-sm font-black text-slate-950">{selectedStudent?.full_name || 'Selecciona un alumno'}</p>
               </div>
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               <SummaryLine label="Plan actual" value={currentMembership?.custom_name || selectedStudent?.membership_name || 'Sin membresia previa'} />
               <SummaryLine label="Clases restantes del ciclo actual" value={currentRemaining} accent={currentRemaining > 0} />
               <SummaryLine label="Vencimiento actual" value={formatDate(currentMembership?.end_date || selectedStudent?.membership_end)} />
@@ -722,7 +725,7 @@ function MembershipSaleForm({
           </div>
         </div>
 
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-sm font-bold text-slate-600">Notas internas</span>
           <textarea
             className="min-h-24 resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
@@ -793,22 +796,22 @@ function MembershipEditPanel({
         </button>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="grid gap-2 xl:col-span-2">
+      <div className="mt-5 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <label className="grid min-w-0 grid-cols-1 gap-2 xl:col-span-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Nombre</span>
-          <input className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.custom_name} onChange={(event) => onPatch({ custom_name: event.target.value })} />
+          <input className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.custom_name} onChange={(event) => onPatch({ custom_name: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Inicio</span>
-          <input type="date" className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.start_date} onChange={(event) => onPatch({ start_date: event.target.value })} />
+          <input type="date" className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.start_date} onChange={(event) => onPatch({ start_date: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Vencimiento</span>
-          <input type="date" className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.end_date} onChange={(event) => onPatch({ end_date: event.target.value })} />
+          <input type="date" className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.end_date} onChange={(event) => onPatch({ end_date: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Estado operativo</span>
-          <select className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.status} onChange={(event) => onPatch({ status: event.target.value })}>
+          <select className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.status} onChange={(event) => onPatch({ status: event.target.value })}>
             <option value="active">Activa</option>
             <option value="expired">Vencida</option>
             <option value="consumed">Consumida</option>
@@ -817,27 +820,27 @@ function MembershipEditPanel({
             <option value="draft">Borrador</option>
           </select>
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Clases totales</span>
-          <input type="number" min={0} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_total} onChange={(event) => onPatch({ classes_total: event.target.value })} />
+          <input type="number" min={0} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_total} onChange={(event) => onPatch({ classes_total: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Usadas</span>
-          <input type="number" min={0} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_used} onChange={(event) => onPatch({ classes_used: event.target.value })} />
+          <input type="number" min={0} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_used} onChange={(event) => onPatch({ classes_used: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Restantes</span>
-          <input type="number" min={0} className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_remaining} onChange={(event) => onPatch({ classes_remaining: event.target.value })} />
+          <input type="number" min={0} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.classes_remaining} onChange={(event) => onPatch({ classes_remaining: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Total</span>
-          <input type="number" min={0} step="0.01" className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.total_amount} onChange={(event) => onPatch({ total_amount: event.target.value })} />
+          <input type="number" min={0} step="0.01" className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.total_amount} onChange={(event) => onPatch({ total_amount: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 grid-cols-1 gap-2">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Moneda</span>
-          <input className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm uppercase outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.currency} onChange={(event) => onPatch({ currency: event.target.value.toUpperCase() })} />
+          <input className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm uppercase outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.currency} onChange={(event) => onPatch({ currency: event.target.value.toUpperCase() })} />
         </label>
-        <label className="grid gap-2 md:col-span-2 xl:col-span-4">
+        <label className="grid min-w-0 grid-cols-1 gap-2 md:col-span-2 xl:col-span-4">
           <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Notas</span>
           <textarea className="min-h-24 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={editor.notes} onChange={(event) => onPatch({ notes: event.target.value })} />
         </label>
@@ -953,11 +956,11 @@ function MembershipsActiveTab({
             <p className="text-sm font-black text-slate-950">Membresias activas</p>
             <p className="mt-1 text-sm text-slate-500">Controla saldo, vencimiento y renovacion sin salir de la vista.</p>
           </div>
-          <div className="grid gap-3 md:grid-cols-3 xl:min-w-[760px]">
+          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3 xl:min-w-[760px]">
             <label className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+                className="h-12 min-w-0 max-w-full w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
                 placeholder="Buscar alumno o plan"
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
@@ -965,7 +968,7 @@ function MembershipsActiveTab({
             </label>
             <label className="relative">
               <Filter className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as ActiveMembershipStatusFilter)}>
+              <select className="h-12 min-w-0 max-w-full w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as ActiveMembershipStatusFilter)}>
                 <option value="all">Todos los estados</option>
                 <option value="active">Activas</option>
                 <option value="expiring">Por vencer</option>
@@ -974,7 +977,7 @@ function MembershipsActiveTab({
                 <option value="historical">Historial</option>
               </select>
             </label>
-            <select className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={sort} onChange={(event) => onSortChange(event.target.value as MembershipSort)}>
+            <select className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={sort} onChange={(event) => onSortChange(event.target.value as MembershipSort)}>
               <option value="recent">Mas recientes</option>
               <option value="expiration">Vencimiento</option>
               <option value="balance">Menor saldo</option>
@@ -1068,7 +1071,7 @@ function MembershipsActiveTab({
           </table>
         </div>
 
-        <div className="grid gap-3 p-4 lg:hidden">
+        <div className="grid min-w-0 grid-cols-1 gap-3 p-4 lg:hidden">
           {filteredMemberships.map((membership) => {
             const status = membershipStatusesById[membership.id] || membershipOperationalStatus(membership)
             const canDeleteMembership = isPersistedMembership(membership)
@@ -1162,33 +1165,33 @@ function PlanEditorModal({
           </div>
 
           <div className="overflow-y-auto p-5 sm:p-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="grid gap-2 md:col-span-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2 md:col-span-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Nombre del plan</span>
-                <input className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.name} onChange={(event) => onPatch({ name: event.target.value })} />
+                <input className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.name} onChange={(event) => onPatch({ name: event.target.value })} />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Clases incluidas</span>
-                <input type="number" min={0} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.classes_included} onChange={(event) => onPatch({ classes_included: event.target.value })} />
+                <input type="number" min={0} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.classes_included} onChange={(event) => onPatch({ classes_included: event.target.value })} />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Cuota semanal</span>
-                <input type="number" min={0} max={4} step={1} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.weekly_class_target} onChange={(event) => onPatch({ weekly_class_target: event.target.value })} />
+                <input type="number" min={0} max={4} step={1} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.weekly_class_target} onChange={(event) => onPatch({ weekly_class_target: event.target.value })} />
                 <span className="text-xs leading-5 text-slate-500">Clases requeridas por semana. 0 desactiva la revision semanal de inasistencias.</span>
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Duracion en dias</span>
-                <input type="number" min={1} className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.duration_days} onChange={(event) => onPatch({ duration_days: event.target.value })} />
+                <input type="number" min={1} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.duration_days} onChange={(event) => onPatch({ duration_days: event.target.value })} />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Precio base</span>
-                <input type="number" min={0} step="0.01" className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.base_price} onChange={(event) => onPatch({ base_price: event.target.value })} />
+                <input type="number" min={0} step="0.01" className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.base_price} onChange={(event) => onPatch({ base_price: event.target.value })} />
               </label>
-              <label className="grid gap-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Moneda</span>
-                <input className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm uppercase outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.currency} onChange={(event) => onPatch({ currency: event.target.value.toUpperCase() })} />
+                <input className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm uppercase outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.currency} onChange={(event) => onPatch({ currency: event.target.value.toUpperCase() })} />
               </label>
-              <label className="grid gap-2 md:col-span-2">
+              <label className="grid min-w-0 grid-cols-1 gap-2 md:col-span-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Descripcion</span>
                 <textarea className="min-h-28 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.description} onChange={(event) => onPatch({ description: event.target.value })} />
               </label>
@@ -1282,7 +1285,7 @@ function PlansCatalogTab({
               <p className="mt-1 text-sm text-slate-500">Administra planes disponibles para nuevas ventas y renovaciones.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <select className="h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={planFilter} onChange={(event) => onFilterChange(event.target.value as PlanFilter)}>
+              <select className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={planFilter} onChange={(event) => onFilterChange(event.target.value as PlanFilter)}>
                 <option value="all">Todos los planes</option>
                 <option value="active">Activos</option>
                 <option value="inactive">Inactivos</option>
@@ -1295,7 +1298,7 @@ function PlansCatalogTab({
           </div>
         </AdminContentPanel>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
           {visiblePlans.map((plan) => {
             const usage = usageForPlan(plan.id)
 
@@ -1365,7 +1368,7 @@ function PlansCatalogTab({
 
 function MembershipSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       {Array.from({ length: 4 }).map((_, index) => (
         <div key={index} className="h-36 animate-pulse rounded-[1.35rem] border border-slate-200 bg-white p-5">
           <div className="h-10 w-10 rounded-2xl bg-slate-100" />
@@ -1405,6 +1408,8 @@ export default function AdminMembershipsPage() {
     [weeklyTemplates],
   )
 
+  const [saleOpen, setSaleOpen] = useState(false)
+  const membershipDeepLinkHandled = useRef(false)
   const [activeTab, setActiveTab] = useState<MembershipTab>('summary')
   const [attentionFilter, setAttentionFilter] = useState<'all' | 'expiring' | 'empty' | 'oneClass'>('all')
   const [assignmentForm, setAssignmentForm] = useState<AssignmentFormState>(emptyAssignmentForm)
@@ -1495,6 +1500,22 @@ export default function AdminMembershipsPage() {
     () => activeStudents.find((student) => student.id === assignmentForm.student_id) || null,
     [activeStudents, assignmentForm.student_id],
   )
+
+  useEffect(() => {
+    const studentId = new URLSearchParams(window.location.search).get('studentId')
+    if (!studentId || membershipDeepLinkHandled.current || studentsLoading || membershipsLoading) return
+    membershipDeepLinkHandled.current = true
+    if (!activeStudents.some((student) => student.id === studentId)) {
+      toast.push({ message: 'El alumno solicitado no está disponible para esta venta.', type: 'error' })
+      return
+    }
+    const memberships = allMemberships.filter((membership) => membership.student?.id === studentId)
+    const startDate = suggestNextMembershipStart(memberships.map((membership) => ({ ...membership, status: membership.status === 'draft' ? 'historical' as const : membership.status })), getLimaDateKey())
+    setAssignmentForm((current) => ({ ...current, student_id: studentId, start_date: startDate }))
+    setSaleOpen(true)
+    setActiveTab('summary')
+    requestAnimationFrame(() => saleRef.current?.scrollIntoView({ block: 'start' }))
+  }, [activeStudents, studentsLoading, membershipsLoading, allMemberships, toast])
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => plan.id === assignmentForm.membership_plan_id) || null,
@@ -1624,6 +1645,7 @@ export default function AdminMembershipsPage() {
   }
 
   function scrollToSaleForm() {
+    setSaleOpen(true)
     setActiveTab('summary')
     window.setTimeout(() => {
       saleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -1852,7 +1874,7 @@ export default function AdminMembershipsPage() {
     try {
       accepted = await confirm(confirmMessage, {
         title: 'Confirmar ciclos de membresia',
-        description: 'Revisa fechas, clases y origen. El consumo seguira el orden FIFO.',
+        description: 'Revisa fechas, clases y origen. Se usarán primero las clases del ciclo más antiguo disponible.',
         confirmLabel: 'Crear membresia',
         cancelLabel: 'Volver a revisar',
         tone: 'warning',
@@ -1914,6 +1936,7 @@ export default function AdminMembershipsPage() {
 
       assignmentIdempotencyKeyRef.current = null
       setAssignmentForm(emptyAssignmentForm())
+      setSaleOpen(false)
       await refreshAll()
     } catch (error: any) {
       toast.push({ message: error.message || 'No se pudo asignar la membresia.', type: 'error' })
@@ -2182,21 +2205,13 @@ export default function AdminMembershipsPage() {
   const loadError = plansError || membershipsError || studentsError
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <AdminPageHeader
         title="Membresias"
         description="Gestiona planes, renovaciones y estado de cuenta de tus alumnos"
         actions={
           <>
-            <button
-              type="button"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-5 text-sm font-black text-accent transition hover:border-accent/40 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={openExpiryExtensionModal}
-              disabled={expiryExtensionLoading || expiryExtensionApplying}
-            >
-              <CalendarClock className="h-4 w-4" />
-              Retrasar vencimientos 7 días
-            </button>
+
             <button
               type="button"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-accent/30 hover:text-accent"
@@ -2226,22 +2241,32 @@ export default function AdminMembershipsPage() {
       {isLoading ? (
         <MembershipSkeleton />
       ) : (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <AdminStatCard label="Membresias activas" value={membershipKpis.activeMemberships.length} helper="Base actual" icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
           <AdminStatCard label="Por vencer" value={membershipKpis.expiring.length} helper="Proximos 7 dias" icon={<CalendarDays className="h-5 w-5" />} tone="orange" />
           <AdminStatCard label="Sin clases" value={membershipKpis.withoutClasses.length} helper="Requieren atencion" icon={<XCircle className="h-5 w-5" />} tone="red" />
           <AdminStatCard label="Una clase" value={membershipKpis.oneClass.length} helper="Renovacion cercana" icon={<AlertTriangle className="h-5 w-5" />} tone="amber" />
           <AdminStatCard label="Renovaciones" value={membershipKpis.monthRenewals} helper="Este mes" icon={<RotateCcw className="h-5 w-5" />} tone="blue" />
-          <AdminStatCard label="Ingresos por membresias" value={formatMoney(membershipKpis.monthIncome, 'PEN')} helper="Este mes" icon={<Wallet className="h-5 w-5" />} tone="slate" />
+          <AdminStatCard label="Valor de ciclos creados" value={formatMoney(membershipKpis.monthIncome, 'PEN')} helper="Creados este mes; no equivale a cobros" icon={<Wallet className="h-5 w-5" />} tone="slate" />
         </section>
       )}
 
       <MembershipTabs activeTab={activeTab} onChange={setActiveTab} />
+      <details className="rounded-xl border border-slate-200 bg-white p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-600">Acciones de vencimiento</summary><div className="pt-3">            <button
+              type="button"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-orange-200 bg-orange-50 px-5 text-sm font-black text-accent transition hover:border-accent/40 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={openExpiryExtensionModal}
+              disabled={expiryExtensionLoading || expiryExtensionApplying}
+            >
+              <CalendarClock className="h-4 w-4" />
+              Retrasar vencimientos 7 días
+            </button></div></details>
 
       {activeTab === 'summary' && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
-            <div ref={saleRef}>
+        <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-6">
+            {saleOpen && <div ref={saleRef} className="scroll-mt-4">
+              <button type="button" disabled={assignmentSaving || assignmentSubmissionLocked} onClick={() => setSaleOpen(false)} className="mb-3 min-h-11 text-sm font-semibold text-slate-600">Cerrar formulario</button>
               <MembershipSaleForm
                 form={assignmentForm}
                 selectedStudent={selectedStudent}
@@ -2263,7 +2288,7 @@ export default function AdminMembershipsPage() {
                   setAssignmentForm(emptyAssignmentForm())
                 }}
               />
-            </div>
+            </div>}
 
             <AdminContentPanel className="p-5">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -2274,7 +2299,7 @@ export default function AdminMembershipsPage() {
                 <button type="button" onClick={() => setAttentionFilter('all')} className="text-sm font-black text-accent">Limpiar filtros</button>
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-5 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <MembershipAttentionCard
                   icon={<CalendarDays className="h-5 w-5" />}
                   title="Membresias por vencer"
@@ -2319,7 +2344,7 @@ export default function AdminMembershipsPage() {
                     No hay membresias para los filtros seleccionados.
                   </p>
                 ) : (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
                     {visibleAttentionStudents.map((student) => (
                       <div key={student.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
                         <Avatar name={student.full_name} url={student.avatar_url} size="md" />
@@ -2346,10 +2371,10 @@ export default function AdminMembershipsPage() {
             </AdminContentPanel>
           </div>
 
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-6">
             <AdminContentPanel className="p-5">
               <h2 className="text-base font-black text-slate-950">Renovaciones recientes</h2>
-              <p className="mt-1 text-sm text-slate-500">Ultimos ciclos registrados en V2.</p>
+              <p className="mt-1 text-sm text-slate-500">Últimos ciclos registrados.</p>
               <div className="mt-4 space-y-3">
                 {recentMemberships.length === 0 ? (
                   <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">

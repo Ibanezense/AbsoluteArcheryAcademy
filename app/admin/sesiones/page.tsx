@@ -11,6 +11,8 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
 import { adminCancelSession } from '@/lib/services/adminBookingService'
 import { supabase } from '@/lib/supabaseClient'
+import { calendarDate, calendarTime, weekDates } from '@/lib/utils/introCalendar'
+import { operationalDate, sessionCalendarRange } from '@/lib/utils/adminCalendar'
 
 type SessionRow = {
   id: string
@@ -48,14 +50,14 @@ type ReservedBooking = {
 type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
 function mondayOfWeek(date: dayjs.Dayjs) {
-  return date.startOf('week').add(1, 'day')
+  return dayjs(weekDates(date.format('YYYY-MM-DD'))[0])
 }
 
 function monthGrid(year: number, month: number) {
   const firstDay = dayjs().year(year).month(month).startOf('month')
   const startIndex = (firstDay.day() + 6) % 7
   const daysInMonth = firstDay.daysInMonth()
-  const todayYMD = dayjs().format('YYYY-MM-DD')
+  const todayYMD = operationalDate()
   const cells: { ymd: string; inMonth: boolean; isToday: boolean }[] = []
 
   for (let index = 0; index < startIndex; index += 1) {
@@ -103,13 +105,13 @@ function occupancyStatus(occupancyRate: number, availableSlots: number, totalCap
 }
 
 function buildAttendanceHref(session: SessionRow) {
-  const date = dayjs(session.start_at).format('YYYY-MM-DD')
+  const date = calendarDate(session.start_at)
   return `/admin/asistencia?date=${date}&sessionId=${session.id}`
 }
 
 function buildSessionCancellationImpact(session: SessionRow, affectedBookings: number) {
-  const dateLabel = dayjs(session.start_at).format('dddd, D [de] MMMM [de] YYYY')
-  const timeLabel = `${dayjs(session.start_at).format('HH:mm')} - ${dayjs(session.end_at).format('HH:mm')}`
+  const dateLabel = dayjs(calendarDate(session.start_at)).format('dddd, D [de] MMMM [de] YYYY')
+  const timeLabel = `${calendarTime(session.start_at)} - ${calendarTime(session.end_at)}`
   return {
     title: 'Cancelar turno por la academia',
     confirmLabel: 'Cancelar turno',
@@ -129,12 +131,11 @@ export default function AdminSessionsPage() {
   const router = useRouter()
   const toast = useToast()
   const confirm = useConfirm()
-  const today = dayjs()
-  const monday = mondayOfWeek(today)
+  const today = dayjs(operationalDate())
 
-  const [year, setYear] = useState(monday.year())
-  const [month, setMonth] = useState(monday.month())
-  const [selectedYMD, setSelectedYMD] = useState(monday.format('YYYY-MM-DD'))
+  const [year, setYear] = useState(today.year())
+  const [month, setMonth] = useState(today.month())
+  const [selectedYMD, setSelectedYMD] = useState(today.format('YYYY-MM-DD'))
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [locationFilter, setLocationFilter] = useState<'all' | 'tiabaya' | 'umacollo'>('all')
   const [allocations, setAllocations] = useState<Record<string, DistanceAllocation[]>>({})
@@ -145,14 +146,13 @@ export default function AdminSessionsPage() {
 
   useEffect(() => {
     const requestedDate = new URLSearchParams(window.location.search).get('date')
-    if (!requestedDate) return
-
-    const parsedDate = dayjs(requestedDate)
-    if (!parsedDate.isValid()) return
+    const parsedDate = dayjs(operationalDate(requestedDate))
 
     setSelectedYMD(parsedDate.format('YYYY-MM-DD'))
     setYear(parsedDate.year())
     setMonth(parsedDate.month())
+    const location = new URLSearchParams(window.location.search).get('location')
+    if (location === 'tiabaya' || location === 'umacollo') setLocationFilter(location)
   }, [])
 
   const loadMonth = useCallback(async (nextYear: number, nextMonth: number) => {
@@ -160,14 +160,13 @@ export default function AdminSessionsPage() {
       setLoading(true)
       setLoadError(null)
 
-      const monthStart = dayjs().year(nextYear).month(nextMonth).startOf('month')
-      const monthEnd = dayjs().year(nextYear).month(nextMonth).endOf('month')
+      const range = sessionCalendarRange(nextYear, nextMonth)
 
       const { data: sessionRows, error: sessionsError } = await supabase
         .from('sessions')
         .select('id, start_at, end_at, status, notes, weekly_template_id, is_manual_override, location:academy_locations!sessions_location_id_fkey(id, code, name)')
-        .gte('start_at', monthStart.toISOString())
-        .lte('start_at', monthEnd.toISOString())
+        .gte('start_at', range.start)
+        .lt('start_at', range.end)
         .order('start_at', { ascending: true })
 
       if (sessionsError) throw sessionsError
@@ -275,7 +274,7 @@ export default function AdminSessionsPage() {
     const grouped: Record<string, SessionRow[]> = {}
 
     sessions.filter((session) => locationFilter === 'all' || session.location?.code === locationFilter).forEach((session) => {
-      const ymd = dayjs(session.start_at).format('YYYY-MM-DD')
+      const ymd = calendarDate(session.start_at)
       if (!grouped[ymd]) grouped[ymd] = []
       grouped[ymd].push(session)
     })
@@ -291,7 +290,7 @@ export default function AdminSessionsPage() {
     const summary: Record<string, { scheduled: number; cancelled: number }> = {}
 
     sessions.filter((session) => locationFilter === 'all' || session.location?.code === locationFilter).forEach((session) => {
-      const ymd = dayjs(session.start_at).format('YYYY-MM-DD')
+      const ymd = calendarDate(session.start_at)
       if (!summary[ymd]) summary[ymd] = { scheduled: 0, cancelled: 0 }
       if (session.status === 'scheduled') summary[ymd].scheduled += 1
       else summary[ymd].cancelled += 1
@@ -421,6 +420,9 @@ export default function AdminSessionsPage() {
     setSelectedYMD(ymd)
     setYear(nextDate.year())
     setMonth(nextDate.month())
+    const params = new URLSearchParams(window.location.search)
+    params.set('date', ymd)
+    window.history.replaceState(null, '', `?${params.toString()}`)
   }
 
   const moveWeek = (offset: number) => {
@@ -429,14 +431,12 @@ export default function AdminSessionsPage() {
   }
 
   const goToday = () => {
-    selectDate(dayjs().format('YYYY-MM-DD'))
+    selectDate(operationalDate())
   }
 
   const moveMonth = (offset: number) => {
     const nextMonth = dayjs().year(year).month(month).add(offset, 'month')
-    setYear(nextMonth.year())
-    setMonth(nextMonth.month())
-    setSelectedYMD(nextMonth.startOf('month').format('YYYY-MM-DD'))
+    selectDate(nextMonth.startOf('month').format('YYYY-MM-DD'))
   }
 
   const weekOperationalMetrics = (() => {
@@ -516,7 +516,7 @@ export default function AdminSessionsPage() {
       <SessionsKpiRow metrics={weekOperationalMetrics} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+        <aside className="order-2 space-y-4 lg:order-none lg:sticky lg:top-6 lg:self-start">
           <MonthlySessionsCalendar
             monthLabel={monthLabel}
             cells={monthGrid(year, month)}
@@ -534,7 +534,7 @@ export default function AdminSessionsPage() {
           />
         </aside>
 
-        <section className="min-w-0 space-y-5">
+        <section className="order-1 min-w-0 space-y-5 lg:order-none">
           <div className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-[0_20px_55px_rgba(15,23,42,0.055)] sm:p-5">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
@@ -544,24 +544,31 @@ export default function AdminSessionsPage() {
                   </h2>
                   {liveUpdateAt && (
                     <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-                      Live {liveUpdateAt}
+                      Actualizado {liveUpdateAt}
                     </span>
                   )}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">Selecciona un dia y despliega solo el turno que necesites operar.</p>
                 <div className="mt-3 flex flex-wrap gap-2" aria-label="Filtrar turnos por sede">
                   {(['all', 'tiabaya', 'umacollo'] as const).map((value) => (
-                    <button key={value} type="button" onClick={() => setLocationFilter(value)} className={`rounded-full px-3 py-1.5 text-xs font-black ${locationFilter === value ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    <button key={value} type="button" aria-pressed={locationFilter === value} onClick={() => {
+                      setLocationFilter(value)
+                      const params = new URLSearchParams(window.location.search)
+                      params.set('date', selectedYMD)
+                      if (value === 'all') params.delete('location')
+                      else params.set('location', value)
+                      window.history.replaceState(null, '', `?${params.toString()}`)
+                    }} className={`rounded-full px-3 py-1.5 text-xs font-black ${locationFilter === value ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600'}`}>
                       {value === 'all' ? 'Todas las sedes' : value === 'tiabaya' ? 'Tiabaya' : 'Umacollo'}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => moveWeek(-1)} className="inline-flex min-h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
+                <button type="button" aria-label="Semana anterior" onClick={() => moveWeek(-1)} className="inline-flex min-h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => moveWeek(1)} className="inline-flex min-h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
+                <button type="button" aria-label="Semana siguiente" onClick={() => moveWeek(1)} className="inline-flex min-h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
                   <ChevronRight className="h-4 w-4" />
                 </button>
                 <button type="button" onClick={goToday} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700">
@@ -591,7 +598,7 @@ export default function AdminSessionsPage() {
             <SessionsSkeleton />
           ) : (
             <div className="space-y-3">
-              {weekDays.map(({ date, ymd, sessions: daySessions }) => (
+              {weekDays.filter(({ ymd }) => ymd === selectedYMD).map(({ date, ymd, sessions: daySessions }) => (
                 <SessionDaySection
                   key={ymd}
                   date={date}
@@ -610,7 +617,7 @@ export default function AdminSessionsPage() {
                         sessionId={session.id}
                         startAt={session.start_at}
                         endAt={session.end_at}
-                        locationName={session.location?.name || 'Tiabaya'}
+                        locationName={session.location?.name || 'Sede no disponible'}
                         sessionStatusLabel={status.label}
                         sessionStatusTone={status.tone}
                         occupancyLabel={occupancy.label}
@@ -674,7 +681,7 @@ function SessionsKpiRow({
       tone: 'text-emerald-700 bg-emerald-50',
     },
     {
-      label: 'Ocupacion promedio',
+      label: 'Cupos con reserva pendiente',
       value: `${metrics.occupancyRate}%`,
       helper: `${metrics.fullSessions} turnos llenos`,
       icon: Boxes,
@@ -690,14 +697,14 @@ function SessionsKpiRow({
   ]
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
       {items.map((item) => {
         const Icon = item.icon
 
         return (
-          <div key={item.label} className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
+          <div key={item.label} className="rounded-[1.35rem] border border-slate-200 bg-white p-3">
             <div className="flex items-start gap-3">
-              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${item.tone}`}>
+              <div className={`hidden h-8 w-8 shrink-0 place-items-center rounded-xl sm:grid ${item.tone}`}>
                 <Icon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -736,7 +743,7 @@ function MonthlySessionsCalendar({
         <button
           type="button"
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700"
-          onClick={onPreviousMonth}
+          aria-label="Mes anterior" onClick={onPreviousMonth}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -744,7 +751,7 @@ function MonthlySessionsCalendar({
         <button
           type="button"
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700"
-          onClick={onNextMonth}
+          aria-label="Mes siguiente" onClick={onNextMonth}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -805,7 +812,7 @@ function SelectedDaySummary({
   onCreate: () => void
 }) {
   return (
-    <section className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.05)]">
+    <section className="rounded-[1.6rem] border border-slate-200 bg-white p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-bold capitalize text-slate-500">{dateLabel}</p>
@@ -861,7 +868,7 @@ function WeekDaySelector({
             <button
               key={ymd}
               type="button"
-              onClick={() => onSelect(ymd)}
+              aria-pressed={isSelected} onClick={() => onSelect(ymd)}
               className={`min-h-20 w-32 rounded-2xl border px-3 py-2 text-left transition ${
                 isSelected
                   ? 'border-accent bg-accent text-white shadow-[0_16px_35px_rgba(249,115,22,0.2)]'

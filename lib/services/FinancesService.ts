@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { getLimaDateKey } from '@/lib/utils/membershipCycles';
 
 export type FinanceRecord = {
     payment_id: string;
@@ -47,24 +48,25 @@ export type FinanceActionableDashboard = {
 
 export class FinancesService {
     static async getMonthlyReport(startDate: string, endDate: string): Promise<FinanceRecord[]> {
-        const { data, error } = await supabase.rpc('get_finances_report', {
-            p_start_date: startDate,
-            p_end_date: endDate
-        });
-
-        if (error) {
-            console.error("Error fetching finances report:", error);
-            throw error;
+        const records: FinanceRecord[] = [];
+        const pageSize = 500;
+        for (let offset = 0; ; offset += pageSize) {
+            const { data, error } = await supabase.rpc('get_finances_report', {
+                p_start_date: startDate,
+                p_end_date: endDate,
+            }).order('paid_at', { ascending: false }).order('payment_id', { ascending: true }).range(offset, offset + pageSize - 1);
+            if (error) throw error;
+            const page = (data || []) as FinanceRecord[];
+            records.push(...page);
+            if (page.length < pageSize) return records;
         }
-
-        return data || [];
     }
 
     static async getActionableDashboard(startDate: string, endDate: string): Promise<FinanceActionableDashboard> {
         const { data, error } = await supabase.rpc('get_finances_actionable_dashboard', {
             p_month_start: startDate,
             p_month_end: endDate,
-            p_reference_date: new Date().toISOString().slice(0, 10),
+            p_reference_date: getLimaDateKey(),
         });
 
         if (error) {
@@ -72,17 +74,7 @@ export class FinancesService {
             throw error;
         }
 
-        return (data || {
-            month_start: startDate,
-            month_end: endDate,
-            reference_date: new Date().toISOString().slice(0, 10),
-            paid_month: 0,
-            pending_month: 0,
-            projection_month: 0,
-            overdue_amount: 0,
-            overdue_count: 0,
-            top_debtors: [],
-            overdue_rows: [],
-        }) as FinanceActionableDashboard;
+        if (!data) throw new Error('El resumen financiero no está disponible.');
+        return data as FinanceActionableDashboard;
     }
 }

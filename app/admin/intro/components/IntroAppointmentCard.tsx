@@ -24,7 +24,7 @@ function CardContent({ row, onSelect, onEdit, disabled, overlay = false, nodeRef
       <div className="mb-2 flex items-center justify-between gap-1">
         <span className="font-mono text-xs font-semibold text-slate-700">{calendarTime(row.session_start)}</span>
         <div className="flex items-center">
-          <button type="button" disabled={disabled} onClick={() => onEdit(row)} aria-label={`Editar cita de ${row.full_name}`} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-800"><Pencil size={13} /></button>
+          <button type="button" disabled={disabled} onClick={() => onEdit(row)} aria-label={`Editar cita de ${row.full_name}`} className="min-h-11 min-w-11 rounded-md p-2.5 text-slate-400 hover:bg-slate-100 hover:text-slate-800"><Pencil size={13} /></button>
           {dragHandle}
         </div>
       </div>
@@ -45,7 +45,7 @@ function DraggableCard(props: CardProps) {
     id: `appointment:${row.booking_id}`, data: { row }, disabled,
   })
   return <CardContent {...props} nodeRef={setNodeRef} isDragging={isDragging} dragHandle={
-    <button type="button" ref={setActivatorNodeRef} {...attributes} {...listeners} disabled={disabled} aria-label={`Mover cita de ${row.full_name}`} className="touch-none rounded-md p-1.5 text-slate-400 hover:bg-slate-100 active:cursor-grabbing"><GripVertical size={15} /></button>
+    <button type="button" ref={setActivatorNodeRef} {...attributes} {...listeners} disabled={disabled} aria-label={`Mover cita de ${row.full_name}`} className="touch-none min-h-11 min-w-11 rounded-md p-2.5 text-slate-400 hover:bg-slate-100 active:cursor-grabbing"><GripVertical size={15} /></button>
   } />
 }
 

@@ -2,9 +2,10 @@
 
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import dayjs from 'dayjs'
 import { ArrowRight, ChevronDown, Clock3, UserCheck, Users } from 'lucide-react'
 import Avatar from '@/components/ui/Avatar'
+import { attendanceActions } from '@/lib/utils/adminAttendance'
+import { calendarDayLabel, calendarTime, calendarDate } from '@/lib/utils/introCalendar'
 
 type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
@@ -130,10 +131,10 @@ export function AdminSessionAccordion({
         >
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="font-heading text-xl font-black leading-none tracking-[-0.045em] text-slate-950">
-              {dayjs(startAt).format('HH:mm')}
+              {calendarTime(startAt)}
             </p>
             <p className="mt-2 text-sm font-black leading-none text-slate-950">
-              {dayjs(endAt).format('HH:mm')}
+              {calendarTime(endAt)}
             </p>
           </div>
 
@@ -260,6 +261,7 @@ export function AttendanceSessionTabs({
   sessions: Array<{
     session_id: string
     session_start_at: string
+    location_name?: string
     bookings: Array<{ booking_status: string }>
   }>
   activeSessionId: string | null
@@ -278,13 +280,15 @@ export function AttendanceSessionTabs({
             key={session.session_id}
             type="button"
             onClick={() => onSelect(session.session_id)}
+            aria-pressed={isActive}
             className={`min-h-14 min-w-[8rem] rounded-2xl border px-4 text-left transition ${
               isActive
                 ? 'border-accent bg-accent text-white shadow-[0_16px_35px_rgba(249,115,22,0.22)]'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-accent/40'
             }`}
           >
-            <span className="block text-sm font-black">{dayjs(session.session_start_at).format('HH:mm')}</span>
+            <span className="block text-sm font-black">{calendarTime(session.session_start_at)}</span>
+            {session.location_name && <span className="block text-xs font-semibold">{session.location_name}</span>}
             <span className={`mt-1 block text-xs ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{total} reservas - {label}</span>
           </button>
         )
@@ -325,6 +329,7 @@ export function AttendanceStudentRow({
   onCancel: () => void
 }) {
   const isReserved = status === 'reserved'
+  const actions = attendanceActions(status)
   const editDisabled = isProcessing || !isReserved || !canEdit
   const statusLabel =
     status === 'attended'
@@ -362,16 +367,16 @@ export function AttendanceStudentRow({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[24rem]">
-        <button
+      <div className="flex flex-wrap gap-2">
+        {actions.canMark && <button
           type="button"
           onClick={onAttended}
           disabled={isProcessing || !isReserved}
           className="min-h-11 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isProcessing ? '...' : 'Asistio'}
-        </button>
-        <button
+          {isProcessing ? 'Registrando…' : 'Marcar asistencia'}
+        </button>}
+        {actions.canEdit && canEdit && <button
           type="button"
           onClick={onEdit}
           disabled={editDisabled}
@@ -379,15 +384,15 @@ export function AttendanceStudentRow({
           className="min-h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Editar
-        </button>
-        <button
+        </button>}
+        {actions.cancellationLabel && <button
           type="button"
           onClick={onCancel}
           disabled={isProcessing || status === 'cancelled'}
           className="min-h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Cancelar
-        </button>
+          {actions.cancellationLabel}
+        </button>}
       </div>
     </div>
   )
@@ -395,12 +400,14 @@ export function AttendanceStudentRow({
 
 export function AttendanceSummaryCard({
   startAt,
+  locationName,
   total,
   attended,
   noShow,
   cancelled,
 }: {
   startAt: string
+  locationName?: string
   total: number
   attended: number
   noShow: number
@@ -413,9 +420,9 @@ export function AttendanceSummaryCard({
     <section className="rounded-[1.45rem] border border-slate-200 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.06)]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-sm font-bold text-slate-500">Sesion activa</p>
+          <p className="text-sm font-bold text-slate-500">{locationName || 'Sede no disponible'} · {calendarDayLabel(calendarDate(startAt))}</p>
           <h2 className="mt-1 font-heading text-3xl font-black tracking-[-0.05em] text-slate-950">
-            {dayjs(startAt).format('HH:mm')}
+            {calendarTime(startAt)}
           </h2>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -454,7 +461,7 @@ export function AttendanceBackToSessionsLink({ href = '/admin/sesiones' }: { hre
   return (
     <Link href={href} className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700">
       <Users className="h-4 w-4" />
-      Volver a sesiones
+      Volver a turnos
     </Link>
   )
 }

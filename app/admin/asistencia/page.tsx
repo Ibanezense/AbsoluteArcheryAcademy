@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -18,6 +18,8 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
+import { operationalDate } from '@/lib/utils/adminCalendar'
+import { calendarDayLabel, shiftDate } from '@/lib/utils/introCalendar'
 
 interface DailyRosterBooking {
   booking_id: string
@@ -38,6 +40,7 @@ interface DailyRosterBooking {
 interface GroupedSession {
   session_id: string
   session_start_at: string
+  location_name: string
   bookings: DailyRosterBooking[]
 }
 
@@ -53,7 +56,7 @@ function bowUsageLabel(booking: DailyRosterBooking) {
 }
 
 function formatDateLabel(date: string) {
-  return dayjs(date).format('dddd, D [de] MMMM [de] YYYY')
+  return calendarDayLabel(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function AsistenciaContent() {
@@ -65,21 +68,34 @@ function AsistenciaContent() {
 
   const requestedDate = searchParams.get('date')
   const requestedSessionId = searchParams.get('sessionId')
-  const [selectedDate, setSelectedDate] = useState(() => requestedDate || dayjs().format('YYYY-MM-DD'))
+  const [selectedDate, setSelectedDate] = useState(() => operationalDate(requestedDate))
   const [activeSessionId, setActiveSessionId] = useState<string | null>(requestedSessionId)
   const [isLoading, setIsLoading] = useState(true)
   const [isSearchingNext, setIsSearchingNext] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<DailyRosterBooking[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const rosterRequest = useRef(0)
+  const [sessionLocations, setSessionLocations] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (requestedDate && requestedDate !== selectedDate) {
-      setSelectedDate(requestedDate)
-    }
-  }, [requestedDate, selectedDate])
+    if (requestedDate) setSelectedDate(operationalDate(requestedDate))
+  }, [requestedDate])
+
+  const selectDate = (date: string) => {
+    if (operationalDate(date) !== date) return
+    setSelectedDate(date)
+    setActiveSessionId(null)
+    router.replace(`/admin/asistencia?date=${date}`, { scroll: false })
+  }
+
+  const selectSession = (sessionId: string) => {
+    setActiveSessionId(sessionId)
+    router.replace(`/admin/asistencia?date=${selectedDate}&sessionId=${encodeURIComponent(sessionId)}`, { scroll: false })
+  }
 
   const loadRoster = async (date: string) => {
+    const request = ++rosterRequest.current
     setIsLoading(true)
     setError(null)
 
@@ -90,14 +106,28 @@ function AsistenciaContent() {
 
       if (rpcError) throw rpcError
       const rows = (data || []) as DailyRosterBooking[]
+      const sessionIds = Array.from(new Set(rows.map((row) => row.session_id)))
+      const locations: Record<string, string> = {}
+      if (sessionIds.length) {
+        const result = await supabase.from('sessions')
+          .select('id,location:academy_locations!sessions_location_id_fkey(name)').in('id', sessionIds)
+        if (result.error) throw result.error
+        for (const session of result.data || []) {
+          const location = Array.isArray(session.location) ? session.location[0] : session.location
+          locations[session.id] = location?.name || 'Sede no disponible'
+        }
+      }
+      if (request !== rosterRequest.current) return []
+      setSessionLocations(locations)
       setBookings(rows)
       return rows
     } catch (err: any) {
+      if (request !== rosterRequest.current) return []
       console.error('Error loading roster:', err)
       setError(err.message || 'Error al cargar el roster')
       return []
     } finally {
-      setIsLoading(false)
+      if (request === rosterRequest.current) setIsLoading(false)
     }
   }
 
@@ -114,6 +144,7 @@ function AsistenciaContent() {
         acc.push({
           session_id: booking.session_id,
           session_start_at: booking.session_start_at,
+          location_name: sessionLocations[booking.session_id] || 'Sede no disponible',
           bookings: [booking],
         })
       }
@@ -122,7 +153,7 @@ function AsistenciaContent() {
 
     grouped.sort((left, right) => dayjs(left.session_start_at).valueOf() - dayjs(right.session_start_at).valueOf())
     return grouped
-  }, [bookings])
+  }, [bookings, sessionLocations])
 
   useEffect(() => {
     if (!groupedSessions.length) {
@@ -153,24 +184,20 @@ function AsistenciaContent() {
     }
   }, [activeSession])
 
-  const setQuickDate = (date: dayjs.Dayjs) => {
-    setSelectedDate(date.format('YYYY-MM-DD'))
-  }
-
   const findNextRosterDate = async () => {
     setIsSearchingNext(true)
     setError(null)
 
     try {
       for (let offset = 1; offset <= 30; offset += 1) {
-        const candidate = dayjs().add(offset, 'day').format('YYYY-MM-DD')
+        const candidate = shiftDate(selectedDate, offset)
         const { data, error: rpcError } = await supabase.rpc('get_daily_roster', {
           p_date: candidate,
         })
 
         if (rpcError) throw rpcError
         if (((data || []) as DailyRosterBooking[]).length > 0) {
-          setSelectedDate(candidate)
+          selectDate(candidate)
           return
         }
       }
@@ -184,6 +211,7 @@ function AsistenciaContent() {
   }
 
   const handleMarkAttendance = async (bookingId: string) => {
+    if (actionLoading) return
     setActionLoading(bookingId)
 
     try {
@@ -202,6 +230,13 @@ function AsistenciaContent() {
         loadRoster(selectedDate),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
         queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-weekend-intro-capacity'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['intro-calendar'] }),
       ])
     } catch (err: any) {
       console.error('Error marking attendance:', err)
@@ -212,13 +247,14 @@ function AsistenciaContent() {
   }
 
   const handleCancelBooking = async (bookingId: string) => {
+    if (actionLoading) return
     const reason = window.prompt('Motivo obligatorio de la cancelación por la academia:')?.trim()
     if (!reason) return
     const ok = await confirm(
       'La reserva se cancelará por la academia. Se liberarán sus recursos y no generará inasistencia. Si ya consumió crédito, se restaurará una sola vez. ¿Continuar?',
       {
         title: 'Cancelar reserva',
-        description: 'Esta accion usa la RPC admin actual y requiere confirmacion porque cambia el estado de la reserva.',
+        description: 'La cancelación quedará registrada con el motivo indicado.',
         confirmLabel: 'Cancelar reserva',
         tone: 'danger',
       },
@@ -243,6 +279,13 @@ function AsistenciaContent() {
         loadRoster(selectedDate),
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
         queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-weekend-intro-capacity'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+        queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['intro-calendar'] }),
       ])
     } catch (err: any) {
       console.error('Error canceling booking:', err)
@@ -260,9 +303,6 @@ function AsistenciaContent() {
         actions={
           <>
             <AttendanceBackToSessionsLink href={`/admin/sesiones?date=${selectedDate}`} />
-            <button className="btn-ghost !px-3" onClick={() => router.push('/admin')}>
-              Volver
-            </button>
           </>
         }
       />
@@ -270,17 +310,17 @@ function AsistenciaContent() {
       <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.055)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h2 className="font-heading text-2xl font-black tracking-[-0.045em] text-slate-950">Seleccionar dia</h2>
+            <h2 className="font-heading text-2xl font-black tracking-[-0.045em] text-slate-950">Seleccionar día</h2>
             <p className="mt-1 text-sm capitalize text-slate-500">{formatDateLabel(selectedDate)}</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-accent" onClick={() => setQuickDate(dayjs())}>
+              <button type="button" className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-accent" onClick={() => selectDate(operationalDate())}>
                 Hoy
               </button>
-              <button type="button" className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700" onClick={() => setQuickDate(dayjs().add(1, 'day'))}>
-                Manana
+              <button type="button" className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700" onClick={() => selectDate(shiftDate(operationalDate(), 1))}>
+                Mañana
               </button>
               <button
                 type="button"
@@ -288,13 +328,14 @@ function AsistenciaContent() {
                 disabled={isSearchingNext}
                 onClick={findNextRosterDate}
               >
-                {isSearchingNext ? 'Buscando' : 'Proximos turnos'}
+                {isSearchingNext ? 'Buscando' : 'Próximos turnos'}
               </button>
             </div>
             <input
               type="date"
+              aria-label="Fecha de asistencia"
               value={selectedDate}
-              onChange={(event) => setSelectedDate(event.target.value)}
+              onChange={(event) => selectDate(event.target.value)}
               className="input w-full sm:w-auto"
             />
           </div>
@@ -310,6 +351,7 @@ function AsistenciaContent() {
       {error && !isLoading && (
         <div className="rounded-[1.6rem] border border-rose-200 bg-rose-50 p-6">
           <p className="text-center font-bold text-rose-700">{error}</p>
+          <button type="button" className="mt-3 min-h-11 underline" onClick={() => loadRoster(selectedDate)}>Reintentar</button>
         </div>
       )}
 
@@ -324,7 +366,7 @@ function AsistenciaContent() {
               disabled={isSearchingNext}
               onClick={findNextRosterDate}
             >
-              Ver Proximos turnos
+              Ver Próximos turnos
             </button>
           }
         />
@@ -335,11 +377,12 @@ function AsistenciaContent() {
           <AttendanceSessionTabs
             sessions={groupedSessions}
             activeSessionId={activeSession.session_id}
-            onSelect={setActiveSessionId}
+            onSelect={selectSession}
           />
 
           <AttendanceSummaryCard
             startAt={activeSession.session_start_at}
+            locationName={activeSession.location_name}
             total={activeStats.total}
             attended={activeStats.attended}
             noShow={activeStats.noShow}
@@ -361,7 +404,7 @@ function AsistenciaContent() {
                   participantLabel={booking.entry_type === 'intro' ? 'Clase de prueba' : null}
                   status={booking.booking_status}
                   notes={booking.admin_notes}
-                  isProcessing={isProcessing}
+                  isProcessing={isProcessing || actionLoading !== null}
                   canEdit
                   onAttended={() => handleMarkAttendance(booking.booking_id)}
                   onEdit={() => {

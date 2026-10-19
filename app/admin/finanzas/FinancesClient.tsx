@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import {
@@ -18,6 +18,10 @@ import {
   Target,
   X,
 } from 'lucide-react'
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar'
+import { formatAdminMoney, paymentMethodLabel } from '@/lib/utils/adminPresentation'
+import { getLimaDateKey } from '@/lib/utils/membershipCycles'
+import { filterFinanceRecords, paginateFinanceRecords } from '@/lib/utils/adminFinanceFilters'
 import { AdminContentPanel } from '@/components/admin/AdminVisualSystem'
 import { FinancesService, type FinanceActionableDashboard, type FinanceRecord } from '@/lib/services/FinancesService'
 
@@ -62,10 +66,10 @@ const MONTHS = [
 
 const initialFilters: FinanceFiltersState = {
   period: 'month',
-  month: new Date().getMonth(),
-  year: new Date().getFullYear(),
-  customStart: dayjs().startOf('month').format('YYYY-MM-DD'),
-  customEnd: dayjs().format('YYYY-MM-DD'),
+  month: dayjs(getLimaDateKey()).month(),
+  year: dayjs(getLimaDateKey()).year(),
+  customStart: dayjs(getLimaDateKey()).startOf('month').format('YYYY-MM-DD'),
+  customEnd: dayjs(getLimaDateKey()).format('YYYY-MM-DD'),
   kind: 'all',
   status: 'all',
   method: 'all',
@@ -73,7 +77,7 @@ const initialFilters: FinanceFiltersState = {
 }
 
 function money(value: number | string | null | undefined) {
-  return `S/ ${Number(value || 0).toFixed(2)}`
+  return formatAdminMoney(value == null ? null : Number(value))
 }
 
 function movementKind(record: FinanceRecord): Exclude<FinanceMovementKind, 'all'> {
@@ -84,13 +88,6 @@ function movementKindLabel(kind: FinanceMovementKind) {
   if (kind === 'intro') return 'Clase intro'
   if (kind === 'membership') return 'Membresia'
   return 'Todos'
-}
-
-function paymentMethodLabel(method: string | null | undefined) {
-  if (!method) return 'Sin metodo'
-  if (method === 'admin_manual') return 'Caja / Manual'
-  if (method === 'transferencia') return 'Transferencia'
-  return method.replaceAll('_', ' ')
 }
 
 function statusLabel(status: string) {
@@ -128,12 +125,13 @@ function statusClasses(status: string) {
 
 function dateRangeFromFilters(filters: FinanceFiltersState) {
   if (filters.period === 'today') {
-    const start = dayjs().startOf('day')
+    const start = dayjs(getLimaDateKey()).startOf('day')
     return { start, end: start.add(1, 'day') }
   }
 
   if (filters.period === 'week') {
-    const start = dayjs().startOf('week').add(1, 'day')
+    const today = dayjs(getLimaDateKey())
+    const start = today.subtract((today.day() + 6) % 7, 'day').startOf('day')
     return { start, end: start.add(7, 'day') }
   }
 
@@ -221,7 +219,7 @@ function FinanceFilters({
   const patch = (partial: Partial<FinanceFiltersState>) => onChange({ ...filters, ...partial })
 
   return (
-    <AdminContentPanel className="p-5">
+    <AdminFilterBar title="Filtros y exportación" activeCount={[filters.kind !== 'all', filters.status !== 'all', filters.method !== 'all', Boolean(filters.search.trim())].filter(Boolean).length} onClear={onClear}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -229,7 +227,7 @@ function FinanceFilters({
               <Filter className="h-4 w-4 text-accent" />
               Filtros
             </div>
-            <p className="mt-1 text-xs text-slate-500">Solo se muestran filtros con datos o soporte actual.</p>
+
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={onClear} className="min-h-11 rounded-2xl border border-slate-200 px-4 text-sm font-black text-slate-700">
@@ -332,7 +330,7 @@ function FinanceFilters({
           </div>
         </div>
       </div>
-    </AdminContentPanel>
+    </AdminFilterBar>
   )
 }
 
@@ -387,7 +385,7 @@ function FinanceMovementTable({
     <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] lg:block">
       <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
         <p className="text-sm font-black text-slate-950">Movimientos financieros</p>
-        <p className="mt-1 text-xs text-slate-500">Tabla desktop con importes alineados y detalle bajo demanda.</p>
+        <p className="mt-1 text-xs text-slate-500">Pagos registrados en el periodo y con los filtros seleccionados.</p>
       </div>
       <div className="max-h-[42rem] overflow-auto">
         <table className="w-full text-left text-sm">
@@ -435,41 +433,23 @@ function FinanceMovementTable({
   )
 }
 
-function FinanceMovementCard({
-  record,
-  onSelect,
-}: {
-  record: FinanceRecord
-  onSelect: (record: FinanceRecord) => void
-}) {
+function FinanceMovementCard({ record, onSelect }: { record: FinanceRecord; onSelect: (record: FinanceRecord) => void }) {
   return (
-    <article className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.055)]">
+    <article className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-black text-slate-950">{record.student_name}</p>
+          <p className="break-words text-sm font-semibold text-slate-950">{record.student_name}</p>
           <p className="mt-1 text-xs text-slate-500">{dayjs(record.paid_at).format('DD MMM YYYY - HH:mm')}</p>
         </div>
+        <p className="shrink-0 text-base font-bold tabular-nums text-slate-950">{money(record.amount_paid)}</p>
+      </div>
+      <p className="mt-2 break-words text-sm text-slate-600">{record.plan_name} · {paymentMethodLabel(record.payment_method)}</p>
+      <div className="mt-2 flex items-center justify-between gap-2">
         <FinanceStatusBadge status={record.payment_status} />
+        <button type="button" onClick={() => onSelect(record)} aria-label={`Ver detalle de ${record.student_name}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <Eye className="h-4 w-4" />Ver detalle
+        </button>
       </div>
-      <div className="mt-4 rounded-2xl bg-slate-50 p-3">
-        <p className="text-xs font-bold text-slate-500">{movementKindLabel(movementKind(record))}</p>
-        <p className="mt-1 truncate text-sm font-bold text-slate-700">{record.plan_name}</p>
-        <p className="mt-3 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(record.amount_paid)}</p>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <p className="font-black uppercase tracking-[0.14em] text-slate-400">Metodo</p>
-          <p className="mt-1 font-bold text-slate-700">{paymentMethodLabel(record.payment_method)}</p>
-        </div>
-        <div>
-          <p className="font-black uppercase tracking-[0.14em] text-slate-400">Referencia</p>
-          <p className="mt-1"><SensitiveValue value={record.payment_id} /></p>
-        </div>
-      </div>
-      <button type="button" onClick={() => onSelect(record)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
-        <Eye className="h-4 w-4" />
-        Ver detalle
-      </button>
     </article>
   )
 }
@@ -496,14 +476,14 @@ function FinanceMovementDetail({
   ]
 
   return (
-    <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/40 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex justify-end bg-slate-950/40 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Detalle de movimiento financiero" onClick={onClose} onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}>
       <aside className="flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[1.6rem] bg-white shadow-[0_30px_90px_rgba(15,23,42,0.25)]" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
           <div>
             <p className="text-sm font-bold text-slate-500">Detalle de movimiento</p>
             <h2 className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(record.amount_paid)}</h2>
           </div>
-          <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 text-slate-600">
+          <button type="button" aria-label="Cerrar detalle de movimiento" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 text-slate-600">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -536,13 +516,13 @@ function FinanceMobileSummary({
     <div className="rounded-[1.35rem] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.055)] lg:hidden">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Resumen superior</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Ingresos filtrados</p>
           <p className="mt-1 text-sm font-bold text-slate-600">{period}</p>
         </div>
         <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-accent">{activeFiltersCount} filtros activos</span>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-emerald-50 p-3">
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="col-span-2 rounded-xl bg-emerald-50 px-3 py-2">
           <p className="text-[11px] font-bold text-emerald-700">Ingresos</p>
           <p className="mt-1 font-heading text-xl font-black text-slate-950">{money(stats.totalIncome)}</p>
         </div>
@@ -565,6 +545,8 @@ export default function FinancesClient() {
   const [actionable, setActionable] = useState<FinanceActionableDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const financeRequest = useRef(0)
   const [selectedRecord, setSelectedRecord] = useState<FinanceRecord | null>(null)
 
   const dateRange = useMemo(() => dateRangeFromFilters(filters), [filters])
@@ -572,6 +554,7 @@ export default function FinancesClient() {
   const endDateString = dateRange.end.format('YYYY-MM-DD')
 
   const loadFinances = async () => {
+    const request = ++financeRequest.current
     setLoading(true)
     setError(null)
 
@@ -580,18 +563,21 @@ export default function FinancesClient() {
         FinancesService.getMonthlyReport(startDateString, endDateString),
         FinancesService.getActionableDashboard(startDateString, endDateString),
       ])
+      if (request !== financeRequest.current) return
       setRecords(data)
       setActionable(dashboard)
     } catch (loadError: any) {
+      if (request !== financeRequest.current) return
       console.error('Error loading finances:', loadError)
       setError(loadError?.message || 'No pudimos cargar la informacion financiera.')
     } finally {
-      setLoading(false)
+      if (request === financeRequest.current) setLoading(false)
     }
   }
 
   useEffect(() => {
     void loadFinances()
+    return () => { financeRequest.current += 1 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDateString, endDateString])
 
@@ -603,22 +589,9 @@ export default function FinancesClient() {
     return Array.from(new Set(records.map((record) => record.payment_status).filter(Boolean))).sort()
   }, [records])
 
-  const filteredRecords = useMemo(() => {
-    const search = filters.search.trim().toLowerCase()
-
-    return records.filter((record) => {
-      const kind = movementKind(record)
-      const matchesKind = filters.kind === 'all' || filters.kind === kind
-      const matchesStatus = filters.status === 'all' || record.payment_status === filters.status
-      const matchesMethod = filters.method === 'all' || record.payment_method === filters.method
-      const matchesSearch = !search
-        || record.student_name?.toLowerCase().includes(search)
-        || record.plan_name?.toLowerCase().includes(search)
-        || record.payment_method?.toLowerCase().includes(search)
-
-      return matchesKind && matchesStatus && matchesMethod && matchesSearch
-    })
-  }, [filters.kind, filters.method, filters.search, filters.status, records])
+  const filteredRecords = useMemo(() => filterFinanceRecords(records, filters), [filters, records])
+  const paginated = useMemo(() => paginateFinanceRecords(filteredRecords, page), [filteredRecords, page])
+  useEffect(() => { setPage(1) }, [filters])
 
   const stats = useMemo(() => {
     const paidRecords = filteredRecords.filter((record) => record.payment_status === 'paid')
@@ -640,7 +613,7 @@ export default function FinancesClient() {
     {
       label: 'Ingresos del periodo',
       value: money(stats.totalIncome),
-      helper: 'Suma de movimientos pagados en el rango visible.',
+      helper: 'Pagos del periodo que coinciden con todos los filtros.',
       tone: 'green',
       icon: <Banknote className="h-5 w-5" />,
     },
@@ -661,7 +634,7 @@ export default function FinancesClient() {
     {
       label: 'Clases intro pagadas',
       value: stats.introPaidCount.toString(),
-      helper: 'Derivado de movimientos con plan Clase de Prueba.',
+      helper: 'Pagos de clases de prueba con los filtros seleccionados.',
       tone: 'orange',
       icon: <Target className="h-5 w-5" />,
     },
@@ -714,6 +687,23 @@ export default function FinancesClient() {
 
   return (
     <div className="space-y-6">
+
+
+      {loading ? (
+        <FinanceSkeleton />
+      ) : error ? (
+        <><FinanceErrorState onRetry={loadFinances} />      <FinanceFilters
+        filters={filters}
+        onChange={setFilters}
+        methodOptions={methodOptions}
+        statusOptions={statusOptions}
+        onClear={clearFilters}
+        onExport={exportToCsv}
+        exportDisabled={loading || Boolean(error) || filteredRecords.length === 0}
+      /></>
+      ) : (
+        <>
+          <FinanceMobileSummary stats={stats} period={periodLabel(filters)} activeFiltersCount={activeFiltersCount} />
       <FinanceFilters
         filters={filters}
         onChange={setFilters}
@@ -721,20 +711,29 @@ export default function FinancesClient() {
         statusOptions={statusOptions}
         onClear={clearFilters}
         onExport={exportToCsv}
-        exportDisabled={filteredRecords.length === 0}
+        exportDisabled={loading || Boolean(error) || filteredRecords.length === 0}
       />
 
-      {loading ? (
-        <FinanceSkeleton />
-      ) : error ? (
-        <FinanceErrorState onRetry={loadFinances} />
-      ) : (
-        <>
-          <FinanceMobileSummary stats={stats} period={periodLabel(filters)} activeFiltersCount={activeFiltersCount} />
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="hidden gap-3 lg:grid lg:grid-cols-3 xl:grid-cols-5">
             {kpis.map((kpi) => <FinanceKpiCard key={kpi.label} kpi={kpi} />)}
           </div>
+
+          {filteredRecords.length === 0 ? (
+            <FinanceEmptyState onClear={clearFilters} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+                <p>{paginated.total} movimientos · Página {paginated.page} de {paginated.pageCount}</p>
+                <div className="flex gap-2"><button type="button" disabled={paginated.page === 1} onClick={() => setPage(paginated.page - 1)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 disabled:opacity-40">Anterior</button><button type="button" disabled={paginated.page === paginated.pageCount} onClick={() => setPage(paginated.page + 1)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 disabled:opacity-40">Siguiente</button></div>
+              </div>
+              <FinanceMovementTable records={paginated.records} onSelect={setSelectedRecord} />
+              <div className="space-y-3 lg:hidden">
+                {paginated.records.map((record) => (
+                  <FinanceMovementCard key={record.payment_id} record={record} onSelect={setSelectedRecord} />
+                ))}
+              </div>
+            </>
+          )}
 
           {actionable && (
             <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
@@ -744,9 +743,9 @@ export default function FinancesClient() {
                     <AlertTriangle className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-950">Morosidad con dato real</p>
+                    <p className="text-sm font-black text-slate-950">{Number(actionable.overdue_amount) > 0 ? 'Deuda vencida · toda la cartera' : 'Registros pendientes · toda la cartera'}</p>
                     <p className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-rose-600">{money(actionable.overdue_amount)}</p>
-                    <p className="mt-1 text-xs text-slate-500">{actionable.overdue_count || 0} pagos atrasados con vencimiento registrado.</p>
+                    <p className="mt-1 text-xs text-slate-500">{actionable.overdue_count || 0} {Number(actionable.overdue_amount) > 0 ? 'pagos vencidos a la fecha de hoy' : 'registros pendientes sin importe por cobrar'}. No depende del periodo ni de los filtros de movimientos.</p>
                   </div>
                 </div>
               </AdminContentPanel>
@@ -757,10 +756,10 @@ export default function FinancesClient() {
                     <CalendarDays className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-950">Proyeccion del rango</p>
+                    <p className="text-sm font-black text-slate-950">Cobrado y por cobrar del periodo</p>
                     <p className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(actionable.projection_month)}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Cobrado {money(actionable.paid_month)} + pendiente {money(actionable.pending_month)}.
+                      Cobrado {money(actionable.paid_month)} + pendiente por vencimiento {money(actionable.pending_month)}. Incluye toda la cartera del periodo, sin filtros de movimientos.
                     </p>
                   </div>
                 </div>
@@ -768,24 +767,11 @@ export default function FinancesClient() {
             </div>
           )}
 
-          {filteredRecords.length === 0 ? (
-            <FinanceEmptyState onClear={clearFilters} />
-          ) : (
-            <>
-              <FinanceMovementTable records={filteredRecords} onSelect={setSelectedRecord} />
-              <div className="space-y-3 lg:hidden">
-                {filteredRecords.map((record) => (
-                  <FinanceMovementCard key={record.payment_id} record={record} onSelect={setSelectedRecord} />
-                ))}
-              </div>
-            </>
-          )}
-
           {actionable?.top_debtors?.length ? (
             <AdminContentPanel className="p-5">
               <div className="mb-4 flex items-center gap-2">
                 <FileText className="h-4 w-4 text-accent" />
-                <p className="text-sm font-black text-slate-950">Seguimiento de atrasos</p>
+                <p className="text-sm font-black text-slate-950">{Number(actionable.overdue_amount) > 0 ? 'Seguimiento de atrasos' : 'Revisar registros pendientes'}</p>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {actionable.top_debtors.slice(0, 6).map((debtor) => (

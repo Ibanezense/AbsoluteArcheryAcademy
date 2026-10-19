@@ -28,7 +28,7 @@ describe('admin memberships redesign block 1', () => {
     expect(page).toContain('Sin clases')
     expect(page).toContain('Una clase')
     expect(page).toContain('Renovaciones')
-    expect(page).toContain('Ingresos por membresias')
+    expect(page).toContain('Valor de ciclos creados')
     expect(page).not.toContain('Pagos pendientes, solo si existe dato real')
     expect(page).not.toContain('Pausadas')
   })
