@@ -736,7 +736,7 @@ export default function AdminDashboard() {
             <MonthlyMetric
               title="Facturacion"
               value={formatCurrency(dashboard.monthly.revenueThisMonth)}
-              helper="Pagos de membresias"
+              helper="Ventas de membresías pagadas"
               icon={<Wallet className="h-5 w-5" />}
             />
             <MonthlyMetric

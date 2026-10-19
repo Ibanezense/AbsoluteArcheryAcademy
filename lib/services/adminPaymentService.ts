@@ -7,9 +7,10 @@ export type PendingMembershipPayment = {
   amount: number
   currency: string
   due_date: string | null
+  created_at: string
   payment_status: string
   student: { full_name: string } | null
-  membership: { custom_name: string } | null
+  membership: { custom_name: string; purchase?: { purchased_at: string } | null } | null
 }
 
 export const collectionMethods = [
@@ -21,7 +22,7 @@ export async function getPendingMembershipPayments(studentId?: string): Promise<
   const rows: PendingMembershipPayment[] = []
   for (let offset = 0; ; offset += 500) {
     let query = supabase.from('student_membership_payments')
-      .select('id,student_id,amount,currency,due_date,payment_status,student:students(full_name),membership:student_memberships(custom_name)')
+      .select('id,student_id,amount,currency,due_date,created_at,payment_status,student:students(full_name),membership:student_memberships(custom_name,purchase:membership_purchases(purchased_at))')
       .in('payment_status', ['pending', 'late']).neq('source', 'migration')
       .order('due_date', { ascending: true, nullsFirst: false }).order('id', { ascending: true })
     if (studentId) query = query.eq('student_id', studentId)

@@ -2,7 +2,7 @@ import type { FinanceRecord } from '@/lib/services/FinancesService'
 
 export type FinanceMovementKind = 'all' | 'membership' | 'intro'
 export function financeMovementKind(record: FinanceRecord): Exclude<FinanceMovementKind, 'all'> {
-  return record.plan_name === 'Clase de Prueba' ? 'intro' : 'membership'
+  return record.movement_kind ?? (record.plan_name === 'Clase de Prueba' ? 'intro' : 'membership')
 }
 
 export function filterFinanceRecords(records: FinanceRecord[], filters: { kind: FinanceMovementKind; status: string; method: string; search: string }) {

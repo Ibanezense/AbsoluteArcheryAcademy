@@ -81,8 +81,13 @@ function money(value: number | string | null | undefined) {
   return formatAdminMoney(value == null ? null : Number(value))
 }
 
+function financeDate(value: string | null) {
+  if (!value) return 'Sin cobro registrado'
+  return new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' }).format(new Date(value))
+}
+
 function movementKind(record: FinanceRecord): Exclude<FinanceMovementKind, 'all'> {
-  return record.plan_name === 'Clase de Prueba' ? 'intro' : 'membership'
+  return record.movement_kind ?? (record.plan_name === 'Clase de Prueba' ? 'intro' : 'membership')
 }
 
 function movementKindLabel(kind: FinanceMovementKind) {
@@ -386,13 +391,13 @@ function FinanceMovementTable({
     <div className="hidden overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] lg:block">
       <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
         <p className="text-sm font-black text-slate-950">Movimientos financieros</p>
-        <p className="mt-1 text-xs text-slate-500">Pagos registrados en el periodo y con los filtros seleccionados.</p>
+        <p className="mt-1 text-xs text-slate-500">Membresías por fecha de venta; pruebas por fecha de pago. Se aplican los filtros seleccionados.</p>
       </div>
       <div className="max-h-[42rem] overflow-auto">
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
             <tr>
-              <th className="px-5 py-4">Fecha</th>
+              <th className="px-5 py-4">Fecha atribuida</th>
               <th className="px-5 py-4">Alumno</th>
               <th className="px-5 py-4">Concepto</th>
               <th className="px-5 py-4">Plan o servicio</th>
@@ -407,8 +412,8 @@ function FinanceMovementTable({
             {records.map((record) => (
               <tr key={record.payment_id} className="border-t border-slate-100 bg-white transition hover:bg-orange-50/30">
                 <td className="px-5 py-4">
-                  <p className="font-bold text-slate-950">{dayjs(record.paid_at).format('DD MMM YYYY')}</p>
-                  <p className="text-xs text-slate-400">{dayjs(record.paid_at).format('HH:mm')}</p>
+                  <p className="font-bold text-slate-950">{financeDate(record.sale_at)}</p>
+                  <p className="text-xs text-slate-400">{movementKind(record) === 'membership' ? 'Venta' : 'Pago de prueba'}</p>
                 </td>
                 <td className="max-w-[14rem] truncate px-5 py-4 font-bold text-slate-900">{record.student_name}</td>
                 <td className="px-5 py-4">
@@ -440,7 +445,7 @@ function FinanceMovementCard({ record, onSelect }: { record: FinanceRecord; onSe
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="break-words text-sm font-semibold text-slate-950">{record.student_name}</p>
-          <p className="mt-1 text-xs text-slate-500">{dayjs(record.paid_at).format('DD MMM YYYY - HH:mm')}</p>
+          <p className="mt-1 text-xs text-slate-500">{movementKind(record) === 'membership' ? 'Venta: ' : 'Pago: '}{financeDate(record.sale_at)}</p>
         </div>
         <p className="shrink-0 text-base font-bold tabular-nums text-slate-950">{money(record.amount_paid)}</p>
       </div>
@@ -466,7 +471,8 @@ function FinanceMovementDetail({
 
   const rows = [
     ['Alumno', record.student_name],
-    ['Fecha', dayjs(record.paid_at).format('DD/MM/YYYY HH:mm')],
+    [movementKind(record) === 'membership' ? 'Fecha de venta' : 'Fecha del pago', financeDate(record.sale_at)],
+    ['Fecha de cobro', financeDate(record.paid_at)],
     ['Monto', money(record.amount_paid)],
     ['Concepto', movementKindLabel(movementKind(record))],
     ['Plan o servicio', record.plan_name],
@@ -614,7 +620,7 @@ export default function FinancesClient() {
     {
       label: 'Ingresos del periodo',
       value: money(stats.totalIncome),
-      helper: 'Pagos del periodo que coinciden con todos los filtros.',
+      helper: 'Pagos confirmados atribuidos a su venta; pruebas por fecha de pago.',
       tone: 'green',
       icon: <Banknote className="h-5 w-5" />,
     },
@@ -661,9 +667,10 @@ export default function FinancesClient() {
   const exportToCsv = () => {
     if (filteredRecords.length === 0) return
 
-    const headers = ['Fecha', 'Alumno', 'Concepto', 'Plan o servicio', 'Monto', 'Metodo', 'Estado', 'Referencia parcial']
+    const headers = ['Fecha atribuida (Lima)', 'Fecha de cobro (Lima)', 'Alumno', 'Concepto', 'Plan o servicio', 'Monto', 'Metodo', 'Estado', 'Referencia parcial']
     const rows = filteredRecords.map((record) => [
-      dayjs(record.paid_at).format('DD/MM/YYYY HH:mm'),
+      financeDate(record.sale_at),
+      financeDate(record.paid_at),
       record.student_name,
       movementKindLabel(movementKind(record)),
       record.plan_name,
@@ -688,6 +695,7 @@ export default function FinancesClient() {
 
   return (
     <div className="space-y-6">
+      <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Los ingresos de membresías se atribuyen al mes de la venta, aunque el pago se regularice después. La fecha de cobro se conserva en el detalle. Las pruebas mantienen su fecha de pago.</p>
       <PendingMembershipPayments onCollected={() => void loadFinances()} />
 
       {loading ? (
@@ -757,10 +765,10 @@ export default function FinancesClient() {
                     <CalendarDays className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-black text-slate-950">Cobrado y por cobrar del periodo</p>
+                    <p className="text-sm font-black text-slate-950">Ventas pagadas y pendientes del periodo</p>
                     <p className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950">{money(actionable.projection_month)}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Cobrado {money(actionable.paid_month)} + pendiente por vencimiento {money(actionable.pending_month)}. Incluye toda la cartera del periodo, sin filtros de movimientos.
+                      Ventas pagadas {money(actionable.paid_month)} + pendientes de esas ventas {money(actionable.pending_month)}. Membresías por fecha de venta; pruebas por fecha de pago. Sin filtros de movimientos.
                     </p>
                   </div>
                 </div>

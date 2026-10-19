@@ -33,7 +33,7 @@ export function useAdminDashboardData() {
   const query = useQuery({
     queryKey: ['admin-dashboard-operational'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_admin_dashboard_operational_data')
+      const { data, error } = await supabase.rpc('get_admin_dashboard_operational_sales_data')
       if (error) throw error
       if (!data || typeof data !== 'object' || Array.isArray(data) ||
         ['today', 'alerts', 'monthly', 'studentsByLevel'].some((key) =>
