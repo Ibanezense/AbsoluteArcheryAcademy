@@ -60,16 +60,16 @@ export function AdminPageHeader({
   actions?: ReactNode
 }) {
   return (
-    <section className="border-b border-slate-200/80 pb-6">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+    <section className="border-b border-slate-200 pb-4">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold capitalize text-slate-500">{eyebrow || adminTodayLabel()}</p>
-          <h1 className="mt-1 font-heading text-3xl font-black tracking-[-0.055em] text-slate-950 sm:text-4xl">
+          <p className="text-xs font-medium capitalize text-slate-500">{eyebrow || adminTodayLabel()}</p>
+          <h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
             {title}
           </h1>
-          <p className="mt-1 max-w-2xl text-base text-slate-500">{description}</p>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p>
         </div>
-        {actions && <div className="flex flex-col gap-3 lg:flex-row lg:items-center">{actions}</div>}
+        {actions && <div className="flex flex-col gap-2 lg:flex-row lg:items-center">{actions}</div>}
       </div>
     </section>
   )
@@ -83,20 +83,10 @@ export function AdminContentPanel({
   className?: string
 }) {
   return (
-    <section className={`rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
       {children}
     </section>
   )
-}
-
-export function AdminSparkline({ tone = 'orange' }: { tone?: Tone }) {
-  const color = toneColor(tone)
-  const data = [18, 22, 20, 29, 23, 25, 21, 32].map((value, index) => ({
-    name: `${index + 1}`,
-    value,
-  }))
-
-  return <AdminMiniBarChart data={data} tone={tone} color={color} />
 }
 
 function toneColor(tone: Tone) {
@@ -205,16 +195,16 @@ export function AdminStatCard({
   tone?: Tone
 }) {
   return (
-    <article className="rounded-[1.35rem] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.055)]">
+    <article className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
       <div className="flex items-start justify-between gap-4">
-        <div className={`grid h-11 w-11 place-items-center rounded-2xl border ${toneClasses(tone)}`}>
+        <div className={`grid h-9 w-9 place-items-center rounded-lg border ${toneClasses(tone)}`}>
           {icon}
         </div>
-        <AdminSparkline tone={tone} />
+
       </div>
-      <p className="mt-4 max-w-[11rem] text-sm font-bold leading-5 text-slate-700">{label}</p>
-      <p className="mt-2 font-heading text-4xl font-black leading-none tracking-[-0.055em] text-slate-950">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">{helper}</p>
+      <p className="mt-2 text-xs font-medium leading-5 text-slate-700">{label}</p>
+      <p className="mt-1 font-heading text-2xl font-semibold leading-none tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-4 text-slate-500">{helper}</p>
     </article>
   )
 }

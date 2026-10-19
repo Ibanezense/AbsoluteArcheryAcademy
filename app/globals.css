@@ -94,3 +94,31 @@ textarea {
 .text-white {
   color: #ffffff !important;
 }
+
+/* Administrative workspace: scoped so the student and guardian portals keep their theme. */
+.admin-workspace { --admin-ink: #182435; font-size: 0.875rem; }
+.admin-workspace h1, .admin-workspace h2, .admin-workspace h3 { letter-spacing: -0.025em; }
+.admin-workspace .font-black { font-weight: 650; }
+.admin-workspace [class*="shadow-["] { box-shadow: none; }
+.admin-workspace [class*="bg-[#07111d]"] h2,
+.admin-workspace [class*="bg-[#07111d]"] h3 { color: #fff; }
+.admin-workspace [class*="bg-[#07111d]"] [class*="text-slate-500"] { color: #cbd5e1; }
+.admin-workspace :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #c2410c;
+  outline-offset: 3px;
+}
+.admin-workspace input, .admin-workspace select, .admin-workspace textarea { min-width: 0; }
+.admin-workspace summary { list-style-position: inside; }
+.admin-workspace aside a { min-height: 44px; }
+@media (prefers-reduced-motion: reduce) {
+  .admin-workspace *, .admin-workspace *::before, .admin-workspace *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.admin-workspace .bg-accent { background-color: #c2410c; }
+.admin-workspace .text-accent { color: #9a3412; }
+.admin-workspace aside .text-accent { color: #fb923c; }
+
+.admin-workspace aside .text-slate-500 { color: #94a3b8; }

@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
-  Bell,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
@@ -27,8 +26,10 @@ import {
 } from 'lucide-react'
 import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalRequests'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
-import { AdminDonutChart, AdminMiniBarChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
+import { AdminDonutChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
+import { attendanceHref, administrativeBookingHref } from '@/lib/utils/adminNavigation'
+import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
   useAdminDashboardData,
   useAdminStudentSearch,
@@ -42,7 +43,7 @@ import {
 
 const agendaFilters: Array<{ key: DashboardAgendaFilter; label: string }> = [
   { key: 'today', label: 'Hoy' },
-  { key: 'tomorrow', label: 'Manana' },
+  { key: 'tomorrow', label: 'Mañana' },
   { key: 'week', label: 'Semana' },
   { key: 'pending', label: 'Pendientes' },
   { key: 'confirmed', label: 'Confirmadas' },
@@ -50,11 +51,11 @@ const agendaFilters: Array<{ key: DashboardAgendaFilter; label: string }> = [
 ]
 
 const quickActions = [
-  { label: 'Nuevo alumno', href: '/admin/alumnos', icon: <UserPlus className="h-4 w-4" /> },
+  { label: 'Nuevo alumno', href: '/admin/alumnos/editar/new', icon: <UserPlus className="h-4 w-4" /> },
   { label: 'Clase de prueba', href: '/admin/intro', icon: <Target className="h-4 w-4" /> },
   { label: 'Pasar asistencia', href: '/admin/asistencia', icon: <ClipboardCheck className="h-4 w-4" /> },
   { label: 'Renovar membresia', href: '/admin/membresias', icon: <BadgeCheck className="h-4 w-4" /> },
-  { label: 'Registrar pago', href: '/admin/finanzas', icon: <CreditCard className="h-4 w-4" /> },
+  { label: 'Ver finanzas', href: '/admin/finanzas', icon: <CreditCard className="h-4 w-4" /> },
   { label: 'Configuracion', href: '/admin/ajustes', icon: <Settings className="h-4 w-4" /> },
 ]
 
@@ -156,7 +157,7 @@ function SectionHeader({ title, helper }: { title: string; helper?: string }) {
 
 function AdminSurface({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)] ${className}`}>
+    <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
       {children}
     </section>
   )
@@ -196,6 +197,7 @@ function StudentSearchBox() {
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
+        aria-label="Buscar alumno, DNI o teléfono"
         placeholder="Buscar alumno, DNI o telefono..."
         className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 shadow-[0_10px_30px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
       />
@@ -209,6 +211,7 @@ function StudentSearchBox() {
             </div>
           )}
 
+          {resultsQuery.isError && <p role="alert" className="px-4 py-3 text-sm text-rose-700">No pudimos buscar. Intenta nuevamente.</p>}
           {!resultsQuery.isLoading && resultsQuery.data?.length === 0 && (
             <div className="px-4 py-3 text-sm text-textsec">No se encontraron alumnos.</div>
           )}
@@ -266,21 +269,21 @@ function TodayCard({
   const iconTone = tone === 'critical' ? 'red' : tone === 'warning' ? 'amber' : 'orange'
 
   return (
-    <article className={`group relative overflow-hidden rounded-2xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.1)] ${toneClass}`}>
+    <article className={`group relative overflow-hidden rounded-xl border p-3 transition hover:border-orange-300 ${toneClass}`}>
       <Link href={href} aria-label={action} className="absolute inset-0 z-10" />
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative hidden items-start justify-between gap-3 sm:flex">
         <IconBadge icon={icon} tone={iconTone} />
         <ArrowRight className="mt-3 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-accent" />
       </div>
-      <div className="relative mt-4">
+      <div className="relative mt-1">
         <p className="text-sm font-semibold text-slate-700">{title}</p>
         <div className="mt-2 flex items-end justify-between gap-3">
-          <p className="font-heading text-4xl font-black leading-none tracking-[-0.05em] text-slate-950">{value}</p>
+          <p className="font-heading text-2xl font-semibold leading-none tracking-tight text-slate-950">{value}</p>
           <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500 sm:inline-flex">
             Hoy
           </span>
         </div>
-        <p className="mt-2 max-w-[12rem] text-xs leading-5 text-slate-500">{helper}</p>
+        <p className="mt-1 hidden max-w-[12rem] text-xs leading-5 text-slate-500 sm:block">{helper}</p>
       </div>
     </article>
   )
@@ -314,7 +317,7 @@ function AlertTask({
       : 'bg-slate-100 text-slate-700'
 
   return (
-    <article className={`rounded-2xl border p-5 shadow-[0_18px_45px_rgba(15,23,42,0.05)] ${toneClass}`}>
+    <article className={`rounded-xl border p-3 ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="max-w-[11rem] text-sm font-bold leading-5 text-slate-950">{title}</p>
@@ -324,7 +327,7 @@ function AlertTask({
           {count === null ? 'N/D' : count}
         </span>
       </div>
-      <Link href={href} className="mt-7 inline-flex items-center gap-1 text-sm font-bold text-accent">
+      <Link href={href} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent">
         {action}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -343,19 +346,6 @@ function MonthlyMetric({
   helper: string
   icon: ReactNode
 }) {
-  const tone =
-    title.includes('activos')
-      ? 'green'
-      : title.includes('Nuevos')
-        ? 'blue'
-        : title.includes('Conversion')
-          ? 'teal'
-          : title.includes('Facturacion')
-            ? 'orange'
-            : title.includes('Ocupacion')
-              ? 'blue'
-              : 'purple'
-
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.055)]">
       <div className="flex items-start justify-between gap-3">
@@ -367,10 +357,7 @@ function MonthlyMetric({
       </div>
       <div className="mt-4 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
         <p className="text-xs leading-4 text-slate-500">{helper}</p>
-        <AdminMiniBarChart
-          tone={tone as 'orange' | 'green' | 'blue' | 'purple' | 'teal'}
-          data={[16, 22, 18, 28, 24, 30, 26].map((item, index) => ({ name: `${index + 1}`, value: item }))}
-        />
+
       </div>
     </article>
   )
@@ -384,6 +371,7 @@ function StudentsLevelDistribution({
     developing: number
     advanced: number
     competitive: number
+    unclassified?: number
   }
 }) {
   const data = [
@@ -391,12 +379,13 @@ function StudentsLevelDistribution({
     { name: 'En desarrollo', code: 'D2', value: levels.developing, color: '#14b8a6' },
     { name: 'Avanzados', code: 'A3', value: levels.advanced, color: '#f97316' },
     { name: 'Competitivos', code: 'C4', value: levels.competitive, color: '#8b5cf6' },
+    { name: 'Sin clasificar', code: '—', value: levels.unclassified ?? 0, color: '#94a3b8' },
   ]
   const total = data.reduce((sum, item) => sum + item.value, 0)
 
   return (
     <AdminSurface className="p-5">
-      <SectionHeader title="Distribucion de alumnos" helper="Solo alumnos activos." />
+      <SectionHeader title="Distribucion de alumnos" helper="Alumnos activos y niveles pendientes de clasificación." />
       <div className="mt-5 grid gap-5 sm:grid-cols-[0.9fr_1.1fr] xl:grid-cols-1 2xl:grid-cols-[0.9fr_1.1fr]">
         <AdminDonutChart data={data} total={total} label="Total" />
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
@@ -432,7 +421,7 @@ function AgendaItem({ item }: { item: AdminDashboardAgendaItem }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="space-y-2">
-            <p className="truncate font-semibold text-textpri">{item.personName}</p>
+            <p className="font-semibold text-textpri">{item.personName}</p>
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${statusClasses(item.status)}`}>
                 {statusLabel(item.status)}
@@ -443,7 +432,7 @@ function AgendaItem({ item }: { item: AdminDashboardAgendaItem }) {
             </div>
           </div>
           <p className="mt-1 text-sm text-textsec">
-            {item.date} - {item.startTime} - {item.durationMinutes} min
+            {formatAdminDate(item.date)} · {item.startTime} - {item.durationMinutes} min
             {item.distanceM ? ` - ${item.distanceM}m` : ''}
           </p>
         </div>
@@ -455,12 +444,12 @@ function AgendaItem({ item }: { item: AdminDashboardAgendaItem }) {
             </Link>
           )}
           {item.status === 'confirmed' && (
-            <Link href="/admin/asistencia" className="btn-outline btn-sm">
+            <Link href={attendanceHref(item.date, item.sessionId)} className="btn-outline btn-sm">
               Marcar asistencia
             </Link>
           )}
           {item.status === 'confirmed' && item.bookingId && (
-            <Link href={`/reserva/${item.bookingId}/editar`} className="btn-ghost btn-sm">
+            <Link href={administrativeBookingHref(item.studentId)} className="btn-ghost btn-sm">
               Reprogramar
             </Link>
           )}
@@ -499,7 +488,7 @@ function WeeklyAgenda({
   return (
     <AdminSurface className="p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <SectionHeader title="Agenda semanal" helper="Reservas accionables de la semana actual." />
+        <SectionHeader title="Agenda" helper="Asistencia y reservas por atender." />
         <div className="flex flex-wrap gap-2">
           {agendaFilters.map((item) => (
             <button
@@ -612,26 +601,23 @@ export default function AdminDashboard() {
     )
   }
 
+  if (error) return (
+    <section role="alert" className="rounded-xl border border-rose-200 bg-white p-6">
+      <h1 className="text-xl font-semibold">Datos no disponibles</h1>
+      <p className="mt-2 text-sm text-slate-600">No pudimos cargar la información de hoy. No se muestran cifras incompletas.</p>
+      <button type="button" onClick={() => refetch()} className="btn-outline mt-4"><RefreshCcw className="h-4 w-4" />Reintentar</button>
+    </section>
+  )
+
   return (
     <div className="space-y-7">
         <AdminPageHeader
           eyebrow={currentDate}
-          title="Dashboard administrativo"
-          description="Operacion diaria, reservas, alumnos y membresias"
+          title="Inicio"
+          description="Tu academia, hoy"
           actions={
             <>
               <StudentSearchBox />
-              <button
-                className="relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition hover:text-accent"
-                aria-label="Notificaciones"
-              >
-                <Bell className="h-5 w-5" />
-                {dashboard.today.pendingConfirmations > 0 && (
-                  <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-accent px-1 text-xs font-black text-white">
-                    {Math.min(dashboard.today.pendingConfirmations, 9)}
-                  </span>
-                )}
-              </button>
               <button
                 className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-accent px-5 font-bold text-white shadow-[0_16px_35px_rgba(249,115,22,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
                 onClick={() => setIsQuickBookingOpen(true)}
@@ -643,28 +629,13 @@ export default function AdminDashboard() {
           }
         />
 
-        {error && (
-          <section className="rounded-xl border border-danger/30 bg-danger/5 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold text-danger">No se pudo cargar el dashboard administrativo.</p>
-                <p className="text-sm text-textsec">Intenta nuevamente. Detalle: {error}</p>
-              </div>
-              <button onClick={() => refetch()} className="btn-outline btn-sm">
-                <RefreshCcw className="h-4 w-4" />
-                Reintentar
-              </button>
-            </div>
-          </section>
-        )}
 
-        <WeekendIntroCapacity />
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <SectionHeader title="Hoy" helper={isFetching ? 'Actualizando datos...' : 'Operacion del dia actual.'} />
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
             <TodayCard
               title="Reservas de hoy"
               value={dashboard.today.reservationsToday}
@@ -676,7 +647,7 @@ export default function AdminDashboard() {
             <TodayCard
               title="Clases programadas"
               value={dashboard.today.scheduledSessionsToday}
-              helper="Turnos scheduled de hoy"
+              helper="Turnos programados hoy"
               action="Ver turnos"
               href="/admin/sesiones"
               icon={<CalendarClock className="h-5 w-5" />}
@@ -712,13 +683,13 @@ export default function AdminDashboard() {
 
         <section className="space-y-3">
           <SectionHeader title="Pendientes importantes" helper="Tareas que requieren seguimiento operativo." />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
             <AlertTask
               title="Membresias por vencer"
               count={dashboard.alerts.expiringMemberships}
               description="Proximos 7 dias."
-              action="Ver renovaciones"
-              href="/admin/membresias"
+              action="Ver alumnos por vencer"
+              href="/admin/alumnos?status=expiring"
             />
             <AlertTask
               title="Alumnos sin clases"
@@ -735,26 +706,33 @@ export default function AdminDashboard() {
               href="/admin/finanzas"
             />
             <AlertTask
-              title="Pruebas sin seguimiento"
+              title="Pruebas pasadas"
               count={dashboard.alerts.trialClassesWithoutFollowUp}
-              description="Fallback: intros pasadas sin trazabilidad de conversion."
-              action="Dar seguimiento"
-              href="/admin/intro"
+              description="Últimos 30 días: revisar continuidad."
+              action="Revisar pruebas"
+              href="/admin/seguimiento?type=trial"
             />
             <AlertTask
-              title="No-shows recientes"
+              title="Inasistencias recientes"
               count={dashboard.alerts.recentNoShows}
-              description="Ultimos 14 dias."
-              action="Revisar"
-              href="/admin/asistencia"
+              description="Últimos 14 días."
+              action="Revisar inasistencias"
+              href="/admin/seguimiento?type=no_show"
             />
           </div>
         </section>
 
         <AdminMembershipRenewalRequests />
 
+        <WeeklyAgenda agenda={dashboard.weeklyAgenda} today={today} />
+
+        <WeekendIntroCapacity />
+
+        <details className="admin-monthly-summary rounded-xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer py-1 text-sm font-semibold text-slate-700">Resultados y análisis del mes</summary>
+          <div className="mt-4 space-y-4">
         <section className="space-y-3">
-          <SectionHeader title="Resumen del mes" helper="KPIs generales sin duplicar la operacion diaria." />
+          <SectionHeader title="Resumen del mes" helper="Resultados del mes actual." />
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MonthlyMetric
               title="Alumnos activos"
@@ -795,14 +773,12 @@ export default function AdminDashboard() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
-          <WeeklyAgenda agenda={dashboard.weeklyAgenda} today={today} />
-
-          <div className="space-y-6">
-            <WeeklyOccupancy rows={dashboard.weeklyOccupancy} />
-            <StudentsLevelDistribution levels={dashboard.studentsByLevel} />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <WeeklyOccupancy rows={dashboard.weeklyOccupancy} />
+              <StudentsLevelDistribution levels={dashboard.studentsByLevel} />
+            </div>
           </div>
-        </div>
+        </details>
 
         <AdminSurface className="p-5">
           <SectionHeader title="Acciones rapidas" helper="Accesos operativos frecuentes." />

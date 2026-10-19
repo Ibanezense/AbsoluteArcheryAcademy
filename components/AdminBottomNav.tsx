@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import React, { memo, type ComponentType } from 'react'
-import { BadgeCheck, ClipboardCheck, Home, Users, type LucideProps } from 'lucide-react'
+import { BadgeCheck, ClipboardCheck, Home, MoreHorizontal, Users, type LucideProps } from 'lucide-react'
 
 export type Tab = 'dashboard' | 'alumnos' | 'asistencia' | 'membresias'
 
@@ -22,7 +22,7 @@ const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProp
   return (
     <Link
       href={href}
-      className={`group flex flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-[11px] font-semibold transition ${active ? 'bg-accent text-white shadow-[0_10px_25px_rgba(249,115,22,0.28)]' : 'text-slate-500 hover:bg-orange-50 hover:text-accent'
+      className={`group flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-[11px] font-semibold transition ${active ? 'bg-orange-50 text-orange-800' : 'text-slate-500 hover:bg-orange-50 hover:text-accent'
         }`}
       aria-current={active ? 'page' : undefined}
     >
@@ -39,19 +39,20 @@ const items: readonly Item[] = [
   { key: 'membresias', href: '/admin/membresias', Icon: BadgeCheck, label: 'Membresias' },
 ]
 
-type Props = { active?: Tab }
+type Props = { active?: Tab; onMore?: () => void }
 
-const AdminBottomNav = memo(function AdminBottomNav({ active }: Props) {
+const AdminBottomNav = memo(function AdminBottomNav({ active, onMore }: Props) {
   return (
     <nav
       role="navigation"
       aria-label="Admin bottom navigation"
-      className="fixed inset-x-0 bottom-3 z-40 px-4 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white px-2 pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
-      <div className="mx-auto flex max-w-[430px] rounded-[1.35rem] border border-white/80 bg-white/95 px-2 py-2 shadow-[0_18px_45px_rgba(15,23,42,0.14)] backdrop-blur">
+      <div className="mx-auto flex max-w-lg bg-white px-1 py-1">
         {items.map(({ key, href, Icon, label }) => (
           <NavItem key={key} href={href} Icon={Icon} label={label} active={active === key} />
         ))}
+        {onMore && <button type="button" onClick={onMore} className="flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-semibold text-slate-600" aria-label="Más opciones de administración"><MoreHorizontal size={20} /><span>Más</span></button>}
       </div>
     </nav>
   )

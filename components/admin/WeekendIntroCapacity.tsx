@@ -165,7 +165,7 @@ function SectionHeading({
       : ''
 
   return (
-    <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+    <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-3">
         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-orange-200 bg-orange-50 text-accent">
           <CalendarDays className="h-5 w-5" />
@@ -173,7 +173,7 @@ function SectionHeading({
         <div>
           <h2
             id="weekend-intro-capacity-title"
-            className="font-heading text-xl font-black tracking-[-0.025em] text-slate-950"
+            className="font-heading text-base font-semibold tracking-tight text-slate-950"
           >
             Disponibilidad para clases de prueba
           </h2>
@@ -261,11 +261,12 @@ export default function WeekendIntroCapacity() {
   const { sessions, isLoading, isFetching, error, refetch } = useAdminWeekendIntroCapacity(now)
   const slots = buildWeekendIntroSlots(sessions, now)
   const dates = getCurrentIntroWeekDates(now)
+  const upcoming = slots.filter((slot) => slot.session && slot.status !== 'finished' && slot.status !== 'not_scheduled')
 
   return (
     <section
       aria-labelledby="weekend-intro-capacity-title"
-      className="overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white shadow-[0_20px_55px_rgba(15,23,42,0.06)]"
+      className="overflow-hidden rounded-xl border border-slate-200 bg-white"
     >
       <SectionHeading isLoading={isLoading} isFetching={isFetching && !isLoading} />
 
@@ -291,7 +292,21 @@ export default function WeekendIntroCapacity() {
           </div>
         </div>
       ) : (
-        <div className="space-y-7 p-5 md:p-6">
+        <div className="p-4">
+          <div className="grid gap-3 sm:grid-cols-2" aria-label="Próximos horarios por sede">
+            {locationDefinitions.map((location) => {
+              const next = upcoming.filter((slot) => location.days.some((day) => day.key === slot.day)).slice(0, 2)
+              return <div key={location.label} className="rounded-lg border border-slate-200 p-3">
+                <h3 className="text-sm font-semibold">{location.label}</h3>
+                {next.length ? next.map((slot) => <div key={slot.session!.sessionId} className="mt-2"><SlotContent slot={slot} /></div>) : <p className="mt-2 text-sm text-slate-500">No quedan horarios esta semana.</p>}
+                <Link href="/admin/intro" className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-orange-800">Ver calendario <ArrowRight className="h-4 w-4" /></Link>
+              </div>
+            })}
+          </div>
+          <details className="mt-4">
+            <summary className="cursor-pointer py-2 text-sm font-semibold text-slate-600">Consultar toda la semana</summary>
+            <div className="mt-3 space-y-7">
+
           {locationDefinitions.map((location) => (
             <section key={location.label} aria-label={`Sede ${location.label}`}>
               <div className="mb-3 flex items-center gap-3">
@@ -328,6 +343,8 @@ export default function WeekendIntroCapacity() {
               </div>
             </section>
           ))}
+            </div>
+          </details>
         </div>
       )}
     </section>

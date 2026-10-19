@@ -13,7 +13,7 @@ describe('admin visual system', () => {
     expect(system).toContain('export function AdminPageHeader')
     expect(system).toContain('export function AdminStatCard')
     expect(system).toContain('export function AdminContentPanel')
-    expect(system).toContain('export function AdminSparkline')
+    expect(system).not.toContain('export function AdminSparkline')
     expect(system).toContain('ResponsiveContainer')
     expect(system).toContain('BarChart')
     expect(system).toContain('PieChart')
@@ -48,7 +48,7 @@ describe('admin visual system', () => {
     const dashboard = source('app/admin/page.tsx')
     const alumnos = source('app/admin/alumnos/page.tsx')
 
-    expect(dashboard).toContain('AdminMiniBarChart')
+    expect(dashboard).not.toContain('data={[16, 22, 18, 28, 24, 30, 26]')
     expect(dashboard).toContain('StudentsLevelDistribution')
     expect(dashboard).toContain('AdminDonutChart')
     expect(alumnos).not.toContain('AdminMiniBarChart')

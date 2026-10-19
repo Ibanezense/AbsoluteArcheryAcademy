@@ -37,8 +37,8 @@ describe('admin productivity phase 3A', () => {
     const attendanceUi = `${asistencia}\n${components}`
 
     expect(attendanceUi).toContain('Hoy')
-    expect(attendanceUi).toContain('Manana')
-    expect(attendanceUi).toContain('Proximos turnos')
+    expect(attendanceUi).toContain('Mañana')
+    expect(attendanceUi).toContain('Próximos turnos')
     expect(attendanceUi).toContain('AttendanceSessionTabs')
     expect(attendanceUi).toContain('AttendanceStudentRow')
     expect(attendanceUi).toContain('Faltan')

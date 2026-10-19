@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { Menu } from 'lucide-react'
@@ -11,6 +11,7 @@ import AdminSidebar from '@/components/AdminSidebar'
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const closeSidebar = useCallback(() => setIsSidebarOpen(false), [])
 
   const activeTab: Tab | undefined = (() => {
     if (pathname.startsWith('/admin/alumnos')) return 'alumnos'
@@ -27,11 +28,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminGuard>
-      <div className="flex min-h-screen overflow-hidden bg-[#f7f4ef]">
-        <AdminSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <div className="admin-workspace flex min-h-screen bg-slate-50">
+        <AdminSidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
-        <div className="flex flex-1 flex-col overflow-y-auto lg:ml-72">
-          <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06101a]/95 px-4 py-4 shadow-[0_14px_35px_rgba(2,6,23,0.25)] backdrop-blur lg:hidden">
+        <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
+          <header className="sticky top-0 z-30 border-b border-slate-800 bg-[#101b28] px-4 py-2 lg:hidden">
             <div className="flex items-center justify-between">
               <div>
                 <Image
@@ -40,13 +41,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   width={140}
                   height={36}
                   className="h-9 w-auto"
-                  style={{ width: 'auto', height: 'auto' }}
+                  style={{ width: 'auto', height: '32px', maxWidth: '165px' }}
                   priority
                 />
               </div>
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="rounded-xl border border-white/10 bg-white/10 p-2 text-white shadow-card transition hover:bg-white/20"
+                className="grid h-11 w-11 place-items-center rounded-lg text-white transition hover:bg-slate-800"
                 aria-label="Abrir menu"
               >
                 <Menu size={22} />
@@ -55,13 +56,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </header>
 
           <main className="flex-1">
-            <div className="w-full px-4 py-5 pb-28 lg:px-8 lg:py-8 lg:pb-10">
+            <div className="w-full px-4 py-4 pb-24 lg:px-8 lg:py-6 lg:pb-10">
               <div className="mx-auto max-w-[1680px]">{children}</div>
             </div>
           </main>
         </div>
 
-        <AdminBottomNav active={activeTab} />
+        <AdminBottomNav active={activeTab} onMore={() => setIsSidebarOpen(true)} />
       </div>
     </AdminGuard>
   )
