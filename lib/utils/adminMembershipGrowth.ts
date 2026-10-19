@@ -15,6 +15,8 @@ export type MembershipGrowthMonth = {
   reactivated: number
   pending: number
   provisional: boolean
+  eligible: number
+  renewalRate: number | null
 }
 
 function civilDate(value: string) {
@@ -37,7 +39,7 @@ export function buildMembershipGrowth(memberships: GrowthMembership[], asOf: str
   const months = Array.from({ length: count }, (_, index) => {
     const start = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() - count + index + 1, 1, 12))
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 12)).toISOString().slice(0, 10)
-    return { month: start.toISOString().slice(0, 7), newStudents: new Set<string>(), renewed: new Set<string>(), notRenewed: new Set<string>(), reactivated: new Set<string>(), pending: new Set<string>(), provisional: asOf <= addDays(end, 7) }
+    return { month: start.toISOString().slice(0, 7), newStudents: new Set<string>(), renewed: new Set<string>(), notRenewed: new Set<string>(), reactivated: new Set<string>(), pending: new Set<string>(), provisional: asOf <= addDays(end, 30) }
   })
   const byMonth = new Map(months.map(month => [month.month, month]))
   const byStudent = new Map<string, GrowthMembership[]>()
@@ -57,27 +59,49 @@ export function buildMembershipGrowth(memberships: GrowthMembership[], asOf: str
   for (const [studentId, rows] of byStudent) {
     rows.sort((a, b) => a.start_date.localeCompare(b.start_date) || (b.end_date ?? '9999-12-31').localeCompare(a.end_date ?? '9999-12-31') || a.id.localeCompare(b.id))
     if (rows[0].start_date <= asOf) byMonth.get(rows[0].start_date.slice(0, 7))?.newStudents.add(studentId)
-    const episodes: Array<{ start: string; end: string | null }> = []
-    for (const membership of rows) {
-      const previous = episodes[episodes.length - 1]
-      if (previous && (previous.end === null || membership.start_date <= addDays(previous.end, 7))) {
-        if (previous.end !== null && (membership.end_date === null || membership.end_date > previous.end)) {
-          if (membership.start_date <= asOf) byMonth.get(membership.start_date.slice(0, 7))?.renewed.add(studentId)
-          previous.end = membership.end_date
-        }
-      } else {
-        episodes.push({ start: membership.start_date, end: membership.end_date })
-      }
+    // A later cycle is effective only when it extends the coverage already known.
+    // Sort equal starts longest first so imports and duplicates cannot invent renewals.
+    const cycles: GrowthMembership[] = []
+    for (const row of rows) {
+      const previous = cycles[cycles.length - 1]
+      if (previous && (previous.end_date === null || (row.end_date !== null && row.end_date <= previous.end_date))) continue
+      cycles.push(row)
     }
-    episodes.forEach((episode, index) => {
-      if (index > 0 && episode.start <= asOf) byMonth.get(episode.start.slice(0, 7))?.reactivated.add(studentId)
-      if (episode.end === null || episode.end >= asOf) return
-      const month = byMonth.get(episode.end.slice(0, 7))
-      if (asOf > addDays(episode.end, 7)) month?.notRenewed.add(studentId)
-      else month?.pending.add(studentId)
+    const expiries = new Map<string, number>()
+    cycles.forEach((cycle, index) => {
+      if (cycle.start_date > asOf) return
+      const previous = cycles[index - 1]
+      if (previous?.end_date && cycle.start_date > addDays(previous.end_date, 30)) {
+        byMonth.get(cycle.start_date.slice(0, 7))?.reactivated.add(studentId)
+      }
+      if (cycle.end_date !== null) expiries.set(cycle.end_date.slice(0, 7), index)
     })
+    // The latest effective expiry in each month owns the student's single outcome.
+    for (const [key, index] of expiries) {
+      const target = byMonth.get(key)
+      if (!target) continue
+      const cycle = cycles[index]
+      const next = cycles[index + 1]
+      const deadline = addDays(cycle.end_date!, 30)
+      if (next && next.start_date <= deadline) target.renewed.add(studentId)
+      else if (asOf > deadline) target.notRenewed.add(studentId)
+      else target.pending.add(studentId)
+    }
   }
-  return months.map(month => ({ month: month.month, newStudents: month.newStudents.size, renewed: month.renewed.size, notRenewed: month.notRenewed.size, reactivated: month.reactivated.size, pending: month.pending.size, provisional: month.provisional }))
+  return months.map(month => {
+    const eligible = month.renewed.size + month.pending.size + month.notRenewed.size
+    return {
+      month: month.month,
+      newStudents: month.newStudents.size,
+      renewed: month.renewed.size,
+      notRenewed: month.notRenewed.size,
+      reactivated: month.reactivated.size,
+      pending: month.pending.size,
+      provisional: month.provisional,
+      eligible,
+      renewalRate: !month.provisional && eligible > 0 ? month.renewed.size / eligible * 100 : null,
+    }
+  })
 }
 
 export function buildMembershipGrowthReport(history: GrowthMembership[], asOf: string, count = 12) {

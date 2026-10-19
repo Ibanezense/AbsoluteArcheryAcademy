@@ -1,5 +1,7 @@
 # Validación de evolución mensual
 
+> Evidencia histórica: los criterios de siete días y las cifras de esta página fueron reemplazados por [retención a 30 días y conversión](admin-retention-trial-conversion.md).
+
 Fecha de referencia: 19 de octubre de 2026, America/Lima. Implementación local en codex/admin-ux-audit.
 
 Criterios elegidos por el usuario: nuevos por inicio de primera membresía sin pruebas ni obsequios; no renovados tras siete días desde vencimiento.

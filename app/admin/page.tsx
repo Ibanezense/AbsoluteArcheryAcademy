@@ -29,6 +29,7 @@ import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { AdminDonutChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
 import MembershipGrowthChart from '@/components/admin/MembershipGrowthChart'
+import TrialConversionPanel from '@/components/admin/TrialConversionPanel'
 import { attendanceHref, administrativeBookingHref } from '@/lib/utils/adminNavigation'
 import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
@@ -724,6 +725,7 @@ export default function AdminDashboard() {
         </section>
 
         <MembershipGrowthChart />
+        <TrialConversionPanel />
 
         <AdminMembershipRenewalRequests />
 
@@ -754,12 +756,6 @@ export default function AdminDashboard() {
               value={dashboard.monthly.trialClassesThisMonth}
               helper="Reservadas/atendidas/no-show"
               icon={<Target className="h-5 w-5" />}
-            />
-            <MonthlyMetric
-              title="Conversion de pruebas"
-              value={formatPercent(dashboard.monthly.trialConversionRate)}
-              helper="Requiere trazabilidad exacta"
-              icon={<CheckCircle2 className="h-5 w-5" />}
             />
             <MonthlyMetric
               title="Facturacion"
