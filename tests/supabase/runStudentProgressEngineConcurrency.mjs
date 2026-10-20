@@ -97,7 +97,7 @@ try {
   )
   for (const file of [
     '20261020033416_student_progress_links.sql',
-    '20261020151351_student_progress_competitions_links.sql',
+    '20261020202314_student_progress_competitions_links.sql',
   ])
     await observer.query(readFileSync(`supabase/migrations/${file}`, 'utf8'))
   const first = await race(

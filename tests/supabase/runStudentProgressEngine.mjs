@@ -104,7 +104,7 @@ try {
   )
   await db.exec(
     readFileSync(
-      'supabase/migrations/20261020151351_student_progress_competitions_links.sql',
+      'supabase/migrations/20261020202314_student_progress_competitions_links.sql',
       'utf8'
     )
   )

@@ -1,6 +1,6 @@
 # Mi progreso: Competencias, verificación previa al piloto
 
-Fecha: 20 octubre 2026, America/Lima. Implementación preparada en el worktree `codex/admin-ux-audit`. Competencias permanece desactivado; no se aplicaron sus migraciones reales, crearon credenciales, confirmaron identidades ni publicaron cambios.
+Fecha: 20 octubre 2026, America/Lima. Este documento recoge la verificación previa en el worktree `codex/admin-ux-audit`. Después de esta revisión el usuario autorizó ambas migraciones y la conexión local, y confirmó un registro exacto. El piloto quedó verificado: [evidencia de activación](2026-10-20-student-progress-competitions-local-pilot.md). La publicación pública permanece pendiente de autorización.
 
 ## Resultado verificable
 
@@ -36,9 +36,11 @@ Capturas sintéticas y regresión real conservadas en `output/competitions-previ
 
 Se volvió a abrir la app real local con la cuenta del piloto de Controles: las marcas existentes y sus formatos permanecen correctos, sin pestaña de Competencias. La ruta de Controles respondió 200. Los servidores locales vuelven a escuchar en loopback 3100 y 3102.
 
-## Activación pendiente y alcance
+## Procedimiento de activación y alcance
 
-1. Obtener autorización para aplicar únicamente la migración PWA `20261020151351_student_progress_competitions_links.sql` y la nueva migración TE `0006_academy_identity.sql`, y configurar la conexión privada local. Verificar antes el historial de migraciones y conflictos de namespace; no ejecutar un lote de migraciones ajenas.
+Los pasos 1–4 se ejecutaron posteriormente para un único registro confirmado; el detalle está en la evidencia de activación enlazada arriba. El paso 5 continúa reservado para autorización futura.
+
+1. Obtener autorización para aplicar únicamente la migración PWA `20261020202314_student_progress_competitions_links.sql` y la nueva migración TE `0006_academy_identity.sql`, y configurar la conexión privada local. Verificar antes el historial de migraciones y conflictos de namespace; no ejecutar un lote de migraciones ajenas.
 2. Respaldar metadatos afectados, aplicar los cambios autorizados y comprobar RLS/permisos, conservación del vínculo Controles y ausencia de vínculos TE nuevos automáticos.
 3. Configurar dos credenciales exclusivas servidor a servidor, fuera de Git; habilitar Competencias solo en desarrollo local.
 4. Buscar y presentar candidatos con IDs/eventos; solicitar confirmación humana del registro exacto antes de vincular cualquier persona. Verificar alumno → PWA → permisos → TE y contrastar resultados con la fuente.

@@ -1,6 +1,6 @@
 # Mi progreso: integración privada de Competencias (entrega 2)
 
-Estado al 20 de octubre de 2026: implementación preparada y probada localmente; migración y credenciales nuevas sin aplicar/configurar en la academia. No se crearon vínculos TE reales, publicaron servicios ni alteraron resultados deportivos.
+Estado al 20 de octubre de 2026: implementación revisada, ambas migraciones aplicadas tras autorización y conexión privada local configurada. Un único registro TE confirmado por el usuario quedó vinculado y verificado desde la cuenta del alumno. No se publicaron servicios ni alteraron resultados deportivos. Evidencia: [piloto local](../qa/2026-10-20-student-progress-competitions-local-pilot.md).
 
 ## Contratos y transporte
 
@@ -34,7 +34,7 @@ No colocar estas credenciales en variables públicas, URLs, respuestas, logs o a
 
 ## Identidad local, decisión humana y canal de finalización
 
-La migración aditiva `20261020151351_student_progress_competitions_links.sql`, generada con Supabase CLI, convierte `external_id` a texto. Mantiene las firmas UUID de las RPC de Controles y sus comparaciones con cast explícito; conserva su exclusividad y permite varios IDs TE por alumno.
+La migración aditiva `20261020202314_student_progress_competitions_links.sql`, generada con Supabase CLI, convierte `external_id` a texto. Mantiene las firmas UUID de las RPC de Controles y sus comparaciones con cast explícito; conserva su exclusividad y permite varios IDs TE por alumno.
 
 Cada par alumno–competidor TE conserva una fila estable. `revision` es la generación monotónica de ese par, incluso después de revocar y volver a confirmar. La identidad externa queda reservada mientras el vínculo está pendiente o confirmado, con unicidad transaccional entre alumnos.
 
@@ -85,4 +85,4 @@ node tests/supabase/runStudentProgressEngineConcurrency.mjs 'postgres://codex_pr
 
 Ambas pruebas nativas pasaron: 36 comprobaciones SQL y tres carreras con bloqueo observado en `pg_stat_activity`, más 14 comprobaciones. Las carreras cubren la misma identidad externa para dos alumnos, dos confirmaciones de la misma revisión y revocación frente a finalización atrasada. En esta última, el vínculo queda revocado y el finalizador pierde con conflicto; la auditoría coincide con las transiciones confirmadas.
 
-No ejecutar fixtures, inicializadores ni runners de reinicio sobre la base de la academia. Antes de publicación faltan revisión/aceptación conjunta, aplicación autorizada de ambas migraciones, configuración privada y despliegues autorizados, prueba de ambas fuentes publicadas y confirmación humana de identidades piloto. No se declara probado un recorrido publicado con credenciales o vínculos TE reales.
+No ejecutar fixtures, inicializadores ni runners de reinicio sobre la base de la academia. Las migraciones, configuración y confirmación de una identidad del piloto local ya están verificadas. Antes de publicación faltan autorización de despliegues y comprobación de ambas fuentes publicadas; también debe cerrarse la renovación de recursos de la sesión administrativa habitual descrita en la evidencia del piloto. No se declara probado un recorrido público con TE.

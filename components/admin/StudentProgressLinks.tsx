@@ -279,8 +279,10 @@ export default function StudentProgressLinks({
             Mi progreso · Vinculación
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Confirma la identidad de Controles antes de mostrar su historial al alumno. Coincidir en
-            el nombre no confirma que sea la misma persona.
+            {competitionsEnabled
+              ? 'Confirma por separado las identidades de Controles y Competencias antes de mostrar sus historiales al alumno.'
+              : 'Confirma la identidad de Controles antes de mostrar su historial al alumno.'}{' '}
+            Coincidir en el nombre no confirma que sea la misma persona.
           </p>
         </div>
         <button type="button" className={button} onClick={onReviewDistance}>
