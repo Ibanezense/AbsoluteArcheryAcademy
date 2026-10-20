@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dayjs from 'dayjs'
-import { CalendarClock, CalendarPlus, ChevronRight, Medal, Target, Ticket } from 'lucide-react'
+import { CalendarClock, CalendarPlus, ChevronRight, Medal, Target, Ticket, UserRound } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 import Avatar from '@/components/ui/Avatar'
 import { NextBookingWidget } from '@/components/ui/NextBookingWidget'
@@ -22,10 +22,8 @@ import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
 import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'
 import { formatDateOnly } from '@/lib/utils/dateUtils'
-import { useProgressAvailability } from '@/components/student/progress/ProgressAvailability'
 
 function StudentHomeContent() {
-  const progressEnabled = useProgressAvailability()
   const router = useRouter()
   const {
     account,
@@ -215,7 +213,7 @@ function StudentHomeContent() {
         <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
           <QuickAction href="/mis-reservas" icon={<CalendarPlus className="h-7 w-7" />} title="Mis reservas" subtitle="Ver y gestionar" />
           <QuickAction href="/membresias" icon={<Ticket className="h-7 w-7" />} title="Mi membresía" subtitle="Historial y plan" accent="violet" />
-          {progressEnabled && <QuickAction href="/mi-progreso" icon={<Target className="h-7 w-7" />} title="Mi progreso" subtitle="Controles y evolución" />}
+          <QuickAction href="/perfil" icon={<UserRound className="h-7 w-7" />} title="Mi perfil" subtitle="Datos y progreso" />
 
         </div>
 

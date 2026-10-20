@@ -1,7 +1,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import React, { memo, type ComponentType } from 'react'
-import { CalendarDays, CalendarPlus, Home, Ticket, type LucideProps } from 'lucide-react'
+import {
+  CalendarDays,
+  CalendarPlus,
+  Home,
+  Ticket,
+  UserRound,
+  type LucideProps,
+} from 'lucide-react'
 
 import { getStudentTab, type StudentTab } from '@/lib/utils/studentNavigation'
 export type { StudentTab } from '@/lib/utils/studentNavigation'
@@ -20,18 +27,33 @@ type NavItemProps = {
   active?: boolean
 }
 
-const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProps) {
+const NavItem = memo(function NavItem({
+  href,
+  Icon,
+  label,
+  active,
+}: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`relative flex min-h-[68px] flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl px-2 text-[0.8rem] transition-colors ${
-        active ? 'font-semibold text-accent' : 'font-medium text-white hover:text-white'
+      className={`relative flex min-h-[68px] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl px-0.5 text-[0.6875rem] max-[359px]:text-[0.625rem] sm:text-[0.8rem] transition-colors ${
+        active
+          ? 'font-semibold text-accent'
+          : 'font-medium text-white hover:text-white'
       }`}
       aria-current={active ? 'page' : undefined}
     >
-      <Icon size={26} strokeWidth={active ? 2.35 : 2.15} className={active ? 'text-accent opacity-100' : 'text-white opacity-100'} />
-      <span>{label}</span>
-      {active && <span className="absolute bottom-0 h-1 w-12 rounded-full bg-accent shadow-[0_0_14px_rgba(249,115,22,0.7)]" />}
+      <Icon
+        size={26}
+        strokeWidth={active ? 2.35 : 2.15}
+        className={
+          active ? 'text-accent opacity-100' : 'text-white opacity-100'
+        }
+      />
+      <span className="whitespace-nowrap">{label}</span>
+      {active && (
+        <span className="absolute bottom-0 h-1 w-12 rounded-full bg-accent shadow-[0_0_14px_rgba(249,115,22,0.7)]" />
+      )}
     </Link>
   )
 })
@@ -39,8 +61,14 @@ const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProp
 const items: readonly Item[] = [
   { key: 'inicio', href: '/', Icon: Home, label: 'Inicio' },
   { key: 'reservar', href: '/reservar', Icon: CalendarPlus, label: 'Reservar' },
-  { key: 'reservas', href: '/mis-reservas', Icon: CalendarDays, label: 'Mis reservas' },
+  {
+    key: 'reservas',
+    href: '/mis-reservas',
+    Icon: CalendarDays,
+    label: 'Mis reservas',
+  },
   { key: 'membresias', href: '/membresias', Icon: Ticket, label: 'Membresías' },
+  { key: 'perfil', href: '/perfil', Icon: UserRound, label: 'Mi perfil' },
 ]
 
 const StudentBottomNav = memo(function StudentBottomNav() {

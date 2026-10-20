@@ -40,7 +40,7 @@ export default function Providers({
     } = supabase.auth.onAuthStateChange((event, session) => {
       const nextAccount = session?.user.id || null
       if (previousAccount !== nextAccount || event === 'SIGNED_OUT') {
-        for (const key of ['student-progress', 'admin-student-progress']) {
+        for (const key of ['student-progress', 'admin-student-progress', 'student-profile']) {
           void queryClient.cancelQueries({ queryKey: [key] })
           queryClient.removeQueries({ queryKey: [key] })
         }

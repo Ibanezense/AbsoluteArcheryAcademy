@@ -9,6 +9,51 @@ import { CompetitionHistory } from '@/components/student/progress/CompetitionHis
 import { CompetitionSourceState } from '@/components/student/progress/CompetitionSourceState'
 
 describe('competition results presentation', () => {
+  it('celebrates an official final silver without turning qualification rank into the final place', () => {
+    const html = renderToStaticMarkup(
+      createElement(CompetitionHistory, {
+        datasets: [
+          snapshot({
+            qualifications: [qualification({ rank: 5 })],
+            final_results: [
+              {
+                final_result_id: 'final-silver',
+                participation_id: 'participation-a',
+                final_position: 2,
+                result_status: 'official',
+                source_kind: 'supplied',
+              },
+            ],
+          }),
+        ],
+      })
+    )
+    expect(html).toContain('Medalla de plata')
+    expect(html).toContain('2.º puesto')
+    expect(html).toContain('Posición de clasificación')
+    expect(html).toContain('>5<')
+  })
+  it('keeps a provisional podium visibly provisional without claiming a medal', () => {
+    const html = renderToStaticMarkup(
+      createElement(CompetitionHistory, {
+        datasets: [
+          snapshot({
+            final_results: [
+              {
+                final_result_id: 'final-pending',
+                participation_id: 'participation-a',
+                final_position: 2,
+                result_status: 'provisional',
+                source_kind: 'supplied',
+              },
+            ],
+          }),
+        ],
+      })
+    )
+    expect(html).toContain('Provisional')
+    expect(html).not.toContain('Medalla de plata')
+  })
   it('shows DNS participation independently of an undocumented final result', () => {
     const base = snapshot()
     const html = renderToStaticMarkup(
@@ -46,7 +91,9 @@ describe('competition results presentation', () => {
     expect(html).not.toContain('493')
   })
   it('shows qualification score and format without inventing a maximum or an origin URL', () => {
-    const html = renderToStaticMarkup(createElement(CompetitionHistory, { datasets: [snapshot()] }))
+    const html = renderToStaticMarkup(
+      createElement(CompetitionHistory, { datasets: [snapshot()] })
+    )
     expect(html).toContain('493')
     expect(html).toContain('72 flechas')
     expect(html).toContain('60 m')

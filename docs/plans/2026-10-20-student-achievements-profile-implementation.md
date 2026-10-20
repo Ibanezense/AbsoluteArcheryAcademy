@@ -8,13 +8,15 @@
 
 **Tech Stack:** Next.js, React, Tailwind, Lucide, React Query, Supabase y Vitest existentes.
 
+Estado al cierre: implementación y revisión completadas, 984 pruebas y compilación aprobadas. [Verificación](../qa/2026-10-20-student-achievements-profile.md). Las comprobaciones y capturas se realizaron localmente; no se publicaron cambios.
+
 ## 1. Perfil, datos y navegación (subtarea independiente)
 
 - Crear `lib/contracts/studentProfile.ts`, `app/api/student-profile/route.ts`, `lib/services/studentProfileService.ts`, `lib/hooks/useStudentProfile.ts`, `components/student/profile/StudentProfilePage.tsx` y pruebas junto a fuentes.
 - Reemplazar redirección legacy de `app/perfil/page.tsx` por la nueva ficha de alumno; conservar tratamiento de admin/login sin usar campos legacy de membresía.
 - Modificar `components/StudentBottomNav.tsx` y `lib/utils/studentNavigation.ts`: quinto destino Mi perfil; perfil/progreso activan ese destino. Verificar cinco etiquetas en 360 px.
 - Antes del código, pruebas rojas de ruta propia/ajena/JWT y de navegación. Datos personales permitidos: nombre, avatar, nacimiento, email/teléfono; deportivos: división, género/categoría derivada existente, nivel, distancia, arco propio/potencia si disponibles. Sin códigos, DNI, datos de tutores, finanzas ni select(*).
-- Autorizar con cliente del usuario y `get_my_children` antes/después de la consulta concreta en students, comprobar identidad de respuesta, sin cliente privilegiado. Caché por cuenta/alumno; desactivada hasta contexto y cuenta coherentes, ocultar datos cuando error/cambio de identidad.
+- Autorizar con cliente del usuario y `resolve_accessible_student_id` (STABLE) antes/después de la consulta concreta en students; revalidar la cuenta activa, comprobar identidad de respuesta y no usar cliente privilegiado. Caché por cuenta/alumno; desactivada hasta contexto y cuenta coherentes, ocultar datos cuando error/cambio de identidad. Evitar `get_my_children` en la nueva API porque sincroniza estados operativos además de consultar.
 - Vista con cabecera deportiva, tres accesos/secciones personales, deportivos y progreso. Enlaces de ayuda; datos en lectura, no prometer edición. Mantener navegación y guardas existentes.
 - Sustituir test legacy por pruebas del contrato V2 real, mantener regresiones de rutas/reservas. No tocar progreso ni estilos globales.
 

@@ -8,19 +8,12 @@ import {
   type CompetitionPosition,
 } from '@/lib/utils/studentCompetitionProgress'
 import { progressDate } from './ProgressSummary'
+import { CompetitionResultHero } from './CompetitionResultHero'
 
-const resultLabels: Record<string, string> = {
-  official: 'Oficial',
-  provisional: 'Provisional',
-  dns: 'No tomó la salida',
-  dnf: 'No finalizó',
-  disqualified: 'Descalificación',
-  unknown: 'Estado no documentado',
-}
 const participationLabels: Record<string, string> = {
   entered: 'Inscripción registrada',
-  started: 'Participación iniciada',
-  finished: 'Participación finalizada',
+  started: 'En curso',
+  finished: 'Finalizada',
   dns: 'No tomó la salida',
   dnf: 'No finalizó',
   disqualified: 'Descalificación',
@@ -60,13 +53,16 @@ export function CompetitionHistory({ datasets }: { datasets: AcademyCompetitionS
         </p>
       )}
       {cards.slice((current - 1) * 10, current * 10).map((card) => (
-        <article key={card.key} className="overflow-hidden rounded-2xl border border-line bg-white">
-          <div className="flex gap-3 border-b border-line p-4 md:p-5">
+        <article
+          key={card.key}
+          className="overflow-hidden rounded-[1.4rem] border border-slate-200 bg-white shadow-[0_10px_32px_-18px_rgba(15,23,42,0.22)]"
+        >
+          <div className="flex gap-3 p-5 md:p-6">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-orange-50 text-accent">
               <Trophy className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h3 className="font-bold leading-snug">{card.eventName}</h3>
+              <h3 className="text-base font-bold leading-snug sm:text-lg">{card.eventName}</h3>
               <p className="mt-1 text-sm font-medium text-textsec">{card.categoryLabel}</p>
               <p className="mt-2 text-xs text-textsec">
                 Fecha del evento:{' '}
@@ -77,8 +73,8 @@ export function CompetitionHistory({ datasets }: { datasets: AcademyCompetitionS
               </p>
             </div>
           </div>
-          <div className="space-y-4 p-4 md:p-5">
-            <p className="text-xs text-textsec">{`Participación: ${participationLabels[card.participationStatus] || 'Estado no documentado'}`}</p>
+          <CompetitionResultHero result={card} />
+          <div className="space-y-4 p-5 md:p-6">
             <div className="space-y-3">
               <h4 className="text-sm font-bold">Clasificación</h4>
               {card.qualifications.length ? (
@@ -96,11 +92,15 @@ export function CompetitionHistory({ datasets }: { datasets: AcademyCompetitionS
                       <div>
                         <p className="font-bold tabular-nums">
                           {row.score === null ? (
-                            <span className="text-sm text-textsec">Puntaje no documentado</span>
+                            <span className="text-sm text-textsec">
+                              Puntaje no documentado
+                            </span>
                           ) : (
                             <>
-                              <span className="text-2xl tracking-tight">{row.score}</span>
-                              <span className="ml-1 text-xs font-medium text-textsec">puntos</span>
+                              <span className="text-3xl tracking-tight">{row.score}</span>
+                              <span className="ml-1 text-xs font-medium text-textsec">
+                                puntos
+                              </span>
                             </>
                           )}
                         </p>
@@ -124,19 +124,7 @@ export function CompetitionHistory({ datasets }: { datasets: AcademyCompetitionS
                 <p className="text-sm text-textsec">Sin puntaje de clasificación publicado.</p>
               )}
             </div>
-            <div className="flex flex-wrap items-start justify-between gap-3 border-t border-line pt-4">
-              <Position value={card.finalPosition} label="Posición final" />
-              <div className="flex flex-wrap gap-2">
-                {(card.finalStatuses.length ? card.finalStatuses : ['unknown']).map((status) => (
-                  <span
-                    key={status}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${status === 'official' ? 'bg-emerald-50 text-emerald-800' : status === 'provisional' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}
-                  >
-                    {resultLabels[status] || 'Estado no documentado'}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <p className="border-t border-line pt-3 text-xs text-textsec">{`Participación: ${participationLabels[card.participationStatus] || 'Estado no documentado'}`}</p>
           </div>
         </article>
       ))}
