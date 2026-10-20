@@ -34,6 +34,8 @@ import {
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admin/AdminOperationalComponents'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
+import StudentProgressLinks from '@/components/admin/StudentProgressLinks'
+import { useProgressAvailability } from '@/components/student/progress/ProgressAvailability'
 import Avatar from '@/components/ui/Avatar'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
 import GuardianDniInput from '@/components/admin/GuardianDniInput'
@@ -459,6 +461,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const queryClient = useQueryClient()
   const router = useRouter()
   const confirm = useConfirm()
+  const progressEnabled = useProgressAvailability()
   const toast = useToast()
   const membershipDeletionLockRef = useRef(false)
   const detailQuery = useStudentDetail(params.id)
@@ -1121,7 +1124,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       </details>}
 
       <div role="tabpanel" id={`student-panel-${activeTab}`} aria-labelledby={`student-tab-${activeTab}`}>
-        {activeTab === 'profile' && (
+        {activeTab === 'profile' && (<div className="space-y-5">
           <ProfileTab
             data={data}
             age={age}
@@ -1135,7 +1138,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
             onUploadAvatar={uploadAvatar}
             onSave={handleSaveStudentProfile}
           />
-        )}
+          {progressEnabled && <StudentProgressLinks key={data.id} studentId={data.id} onReviewDistance={() => { setActiveTab('sports'); document.getElementById('student-tab-sports')?.focus() }} />}
+        </div>)}
 
       {activeTab === 'membership' && (
         <MembershipTab

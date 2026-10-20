@@ -4,7 +4,8 @@ import { Headphones, RefreshCw } from 'lucide-react'
 import { useStudentPendingRenewal } from '@/lib/hooks/useMembershipRenewal'
 import { openMembershipRenewalPrompt } from '@/lib/utils/membershipRenewal'
 
-export const STUDENT_SUPPORT_URL = 'https://wa.me/51997224472'
+import { STUDENT_SUPPORT_URL } from '@/lib/utils/studentSupport'
+export { STUDENT_SUPPORT_URL } from '@/lib/utils/studentSupport'
 
 export default function StudentRenewalActions({ studentId, className = '' }: { studentId: string; className?: string }) {
   const pending = useStudentPendingRenewal(studentId)

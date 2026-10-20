@@ -8,5 +8,6 @@ describe('student navigation', () => {
     expect(getStudentTab('/reservar')).toBe('reservar')
     expect(getStudentTab('/membresias')).toBe('membresias')
     expect(getStudentTab('/')).toBe('inicio')
+    expect(getStudentTab('/mi-progreso')).toBeNull()
   })
 })

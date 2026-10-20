@@ -1,0 +1,15 @@
+DO $$ BEGIN IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon; END IF; END $$;
+DO $$ BEGIN IF NOT EXISTS(SELECT FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated; END IF; END $$;
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+GRANT USAGE ON SCHEMA auth TO anon,authenticated;
+CREATE TABLE public.profiles(id uuid PRIMARY KEY,role text NOT NULL,is_active boolean);
+CREATE TABLE public.students(id uuid PRIMARY KEY,self_profile_id uuid REFERENCES public.profiles(id),current_distance_m integer);
+CREATE TABLE public.student_guardians(student_id uuid REFERENCES public.students(id),guardian_profile_id uuid REFERENCES public.profiles(id));
+CREATE FUNCTION public.is_admin_user() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$SELECT EXISTS(SELECT 1 FROM profiles WHERE id=auth.uid() AND role='admin' AND coalesce(is_active,true))$$;
+CREATE FUNCTION public.can_access_student(p_student_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT EXISTS(SELECT 1 FROM students s WHERE s.id=p_student_id AND (is_admin_user() OR s.self_profile_id=auth.uid() OR EXISTS(SELECT 1 FROM student_guardians sg WHERE sg.student_id=s.id AND sg.guardian_profile_id=auth.uid())))$$;
+CREATE FUNCTION public.resolve_accessible_student_id(p_student_id uuid DEFAULT NULL) RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public AS $$BEGIN IF auth.uid() IS NULL OR NOT public.can_access_student(p_student_id) THEN RAISE EXCEPTION 'No tienes acceso a este alumno'; END IF; RETURN p_student_id;END$$;
+GRANT SELECT ON profiles TO authenticated;
+INSERT INTO profiles VALUES('10000000-0000-4000-8000-000000000001','admin',true),('10000000-0000-4000-8000-000000000002','student',true),('10000000-0000-4000-8000-000000000003','guardian',true),('10000000-0000-4000-8000-000000000004','student',true),('10000000-0000-4000-8000-000000000005','admin',false);
+INSERT INTO students VALUES('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002',20),('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000004',30);
+INSERT INTO student_guardians VALUES('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000003');

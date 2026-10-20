@@ -10,7 +10,7 @@
 
 ---
 
-Fecha del ajuste: 19 octubre 2026, America/Lima. Spec: [Mi progreso](../specs/2026-10-19-mi-progreso.md). Estado: plan ajustado tras revisión, no ejecutado.
+Fecha del ajuste: 19 octubre 2026, America/Lima. Spec: [Mi progreso](../specs/2026-10-19-mi-progreso.md). Estado: entregas 1A–1E implementadas y revisadas localmente. Entrega 1F verificada con datos sintéticos, pendiente de activación autorizada y piloto real. Entrega 2 pendiente de esa puerta de aceptación. Evidencia: [verificación de Controles](../qa/2026-10-19-student-progress-controls.md).
 
 ## 1. Fuentes y límites de ejecución
 
