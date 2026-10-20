@@ -23,7 +23,29 @@ vi.mock('@/components/student/progress/TrainingWorkspace', () => ({
   TrainingWorkspace: () => createElement('div', null, 'CONTROLES PRIVADOS'),
 }))
 import StudentProgressPage from '@/components/student/progress/StudentProgressPage'
+vi.mock('@/components/student/progress/StudentCompetitionsPanel', () => ({
+  StudentCompetitionsPanel: () => createElement('div', null, 'COMPETENCIAS PRIVADAS'),
+}))
+import { CompetitionAvailabilityContext } from '@/components/student/progress/ProgressAvailability'
 describe('student progress identity presentation boundary', () => {
+  it('keeps competition access absent until the independent feature is enabled', () => {
+    const html = renderToStaticMarkup(createElement(StudentProgressPage))
+    expect(html).not.toContain('role="tablist"')
+    expect(html).not.toContain('COMPETENCIAS PRIVADAS')
+  })
+  it('offers separate source tabs when competitions are enabled, starting with controls', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        CompetitionAvailabilityContext.Provider,
+        { value: true },
+        createElement(StudentProgressPage)
+      )
+    )
+    expect(html).toContain('role="tablist"')
+    expect(html).toContain('Competencias')
+    expect(html).toContain('CONTROLES PRIVADOS')
+    expect(html).not.toContain('COMPETENCIAS PRIVADAS')
+  })
   beforeEach(() => {
     mocks.accountId = 'account-a'
     mocks.context = {

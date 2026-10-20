@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:te:academy-identity-command-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "request_id",
+    "competitor_id",
+    "external_id",
+    "actor_id",
+    "evidence",
+    "generation"
+  ],
+  "properties": {
+    "operation": {
+      "enum": [
+        "confirm",
+        "revoke"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "competitor_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,160}$"
+    },
+    "external_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "actor_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "evidence": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 1000,
+      "pattern": "\\S"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  }
+}

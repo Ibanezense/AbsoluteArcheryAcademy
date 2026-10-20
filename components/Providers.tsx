@@ -7,7 +7,10 @@ import ConfirmProvider from './ui/ConfirmDialog'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import { supabase } from '@/lib/supabaseClient'
-import { ProgressAvailabilityContext } from '@/components/student/progress/ProgressAvailability'
+import {
+  ProgressAvailabilityContext,
+  CompetitionAvailabilityContext,
+} from '@/components/student/progress/ProgressAvailability'
 
 dayjs.locale('es')
 
@@ -21,10 +24,20 @@ const queryClient = new QueryClient({
   },
 })
 
-export default function Providers({ children, studentProgressEnabled = false }: { children: React.ReactNode; studentProgressEnabled?: boolean }) {
+export default function Providers({
+  children,
+  studentProgressEnabled = false,
+  studentCompetitionsEnabled = false,
+}: {
+  children: React.ReactNode
+  studentProgressEnabled?: boolean
+  studentCompetitionsEnabled?: boolean
+}) {
   React.useEffect(() => {
     let previousAccount: string | null | undefined
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const nextAccount = session?.user.id || null
       if (previousAccount !== nextAccount || event === 'SIGNED_OUT') {
         for (const key of ['student-progress', 'admin-student-progress']) {
@@ -39,11 +52,11 @@ export default function Providers({ children, studentProgressEnabled = false }: 
   return (
     <QueryClientProvider client={queryClient}>
       <ProgressAvailabilityContext.Provider value={studentProgressEnabled}>
-      <ToastProvider>
-        <ConfirmProvider>
-          {children}
-        </ConfirmProvider>
-      </ToastProvider>
+        <CompetitionAvailabilityContext.Provider value={studentCompetitionsEnabled}>
+          <ToastProvider>
+            <ConfirmProvider>{children}</ConfirmProvider>
+          </ToastProvider>
+        </CompetitionAvailabilityContext.Provider>
       </ProgressAvailabilityContext.Provider>
     </QueryClientProvider>
   )

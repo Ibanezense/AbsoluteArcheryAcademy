@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className={`${inter.variable} ${poppins.variable} bg-bg text-textpri`}>
-        <Providers studentProgressEnabled={process.env.STUDENT_PROGRESS_ENABLED === 'true'}>
+        <Providers studentProgressEnabled={process.env.STUDENT_PROGRESS_ENABLED === 'true'} studentCompetitionsEnabled={process.env.STUDENT_PROGRESS_COMPETITIONS_ENABLED === 'true'}>
           <ServiceWorkerRegistrar />
           <LayoutWrapper>
             {children}

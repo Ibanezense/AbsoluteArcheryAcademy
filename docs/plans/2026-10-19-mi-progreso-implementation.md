@@ -10,7 +10,7 @@
 
 ---
 
-Fecha del ajuste: 19 octubre 2026, America/Lima. Spec: [Mi progreso](../specs/2026-10-19-mi-progreso.md). Estado: entregas 1A–1F implementadas y verificadas; piloto local real habilitado tras autorización y confirmación humana de una identidad. Competencias permanece pendiente. Evidencia: [verificación de Controles](../qa/2026-10-19-student-progress-controls.md) y [piloto local](../qa/2026-10-19-student-progress-local-pilot.md).
+Fecha del ajuste: 19 octubre 2026, America/Lima. Spec: [Mi progreso](../specs/2026-10-19-mi-progreso.md). Estado actualizado el 20 octubre: entregas 1A–1F implementadas y verificadas; piloto local real de Controles habilitado tras autorización y confirmación humana. Competencias implementado y revisado con pruebas aisladas; pendientes activación de migraciones/conexión autorizadas, confirmación humana del piloto y publicación autorizada. Evidencia: [verificación de Controles](../qa/2026-10-19-student-progress-controls.md), [piloto local](../qa/2026-10-19-student-progress-local-pilot.md) y [aceptación previa de Competencias](../qa/mi-progreso-competitions-acceptance.md).
 
 ## 1. Fuentes y límites de ejecución
 

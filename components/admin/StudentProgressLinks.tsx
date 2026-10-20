@@ -10,6 +10,8 @@ import type {
 import { useProgressAccountId } from '@/lib/hooks/useStudentProgress'
 import { progressRequest, ProgressRequestError } from '@/lib/services/studentProgressService'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useCompetitionAvailability } from '@/components/student/progress/ProgressAvailability'
+import EngineProgressLinks from './EngineProgressLinks'
 
 type LinkContext = {
   student_id: string
@@ -69,6 +71,7 @@ export default function StudentProgressLinks({
   studentId: string
   onReviewDistance: () => void
 }) {
+  const competitionsEnabled = useCompetitionAvailability()
   const accountId = useProgressAccountId()
   const scope = `${accountId || 'signed-out'}:${studentId}`
   const current = useRef<Operation>({ scope, sequence: 0 })
@@ -520,6 +523,7 @@ export default function StudentProgressLinks({
           {work.message}
         </p>
       ) : null}
+      {competitionsEnabled && <EngineProgressLinks key={studentId} studentId={studentId} />}
     </section>
   )
 }

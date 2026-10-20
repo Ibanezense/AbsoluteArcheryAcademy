@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:te:academy-identity-v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "checked_at",
+        "candidates",
+        "has_more"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "te-academy-identity-v1"
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "competitor_id",
+              "display_name",
+              "identity_status"
+            ],
+            "properties": {
+              "competitor_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,160}$"
+              },
+              "display_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "identity_status": {
+                "enum": [
+                  "confirmed",
+                  "probable",
+                  "ambiguous",
+                  "unresolved"
+                ]
+              }
+            }
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "checked_at",
+        "candidate",
+        "published_individual_datasets",
+        "recent_events"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "te-academy-identity-v1"
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "competitor_id",
+            "display_name",
+            "identity_status"
+          ],
+          "properties": {
+            "competitor_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,160}$"
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "identity_status": {
+              "enum": [
+                "confirmed",
+                "probable",
+                "ambiguous",
+                "unresolved"
+              ]
+            }
+          }
+        },
+        "published_individual_datasets": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recent_events": {
+          "type": "array",
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "start_date",
+              "category_labels"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "start_date": {
+                "type": "string",
+                "format": "date"
+              },
+              "category_labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "checked_at",
+        "namespace",
+        "competitor_id",
+        "external_id",
+        "link_status",
+        "verified_at",
+        "generation",
+        "request"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "te-academy-identity-v1"
+        },
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "namespace": {
+          "const": "academy_reservas_student"
+        },
+        "competitor_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
+        },
+        "external_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "link_status": {
+          "enum": [
+            "confirmed",
+            "revoked",
+            "absent"
+          ]
+        },
+        "verified_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "request": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "request_id",
+                "action",
+                "generation",
+                "status",
+                "applied_at"
+              ],
+              "properties": {
+                "request_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "action": {
+                  "enum": [
+                    "confirm",
+                    "revoke"
+                  ]
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "const": "applied"
+                },
+                "applied_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

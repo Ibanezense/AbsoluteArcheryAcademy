@@ -1,0 +1,436 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:te:academy-individual-progress-v1",
+  "title": "academy-individual-progress-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "complete",
+    "checked_at",
+    "dataset_id",
+    "dataset_version_id",
+    "dataset_version",
+    "consumer_subject",
+    "competitor",
+    "tournament",
+    "competitive_classes",
+    "participations",
+    "qualifications",
+    "final_results",
+    "ranking_entries",
+    "tombstones"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "te-academy-individual-progress-v1"
+    },
+    "complete": {
+      "const": true
+    },
+    "checked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,160}$"
+    },
+    "dataset_version_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,160}$"
+    },
+    "dataset_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "consumer_subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "namespace",
+        "external_id",
+        "link_status"
+      ],
+      "properties": {
+        "namespace": {
+          "const": "academy_reservas_student"
+        },
+        "external_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "link_status": {
+          "const": "confirmed"
+        }
+      }
+    },
+    "competitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "competitor_id",
+        "display_name"
+      ],
+      "properties": {
+        "competitor_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tournament": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tournament_id",
+        "name",
+        "start_date",
+        "end_date"
+      ],
+      "properties": {
+        "tournament_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "competitive_classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competitive_class_id",
+          "label",
+          "event_type",
+          "division",
+          "age_class",
+          "gender"
+        ],
+        "properties": {
+          "competitive_class_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "event_type": {
+            "const": "individual"
+          },
+          "division": {
+            "type": "string"
+          },
+          "age_class": {
+            "type": "string"
+          },
+          "gender": {
+            "enum": [
+              "female",
+              "male",
+              "mixed",
+              "open",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "participations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "participation_id",
+          "tournament_id",
+          "competitor_id",
+          "competitive_class_id",
+          "status"
+        ],
+        "properties": {
+          "participation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "tournament_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "competitor_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "competitive_class_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "status": {
+            "enum": [
+              "entered",
+              "started",
+              "finished",
+              "dns",
+              "dnf",
+              "disqualified",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "qualifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "qualification_id",
+          "participation_id",
+          "score",
+          "arrow_count",
+          "rank",
+          "ten_count",
+          "x_count",
+          "segments"
+        ],
+        "properties": {
+          "qualification_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "participation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "data_level": {
+            "enum": [
+              "arrow_by_arrow",
+              "total_only"
+            ]
+          },
+          "distance_m": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "target_face_cm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "arrow_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rank": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "ten_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "x_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "qualification_segment_id",
+                "segment_order",
+                "distance_m",
+                "target_face_cm",
+                "score",
+                "arrow_count"
+              ],
+              "properties": {
+                "qualification_segment_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,160}$"
+                },
+                "segment_order": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "distance_m": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "target_face_cm": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "exclusiveMinimum": 0
+                },
+                "score": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "arrow_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "final_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "final_result_id",
+          "participation_id",
+          "final_position",
+          "result_status",
+          "source_kind"
+        ],
+        "properties": {
+          "final_result_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "participation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "final_position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "result_status": {
+            "enum": [
+              "official",
+              "provisional",
+              "dns",
+              "dnf",
+              "disqualified",
+              "unknown"
+            ]
+          },
+          "source_kind": {
+            "enum": [
+              "supplied",
+              "reproduced"
+            ]
+          }
+        }
+      }
+    },
+    "ranking_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ranking_entry_id",
+          "participation_id",
+          "ranking_type",
+          "position",
+          "source_kind"
+        ],
+        "properties": {
+          "ranking_entry_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "participation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "ranking_type": {
+            "enum": [
+              "qualification",
+              "final",
+              "source_other"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_kind": {
+            "enum": [
+              "supplied",
+              "reproduced"
+            ]
+          }
+        }
+      }
+    },
+    "tombstones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entity_type",
+          "entity_id",
+          "replacement_entity_id",
+          "effective_dataset_version_id"
+        ],
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          },
+          "replacement_entity_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,160}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective_dataset_version_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,160}$"
+          }
+        }
+      }
+    }
+  }
+}
