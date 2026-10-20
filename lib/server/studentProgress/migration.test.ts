@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 describe('progress SQL contract', () => {
   it('provides atomic guarded links and fresh authorization context', () => {
     const sql = readFileSync(
-      'supabase/migrations/20261020021006_student_progress_links.sql',
+      'supabase/migrations/20261020033416_student_progress_links.sql',
       'utf8'
     )
     for (const part of [

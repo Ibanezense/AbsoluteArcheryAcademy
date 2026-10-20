@@ -21,7 +21,7 @@ const context = () => db.query(`select student_progress_context('${s}') as value
 try {
   await db.exec(readFileSync('tests/supabase/studentProgress.bootstrap.sql', 'utf8'))
   await db.exec(
-    readFileSync('supabase/migrations/20261020021006_student_progress_links.sql', 'utf8')
+    readFileSync('supabase/migrations/20261020033416_student_progress_links.sql', 'utf8')
   )
   await actor(admin)
   const confirmed = (

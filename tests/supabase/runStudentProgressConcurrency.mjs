@@ -106,7 +106,7 @@ async function run(input) {
       )
     await observer.query(readFileSync('tests/supabase/studentProgress.bootstrap.sql', 'utf8'))
     await observer.query(
-      readFileSync('supabase/migrations/20261020021006_student_progress_links.sql', 'utf8')
+      readFileSync('supabase/migrations/20261020033416_student_progress_links.sql', 'utf8')
     )
 
     // Different students competing for the same external identity: one succeeds.

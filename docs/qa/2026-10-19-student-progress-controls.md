@@ -2,6 +2,8 @@
 
 Fecha: 19 octubre 2026, America/Lima. Alcance: entrega 1 del plan. La entrega 2, Competencias, conserva su alcance y espera la aceptación de Controles.
 
+Actualización: el piloto local real quedó verificado tras las autorizaciones del usuario. Estado y evidencia en [piloto local](2026-10-19-student-progress-local-pilot.md). Las referencias a activación pendiente más abajo describen el estado previo a esa autorización.
+
 ## Implementación preparada
 
 - Entrada desde Inicio y ruta `/mi-progreso`, con los cuatro accesos inferiores existentes y sin marcar otro como actual.
@@ -27,7 +29,7 @@ Las capturas y los transportes de prueba permanecen en `output/student-progress-
 
 ## Activación pendiente
 
-La migración `20261020021006_student_progress_links.sql` está preparada y probada, sin aplicar a la academia. No se crearon vínculos reales ni se copiaron puntajes. El lector de la web está preparado, sin desplegar; no se generó ni configuró su credencial real.
+La migración `20261020033416_student_progress_links.sql` está preparada y probada, sin aplicar a la academia. No se crearon vínculos reales ni se copiaron puntajes. El lector de la web está preparado, sin desplegar; no se generó ni configuró su credencial real.
 
 El plan aprobado reserva la aplicación a la base real y los despliegues para autorización expresa. La activación requiere aplicar esa migración, publicar el lector privado y configurar su credencial exclusiva entre ambos servidores. `STUDENT_PROGRESS_ENABLED` permanece desactivado por defecto. Después se verificará una identidad piloto confirmada por administración; esa comprobación cierra 1F y permite iniciar Competencias. La web no tiene repositorio Git: revisar y respaldar su paquete de publicación antes de desplegarla, preservando los cambios existentes.
 
