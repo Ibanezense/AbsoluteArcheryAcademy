@@ -76,7 +76,7 @@ function PlanOption({
   )
 }
 
-export default function MembershipRenewalPrompt() {
+export default function MembershipRenewalPrompt({ suppressAutomatic = false, onOpenChange }: { suppressAutomatic?: boolean; onOpenChange?: (open: boolean) => void } = {}) {
   const { account, activeStudentId, loading: contextLoading } = useStudentContext()
   const alertsQuery = useMembershipRenewalAlerts(activeStudentId ? [activeStudentId] : [])
   const alert = activeStudentId ? alertsQuery.data?.[activeStudentId] : undefined
@@ -102,12 +102,13 @@ export default function MembershipRenewalPrompt() {
     contextReady: !!activeStudentId && !contextLoading,
     queryReady: !alertsQuery.isLoading && !alertsQuery.isFetching && !alertsQuery.error,
     isAdmin: account?.role === 'admin',
-    alert: visibleAlert,
+    alert: !suppressAutomatic && visibleAlert?.alert_state !== 'expired' ? visibleAlert : null,
     dismissalKey,
     checkedDismissalKey,
     dismissed,
     manualOpen,
   })
+  useEffect(() => { onOpenChange?.(isOpen) }, [isOpen, onOpenChange])
   const shouldLoadOptions = isOpen
   const optionsQuery = useMembershipRenewalOptions(activeStudentId, shouldLoadOptions)
   const requestMutation = useRequestMembershipRenewal()

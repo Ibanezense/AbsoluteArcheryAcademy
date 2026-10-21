@@ -21,7 +21,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       pathname.startsWith('/admin/sesiones') ||
       pathname.startsWith('/admin/intro') ||
       pathname.startsWith('/admin/finanzas') ||
-      pathname.startsWith('/admin/ajustes')
+      pathname.startsWith('/admin/ajustes') ||
+      pathname.startsWith('/admin/notificaciones')
     ) return undefined
     return 'dashboard'
   })()

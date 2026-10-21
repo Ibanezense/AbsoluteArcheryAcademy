@@ -52,7 +52,7 @@ describe('student membership renewal prompt surface', () => {
       'queryReady: !alertsQuery.isLoading && !alertsQuery.isFetching && !alertsQuery.error',
     )
     expect(promptSource).toContain("isAdmin: account?.role === 'admin'")
-    expect(promptSource).toContain('alert: visibleAlert')
+    expect(promptSource).toContain("alert: !suppressAutomatic && visibleAlert?.alert_state !== 'expired' ? visibleAlert : null")
     expect(promptSource).toContain('checkedDismissalKey')
   })
 
@@ -72,8 +72,9 @@ describe('student membership renewal prompt surface', () => {
   })
 
   it('remains mounted on student routes without legacy dashboard inference', () => {
-    expect(layoutSource).toContain('<MembershipRenewalPromptBoundary key={pathname}>')
-    expect(layoutSource).toContain('<MembershipRenewalPrompt />')
+    expect(layoutSource).toContain('<MembershipRenewalPromptBoundary>')
+    expect(layoutSource).not.toContain('key={pathname}')
+    expect(layoutSource).toContain('<StudentNotificationCenter />')
     expect(boundarySource).toContain('getDerivedStateFromError')
     expect(boundarySource).toContain('return null')
     expect(renewalHelpersSource).not.toContain('RenewalPromptState')

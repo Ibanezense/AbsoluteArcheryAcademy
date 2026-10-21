@@ -4,10 +4,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { memo, useEffect, useRef } from 'react'
-import { BadgeCheck, Banknote, CalendarDays, ClipboardCheck, Home, LogOut, Settings, Target, Users } from 'lucide-react'
+import { BadgeCheck, Banknote, Bell, CalendarDays, ClipboardCheck, Home, LogOut, Settings, Target, Users } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
 
-export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard' | 'asistencia' | 'finanzas' | 'intro'
+export type Tab = 'turnos' | 'alumnos' | 'membresias' | 'ajustes' | 'dashboard' | 'asistencia' | 'finanzas' | 'intro' | 'notificaciones'
 
 interface AdminSidebarProps {
   isOpen: boolean
@@ -71,6 +71,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     if (pathname.startsWith('/admin/finanzas')) return 'finanzas'
     if (pathname.startsWith('/admin/intro')) return 'intro'
     if (pathname.startsWith('/admin/ajustes')) return 'ajustes'
+    if (pathname.startsWith('/admin/notificaciones')) return 'notificaciones'
     return 'dashboard'
   })()
 
@@ -109,6 +110,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           <NavItem href="/admin/asistencia" icon={<ClipboardCheck size={20} />} label="Asistencia" active={active === 'asistencia'} onClick={onClose} />
           <NavItem href="/admin/membresias" icon={<BadgeCheck size={20} />} label="Membresias" active={active === 'membresias'} onClick={onClose} />
           <NavItem href="/admin/finanzas" icon={<Banknote size={20} />} label="Finanzas" active={active === 'finanzas'} onClick={onClose} />
+          <NavItem href="/admin/notificaciones" icon={<Bell size={20} />} label="Notificaciones" active={active === 'notificaciones'} onClick={onClose} />
         </nav>
 
         <div className="relative space-y-1 border-t border-slate-800 p-3">

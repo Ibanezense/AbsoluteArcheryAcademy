@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { ReactNode } from 'react'
 import StudentBottomNav from '@/components/StudentBottomNav'
-import MembershipRenewalPrompt from '@/components/MembershipRenewalPrompt'
+import StudentNotificationCenter from '@/components/student/StudentNotificationCenter'
 import MembershipRenewalPromptBoundary from '@/components/MembershipRenewalPromptBoundary'
 
 export default function LayoutWrapper({ children }: { children: ReactNode }) {
@@ -26,8 +26,8 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
         {children}
       </main>
       {showStudentNav && (
-        <MembershipRenewalPromptBoundary key={pathname}>
-          <MembershipRenewalPrompt />
+        <MembershipRenewalPromptBoundary>
+          <StudentNotificationCenter />
         </MembershipRenewalPromptBoundary>
       )}
       {showStudentNav && <StudentBottomNav />}
