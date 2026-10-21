@@ -26,9 +26,12 @@ Tournament Engine conserva un nombre completo aprobado y los identificadores con
 
 Cambios TE desarrollados en un release aislado y trasladados a los nueve archivos correspondientes del proyecto original únicamente después de comprobar que coincidían con el baseline; los cambios locales ajenos se conservaron. El parche reproducible sin líneas de contexto queda en `docs/integrations/tournament-engine-athlete-groups.patch`; se comprobó con `git apply --reverse --check --unidiff-zero` sobre el árbol resultante. Para aplicarlo a otro checkout del mismo baseline, usar `git apply --unidiff-zero`.
 
-Pendientes de autorización concreta antes de activar en bases reales:
+El usuario autorizó expresamente las tres migraciones. Activadas el 21/10/2026:
 
 1. Reservas: `supabase/migrations/20261021063651_monthly_membership_validity.sql`.
 2. Tournament Engine: `db/migrations/0007_academy_athlete_groups.sql`, que conserva nombres aprobados de los vínculos ya confirmados sin modificar resultados fuente.
+3. Reservas: `20261021024214_academy_notifications.sql`.
 
-Publicar TE antes de la nueva PWA para que la consulta privada `operation=members` esté disponible. Verificar en cuentas reales después de aplicar las migraciones. La migración de notificaciones del trabajo anterior (`20261021024214_academy_notifications.sql`) sigue pendiente; dado que la rama incluye esa funcionalidad, su autorización y activación también son necesarias antes de publicar la rama completa. Ninguna de las tres se ha aplicado implícitamente.
+Verificación posterior: el helper real devuelve 20/11/2026 para inicio 20/10/2026; las tres funciones administrativas usan la nueva fórmula. Las tablas de notificaciones tienen RLS activo y cero avisos creados. El panel administrativo real carga sin errores y permite preparar avisos; no se publicó ningún mensaje de prueba.
+
+TE conservó los conteos de las 33 tablas existentes y creó 27 anclas a partir de vínculos confirmados. Publicado antes de la PWA en `dpl_7JYd3Ug79mZLcGY9CbywxFUQ19n9`, luego de ejecutar sus 59 pruebas en Vercel. Se comprobó `operation=members` tanto en el despliegue preparado como en el dominio público: Joyse devuelve cuatro identidades de torneo y Alejandro una, con el alumno y ancla correctos. No se crearon nuevos vínculos durante esta verificación.
