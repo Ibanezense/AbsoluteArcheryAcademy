@@ -21,16 +21,14 @@ import StudentProgressLinks, {
 } from './StudentProgressLinks'
 const identity = { id: 'external-1', name: 'María Pérez', active: 1 as const }
 describe('admin identity confirmation rules', () => {
-  it('requires explicit human verification and evidence after preview', () => {
-    expect(canConfirmProgressIdentity(identity, 'Documento comprobado', true)).toBe(true)
-    expect(canConfirmProgressIdentity(null, 'Documento comprobado', true)).toBe(false)
-    expect(canConfirmProgressIdentity(identity, 'Documento comprobado', false)).toBe(false)
-    expect(canConfirmProgressIdentity(identity, '  ', true)).toBe(false)
-    expect(canConfirmProgressIdentity(identity, 'x'.repeat(1001), true)).toBe(false)
+  it('requires preview and explicit human verification without a typed justification', () => {
+    expect(canConfirmProgressIdentity(identity, true)).toBe(true)
+    expect(canConfirmProgressIdentity(null, true)).toBe(false)
+    expect(canConfirmProgressIdentity(identity, false)).toBe(false)
   })
   it('does not treat inactive source records as a different identity', () => {
     expect(
-      canConfirmProgressIdentity({ ...identity, active: 0 }, 'Verificado manualmente', true)
+      canConfirmProgressIdentity({ ...identity, active: 0 }, true)
     ).toBe(true)
   })
   it('rejects late answers from another student, account or request', () => {

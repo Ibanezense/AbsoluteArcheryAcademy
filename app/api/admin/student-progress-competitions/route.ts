@@ -20,6 +20,7 @@ import {
   type EngineOperationResult,
 } from '@/lib/server/studentProgress/engineLinks'
 import { clearCompetitionsCache } from '@/lib/server/studentProgress/competitions'
+import { identityConfirmationEvidence } from '@/lib/server/studentProgress/identityEvidence'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 function uuid(value: unknown): string {
@@ -76,12 +77,11 @@ export async function POST(request: Request) {
       let external: string | null = null,
         expectedLink: string | null = null,
         expectedRevision: number | null = null
+      let evidence = 'Revocación administrativa'
       if (body.action === 'beginConfirm') {
         external = externalId(body.externalId)
+        evidence = identityConfirmationEvidence(body, 'competitions')
         if (
-          typeof body.evidence !== 'string' ||
-          body.evidence.trim().length < 5 ||
-          body.evidence.length > 1000 ||
           !(
             body.expectedLinkId === null ||
             typeof body.expectedLinkId === 'string'
@@ -110,10 +110,7 @@ export async function POST(request: Request) {
         p_request_id: requestId,
         p_student_id: studentId,
         p_external_id: external,
-        p_evidence:
-          body.action === 'beginConfirm'
-            ? (body.evidence as string).trim()
-            : 'Revocación administrativa',
+        p_evidence: evidence,
         p_expected_link_id: expectedLink,
         p_expected_revision: expectedRevision,
       })

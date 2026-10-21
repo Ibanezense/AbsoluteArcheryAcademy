@@ -27,7 +27,6 @@ type Workspace = {
   hasMore: boolean
   searched: boolean
   preview: Preview | null
-  evidence: string
   verified: boolean
   busy: boolean
   message: string
@@ -46,7 +45,6 @@ function initial(scope: string): Workspace {
     hasMore: false,
     searched: false,
     preview: null,
-    evidence: '',
     verified: false,
     busy: false,
     message: '',
@@ -58,10 +56,9 @@ export function isCurrentProgressOperation(operation: Operation, current: Operat
 }
 export function canConfirmProgressIdentity(
   identity: AcademyIdentity | null,
-  evidence: string,
   verified: boolean
 ) {
-  return !!identity && verified && evidence.trim().length >= 3 && evidence.length <= 1000
+  return !!identity && verified
 }
 
 export default function StudentProgressLinks({
@@ -84,7 +81,6 @@ export default function StudentProgressLinks({
   const cache = useQueryClient()
   const headingId = useId()
   const searchId = useId()
-  const evidenceId = useId()
   const dataQuery = useQuery({
     queryKey: ['admin-student-progress', accountId, studentId],
     enabled: !!accountId && !!studentId,
@@ -148,7 +144,7 @@ export default function StudentProgressLinks({
     event.preventDefault()
     if (!canAct || work.query.trim().length < 2 || work.query.length > 100) return
     const { operation, signal } = begin()
-    update({ candidates: [], preview: null, evidence: '', verified: false, searched: false })
+    update({ candidates: [], preview: null, verified: false, searched: false })
     try {
       const result = await progressRequest<{ candidates: AcademyIdentity[]; has_more: boolean }>(
         endpoint,
@@ -172,7 +168,7 @@ export default function StudentProgressLinks({
   async function preview(candidate: AcademyIdentity) {
     if (!canAct) return
     const { operation, signal } = begin()
-    update({ preview: null, evidence: '', verified: false })
+    update({ preview: null, verified: false })
     try {
       const result = await progressRequest<Preview>(endpoint, {
         accountId: accountId!,
@@ -190,7 +186,7 @@ export default function StudentProgressLinks({
     if (
       !canAct ||
       !work.preview ||
-      !canConfirmProgressIdentity(work.preview.student, work.evidence, work.verified)
+      !canConfirmProgressIdentity(work.preview.student, work.verified)
     )
       return
     const selected = work.preview.student
@@ -219,7 +215,7 @@ export default function StudentProgressLinks({
           action: 'confirm',
           studentId,
           externalId: selected.id,
-          evidence: work.evidence.trim(),
+          identityVerified: true,
           expectedLinkId: link?.id ?? null,
           expectedRevision: link?.revision ?? null,
         },
@@ -367,8 +363,7 @@ export default function StudentProgressLinks({
                     query: event.target.value,
                     preview: null,
                     verified: false,
-                    evidence: '',
-                    message: '',
+                                    message: '',
                     searched: false,
                     candidates: [],
                     hasMore: false,
@@ -467,24 +462,7 @@ export default function StudentProgressLinks({
                   Usa «Revisar distancia asignada» para comprobarla.
                 </p>
               ) : null}
-              <label htmlFor={evidenceId} className="mt-4 block text-sm font-medium text-slate-800">
-                Evidencia de identidad
-              </label>
-              <p className="mt-1 text-xs text-slate-600">
-                Describe qué comprobaste para confirmar a esta persona. Evita copiar documentos
-                completos o datos sensibles.
-              </p>
-              <textarea
-                id={evidenceId}
-                value={work.evidence}
-                minLength={3}
-                maxLength={1000}
-                required
-                disabled={work.busy}
-                onChange={(event) => update({ evidence: event.target.value })}
-                rows={3}
-                className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"
-              />
+              <p className="mt-4 text-xs text-slate-600">Se guardarán automáticamente el administrador, la fecha y el registro vinculado.</p>
               <label className="mt-3 flex items-start gap-2 text-sm text-slate-800">
                 <input
                   type="checkbox"
@@ -500,7 +478,7 @@ export default function StudentProgressLinks({
                 className={`${primary} mt-4`}
                 disabled={
                   !canAct ||
-                  !canConfirmProgressIdentity(work.preview.student, work.evidence, work.verified)
+                  !canConfirmProgressIdentity(work.preview.student, work.verified)
                 }
                 onClick={() => void save()}
               >

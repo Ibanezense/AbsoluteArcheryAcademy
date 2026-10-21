@@ -10,6 +10,7 @@ import {
 import { uuidPattern, readControls, searchControls } from '@/lib/server/studentProgress/source'
 import { invalidateTrainingCache } from '@/lib/server/studentProgress/training'
 import { summarizeTrainingControls } from '@/lib/utils/studentTrainingProgress'
+import { identityConfirmationEvidence } from '@/lib/server/studentProgress/identityEvidence'
 export const dynamic = 'force-dynamic'
 function uuid(value: unknown): string {
   if (typeof value !== 'string' || !uuidPattern.test(value))
@@ -48,10 +49,7 @@ export async function POST(request: Request) {
       const externalId = uuid(body.externalId)
       if (
         body.action === 'confirm' &&
-        (typeof body.evidence !== 'string' ||
-          body.evidence.trim().length < 3 ||
-          body.evidence.length > 1000 ||
-          !(
+        (!(
             body.expectedLinkId === null ||
             (typeof body.expectedLinkId === 'string' && uuidPattern.test(body.expectedLinkId))
           ) ||
@@ -61,6 +59,7 @@ export async function POST(request: Request) {
           ))
       )
         throw new ProgressError(400, 'invalid_request')
+      const evidence = body.action === 'confirm' ? identityConfirmationEvidence(body, 'controls') : null
       const snapshot = await readControls(externalId)
       if (body.action === 'preview') {
         await authorize(request, true)
@@ -73,7 +72,7 @@ export async function POST(request: Request) {
       const { data, error } = await client.rpc('admin_confirm_progress_link', {
         p_student_id: studentId,
         p_external_id: externalId,
-        p_evidence: body.evidence,
+        p_evidence: evidence,
         p_expected_link_id: body.expectedLinkId,
         p_expected_revision: body.expectedRevision,
       })

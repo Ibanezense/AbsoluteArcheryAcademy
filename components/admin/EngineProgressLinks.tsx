@@ -23,7 +23,6 @@ type Work = {
   hasMore: boolean
   searched: boolean
   preview: EngineIdentityPreview | null
-  evidence: string
   verified: boolean
   busy: boolean
   message: string
@@ -36,7 +35,6 @@ const initial = (scope: string): Work => ({
   hasMore: false,
   searched: false,
   preview: null,
-  evidence: '',
   verified: false,
   busy: false,
   message: '',
@@ -121,7 +119,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
     event.preventDefault()
     if (!canAct || work.query.trim().length < 2) return
     const { operation, signal } = begin()
-    update({ preview: null, searched: false, candidates: [], verified: false, evidence: '' })
+    update({ preview: null, searched: false, candidates: [], verified: false })
     try {
       const result = await progressRequest<{ candidates: EngineCandidate[]; has_more: boolean }>(
         endpoint,
@@ -145,7 +143,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
   async function preview(candidate: Pick<EngineCandidate, 'competitor_id'>) {
     if (!canAct) return
     const { operation, signal } = begin()
-    update({ preview: null, verified: false, evidence: '' })
+    update({ preview: null, verified: false })
     try {
       const result = await progressRequest<EngineIdentityPreview>(endpoint, {
         accountId: accountId!,
@@ -167,10 +165,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
     const candidate = work.preview?.candidate
     if (
       action === 'beginConfirm' &&
-      (!candidate ||
-        !work.verified ||
-        work.evidence.trim().length < 5 ||
-        work.evidence.length > 1000)
+      (!candidate || !work.verified)
     )
       return
     const { operation, signal } = begin()
@@ -208,7 +203,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
               action,
               studentId,
               externalId: candidate!.competitor_id,
-              evidence: work.evidence.trim(),
+              identityVerified: true,
               requestId: crypto.randomUUID(),
               expectedLinkId: existing?.id ?? null,
               expectedRevision: existing?.revision ?? null,
@@ -247,8 +242,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
         update({
           preview: null,
           verified: false,
-          evidence: '',
-          busy: false,
+                  busy: false,
           error: errorMessage(error),
         })
     }
@@ -387,8 +381,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
                     candidates: [],
                     searched: false,
                     preview: null,
-                    evidence: '',
-                    verified: false,
+                                      verified: false,
                   })
                 }
                 className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm"
@@ -470,26 +463,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
                 </p>
               ) : (
                 <>
-                  <label
-                    htmlFor={`${formId}-evidence`}
-                    className="mt-4 block text-sm font-semibold text-slate-800"
-                  >
-                    Evidencia de identidad en competencias
-                  </label>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Describe cómo verificaste que corresponde a este alumno. Coincidir en el nombre
-                    no basta.
-                  </p>
-                  <textarea
-                    id={`${formId}-evidence`}
-                    rows={3}
-                    minLength={5}
-                    maxLength={1000}
-                    value={work.evidence}
-                    disabled={work.busy}
-                    onChange={(event) => update({ evidence: event.target.value })}
-                    className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm"
-                  />
+                  <p className="mt-4 text-xs text-slate-600">Se guardarán automáticamente el administrador, la fecha y el registro vinculado.</p>
                   <label className="mt-3 flex items-start gap-2 text-sm text-slate-800">
                     <input
                       type="checkbox"
@@ -503,7 +477,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
                   <button
                     type="button"
                     className="mt-4 min-h-11 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                    disabled={!canAct || !work.verified || work.evidence.trim().length < 5}
+                    disabled={!canAct || !work.verified}
                     onClick={() => void mutate('beginConfirm')}
                   >
                     Confirmar identidad de competencias
