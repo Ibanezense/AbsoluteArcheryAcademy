@@ -4,11 +4,24 @@ import { describe, expect, it } from 'vitest'
 import {
   competitionSnapshot as snapshot,
   competitionQualification as qualification,
+  fragmentedCompetitionSnapshots,
 } from '@/tests/fixtures/studentCompetitions'
 import { CompetitionHistory } from '@/components/student/progress/CompetitionHistory'
 import { CompetitionSourceState } from '@/components/student/progress/CompetitionSourceState'
 
 describe('competition results presentation', () => {
+  it('renders one complete result when classification and final arrive under separate source IDs', () => {
+    const html = renderToStaticMarkup(createElement(CompetitionHistory, { datasets: fragmentedCompetitionSnapshots() }))
+    expect((html.match(/<article/g) || [])).toHaveLength(1)
+    expect(html).toContain('1 participación verificada')
+    expect(html).toContain('Medalla de oro')
+    expect(html).toContain('1.º puesto')
+    expect(html).toContain('557')
+    expect(html).toContain('72 flechas')
+    expect(html).toContain('40 m')
+    expect(html).not.toContain('Sin puntaje de clasificación publicado')
+    expect(html).not.toContain('Estado no documentado')
+  })
   it('celebrates an official final silver without turning qualification rank into the final place', () => {
     const html = renderToStaticMarkup(
       createElement(CompetitionHistory, {

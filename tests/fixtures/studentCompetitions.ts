@@ -69,3 +69,20 @@ export function competitionSnapshot(
     ...overrides,
   }
 }
+
+// A source tournament can import registration, qualification and finals with
+// separate competitor IDs even though all belong to one authorized athlete.
+export function fragmentedCompetitionSnapshots(): AcademyCompetitionSnapshot[] {
+  return ['final', 'qualification', 'registration'].map((stage) => {
+    const id = `participation-${stage}`
+    const known = stage === 'final'
+    return competitionSnapshot({
+      competitor: { competitor_id: `competitor-${stage}`, display_name: stage === 'qualification' ? 'DE PRUEBA Atleta' : 'Atleta de prueba' },
+      competitive_classes: known ? competitionSnapshot().competitive_classes : [{ competitive_class_id: 'class-unknown', label: 'Unknown', event_type: 'individual', division: 'Unknown', age_class: 'Unknown', gender: 'unknown' }],
+      participations: [{ participation_id: id, tournament_id: 'event-a', competitor_id: `competitor-${stage}`, competitive_class_id: known ? 'class-a' : 'class-unknown', status: 'finished' }],
+      qualifications: stage === 'qualification' ? [competitionQualification({ qualification_id: 'qualification-stage', participation_id: id, score: 557, distance_m: 40 })] : [],
+      final_results: known ? [{ final_result_id: 'final-stage', participation_id: id, final_position: 1, result_status: 'official', source_kind: 'supplied' }] : [],
+      ranking_entries: known ? [{ ranking_entry_id: 'rank-qualification-stage', participation_id: id, ranking_type: 'qualification', position: 2, source_kind: 'supplied' }] : [],
+    })
+  })
+}
