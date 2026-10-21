@@ -27,7 +27,7 @@ function Detail({
 }) {
   return (
     <div className="min-w-0 border-b border-slate-100 py-3.5 last:border-0">
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dt className="text-xs font-semibold text-textsec">{label}</dt>
       <dd
         className={`mt-1 break-words text-sm font-semibold ${value ? 'text-slate-900' : 'font-normal text-slate-400'}`}
       >
@@ -74,7 +74,7 @@ export default function StudentProfilePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[#F7F8FA] pb-8 text-textpri">
+      <div className="min-h-screen bg-bg pb-8 text-textpri">
         <MobileStudentHeader
           title="Mi perfil"
           subtitle="Tu información y tus logros"
@@ -133,11 +133,11 @@ export default function StudentProfilePage() {
             <>
               <section
                 aria-label="Perfil del alumno"
-                className="relative isolate overflow-hidden rounded-[28px] bg-[#071421] p-6 text-white shadow-[0_16px_36px_rgba(7,20,33,0.12)] sm:p-8"
+                className="sport-dark relative isolate overflow-hidden rounded-2xl border border-slate-700 p-6 text-white shadow-soft sm:p-8"
               >
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute -right-14 -top-20 -z-10 h-72 w-72 rounded-full border-[32px] border-white/[0.025]"
+                  className="pointer-events-none absolute -right-20 top-0 -z-10 h-full w-56 -skew-x-[20deg] border-x-[20px] border-white/[0.035]"
                 />
                 <div className="flex items-start justify-between gap-4">
                   <Avatar
@@ -154,7 +154,7 @@ export default function StudentProfilePage() {
                 <p className="mt-6 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-orange-400">
                   Absolute Archery
                 </p>
-                <h2 className="mt-2 max-w-2xl font-heading text-2xl font-bold leading-tight tracking-[-0.035em] text-white sm:text-3xl">
+                <h2 className="mt-2 max-w-2xl font-heading text-4xl font-bold leading-none tracking-tight text-white sm:text-5xl">
                   {profile.full_name || 'Alumno'}
                 </h2>
                 <p className="mt-2 text-sm text-slate-300">
@@ -173,13 +173,13 @@ export default function StudentProfilePage() {
               {progressEnabled && (
                 <Link
                   href="/mi-progreso"
-                  className="group my-5 flex min-h-[108px] items-center gap-4 rounded-3xl border border-orange-200/80 bg-[#FFF4E9] p-5 transition hover:border-orange-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-500"
+                  className="group my-5 flex min-h-[108px] items-center gap-4 rounded-2xl border border-orange-200 bg-orange-50 p-5 transition-colors hover:border-orange-400 hover:bg-orange-100/60"
                 >
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#FA6B16] text-white shadow-[0_6px_16px_rgba(250,107,22,0.18)]">
-                    <Trophy className="h-6 w-6" />
+                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-accent text-white shadow-card">
+                    <Trophy className="h-6 w-6" aria-hidden="true" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block font-heading text-lg font-bold tracking-tight text-[#162536]">
+                    <span className="block font-heading text-2xl font-bold tracking-tight text-textpri">
                       Mi progreso
                     </span>
                     <span className="mt-1 block text-xs leading-relaxed text-[#76543D]">
@@ -195,11 +195,11 @@ export default function StudentProfilePage() {
               >
                 <section
                   aria-labelledby="personal-title"
-                  className="rounded-3xl border border-[#E2E7ED] bg-white px-5 pb-2 pt-5 sm:px-6"
+                  className="surface-panel px-5 pb-2 pt-5 sm:px-6"
                 >
                   <h2
                     id="personal-title"
-                    className="flex items-center gap-2.5 font-heading text-base font-bold"
+                    className="flex items-center gap-2.5 font-heading text-2xl font-bold"
                   >
                     <UserRound className="h-4 w-4 text-orange-600" />
                     Datos personales
@@ -216,11 +216,11 @@ export default function StudentProfilePage() {
                 </section>
                 <section
                   aria-labelledby="sports-title"
-                  className="rounded-3xl border border-[#E2E7ED] bg-white px-5 pb-2 pt-5 sm:px-6"
+                  className="surface-panel px-5 pb-2 pt-5 sm:px-6"
                 >
                   <h2
                     id="sports-title"
-                    className="flex items-center gap-2.5 font-heading text-base font-bold"
+                    className="flex items-center gap-2.5 font-heading text-2xl font-bold"
                   >
                     <Crosshair className="h-4 w-4 text-orange-600" />
                     Datos deportivos

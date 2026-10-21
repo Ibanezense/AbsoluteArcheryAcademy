@@ -3,17 +3,17 @@ import Providers from '@/components/Providers'
 import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar'
 import LayoutWrapper from './LayoutWrapper'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Poppins } from 'next/font/google'
+import { Manrope, Barlow_Condensed } from 'next/font/google'
 
-const inter = Inter({
+const bodyFont = Manrope({
   subsets: ['latin'],
   variable: '--font-body',
   display: 'swap',
 })
 
-const poppins = Poppins({
+const headingFont = Barlow_Condensed({
   subsets: ['latin'],
-  weight: ['500', '600', '700'],
+  weight: ['500', '600', '700', '800'],
   variable: '--font-heading',
   display: 'swap',
 })
@@ -45,7 +45,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body className={`${inter.variable} ${poppins.variable} bg-bg text-textpri`}>
+      <body className={`${bodyFont.variable} ${headingFont.variable} bg-bg text-textpri`}>
         <Providers studentProgressEnabled={process.env.STUDENT_PROGRESS_ENABLED === 'true'} studentCompetitionsEnabled={process.env.STUDENT_PROGRESS_COMPETITIONS_ENABLED === 'true'}>
           <ServiceWorkerRegistrar />
           <LayoutWrapper>

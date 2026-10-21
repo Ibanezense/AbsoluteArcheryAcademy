@@ -26,23 +26,17 @@ export function MobileStudentHeader({
   }
 
   return (
-    <header className="relative overflow-hidden bg-[#020B14] px-4 pb-5 pt-[calc(env(safe-area-inset-top)+18px)] text-white shadow-[0_10px_24px_rgba(2,11,20,0.22)]">
-      <div className="absolute inset-0 opacity-35">
-        <div className="absolute -right-14 -top-20 h-44 w-44 rounded-full border border-orange-500/30" />
-        <div className="absolute right-8 top-4 h-28 w-28 rounded-full border border-slate-500/20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_84%_22%,rgba(249,115,22,0.22),transparent_24%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(2,6,23,0.98))]" />
-      </div>
-
-      <div className="relative z-10 flex min-h-[54px] items-center justify-between gap-3">
+    <header className="sport-dark relative border-b border-white/10 bg-navy px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] text-white sm:px-6 md:px-8">
+      <div className="relative z-10 flex min-h-[52px] items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {showBack && (
             <button
               type="button"
               onClick={() => router.back()}
-              className="-ml-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition hover:bg-white/10"
+              className="-ml-1 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300"
               aria-label="Volver"
             >
-              <ArrowLeft className="h-7 w-7" />
+              <ArrowLeft aria-hidden="true" className="h-5 w-5" />
             </button>
           )}
 
@@ -54,13 +48,13 @@ export function MobileStudentHeader({
                 width={220}
                 height={60}
                 priority
-                className="h-14 w-auto object-contain"
+                className="h-10 w-auto max-w-[220px] object-contain sm:h-11"
               />
             </div>
           ) : (
-            <div className="min-w-0 flex-1 text-center">
-              {title && <h1 className="truncate text-[1.35rem] font-black leading-tight tracking-[-0.03em] text-white">{title}</h1>}
-              {subtitle && <p className="mt-0.5 truncate text-sm font-medium text-white/72">{subtitle}</p>}
+            <div className="min-w-0 flex-1 text-left">
+              {title && <h1 className="truncate font-heading text-2xl font-bold leading-tight tracking-tight text-white">{title}</h1>}
+              {subtitle && <p className="mt-0.5 truncate text-sm font-medium text-slate-300">{subtitle}</p>}
             </div>
           )}
         </div>
@@ -68,10 +62,10 @@ export function MobileStudentHeader({
         <button
           type="button"
           onClick={handleSignOut}
-          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full text-white transition hover:bg-white/10"
+          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300"
           aria-label="Cerrar sesión"
         >
-          <LogOut className="h-6 w-6" />
+          <LogOut aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
     </header>

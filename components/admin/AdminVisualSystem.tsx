@@ -60,16 +60,16 @@ export function AdminPageHeader({
   actions?: ReactNode
 }) {
   return (
-    <section className="border-b border-slate-200 pb-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <section className="relative border-b border-slate-200 pb-6">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-medium capitalize text-slate-500">{eyebrow || adminTodayLabel()}</p>
-          <h1 className="mt-1 font-heading text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+          <p className="flex items-center gap-2 text-xs font-semibold capitalize tracking-wide text-slate-600 before:h-1 before:w-6 before:bg-accent before:content-['']">{eyebrow || adminTodayLabel()}</p>
+          <h1 className="mt-2 font-heading text-4xl font-bold leading-none tracking-tight text-slate-950 sm:text-5xl">
             {title}
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">{description}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
         </div>
-        {actions && <div className="flex flex-col gap-2 lg:flex-row lg:items-center">{actions}</div>}
+        {actions && <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:w-auto">{actions}</div>}
       </div>
     </section>
   )
@@ -83,7 +83,7 @@ export function AdminContentPanel({
   className?: string
 }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
+    <section className={`surface-panel ${className}`}>
       {children}
     </section>
   )
@@ -195,16 +195,16 @@ export function AdminStatCard({
   tone?: Tone
 }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+    <article className="surface-panel relative overflow-hidden p-4 sm:p-5">
       <div className="flex items-start justify-between gap-4">
-        <div className={`grid h-9 w-9 place-items-center rounded-lg border ${toneClasses(tone)}`}>
+        <div className={`grid h-10 w-10 place-items-center rounded-xl border ${toneClasses(tone)}`}>
           {icon}
         </div>
 
       </div>
-      <p className="mt-2 text-xs font-medium leading-5 text-slate-700">{label}</p>
-      <p className="mt-1 font-heading text-2xl font-semibold leading-none tracking-tight text-slate-950">{value}</p>
-      <p className="mt-1 text-xs leading-4 text-slate-500">{helper}</p>
+      <p className="mt-4 text-sm font-semibold leading-5 text-slate-600">{label}</p>
+      <p className="mt-2 font-heading text-4xl font-bold tabular-nums leading-none tracking-tight text-slate-950">{value}</p>
+      <p className="mt-3 text-xs leading-5 text-slate-600">{helper}</p>
     </article>
   )
 }

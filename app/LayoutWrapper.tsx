@@ -22,7 +22,7 @@ export default function LayoutWrapper({ children }: { children: ReactNode }) {
   // Las pantallas de alumnos aprovechan el ancho disponible en escritorio.
   return (
     <>
-      <main className={`mx-auto min-h-screen w-full ${showStudentNav ? 'max-w-[1120px]' : 'max-w-[430px]'} bg-bg pb-[96px] shadow-[0_0_0_1px_rgba(15,23,42,0.04)]`}>
+      <main className={`mx-auto min-h-screen w-full ${showStudentNav ? 'student-workspace max-w-[1120px]' : 'max-w-[480px] px-4'} bg-bg pb-[calc(112px+env(safe-area-inset-bottom))]`}>
         {children}
       </main>
       {showStudentNav && (

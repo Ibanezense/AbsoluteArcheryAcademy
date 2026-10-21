@@ -27,14 +27,14 @@ const NavItem = memo(function NavItem({ href, icon, label, active, onClick }: Na
     <Link
       href={href}
       onClick={onClick}
-      className={`group flex items-center gap-3 rounded-lg px-3 py-3 transition-all duration-200 ${active
-        ? 'bg-orange-500/15 text-white'
-        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      className={`group relative flex min-h-12 items-center gap-3 rounded-xl border-l-2 px-3 py-3 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-300 ${active
+        ? 'border-orange-400 bg-white/10 text-white'
+        : 'border-transparent text-slate-300 hover:bg-white/5 hover:text-white'
         }`}
       suppressHydrationWarning
       aria-current={active ? 'page' : undefined}
     >
-      <span className={active ? 'text-accent' : 'text-slate-400 group-hover:text-accent'}>{icon}</span>
+      <span aria-hidden="true" className={active ? 'text-orange-300' : 'text-slate-400 group-hover:text-orange-300'}>{icon}</span>
       <span className="text-sm font-medium">{label}</span>
     </Link>
   )
@@ -84,11 +84,11 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         role={isOpen ? "dialog" : undefined}
         aria-modal={isOpen ? true : undefined}
         aria-label="Navegación administrativa"
-        className={`fixed left-0 top-0 z-50 flex h-dvh w-64 flex-col overflow-y-auto border-r border-slate-800 bg-[#101b28] text-white transition-transform duration-300 ease-in-out ${isOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
+        className={`sport-dark fixed left-0 top-0 z-50 flex h-dvh w-64 flex-col overflow-y-auto border-r border-slate-800 bg-[#101e2a] text-white transition-transform duration-300 ease-in-out ${isOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
           } lg:visible lg:translate-x-0`}
       >
 
-        <div className="relative border-b border-slate-800 px-5 py-5">
+        <div className="relative border-b border-white/10 px-6 py-7">
           <Image
             src="/AA ACADEMY logo blanco.png"
             alt="Absolute Archery Academy"
@@ -98,30 +98,30 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
             style={{ width: 'auto', height: '38px', maxWidth: '200px' }}
             priority
           />
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.28em] text-orange-300/80">Administración</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.28em] text-orange-300">Administración</p>
         </div>
 
-        <nav className="relative flex-1 space-y-1 p-3">
-          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Navegacion</p>
+        <nav className="relative flex-1 space-y-1.5 p-4">
+          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Academia</p>
           <NavItem href="/admin" icon={<Home size={20} />} label="Inicio" active={active === 'dashboard'} onClick={onClose} />
           <NavItem href="/admin/sesiones" icon={<CalendarDays size={20} />} label="Turnos" active={active === 'turnos'} onClick={onClose} />
           <NavItem href="/admin/alumnos" icon={<Users size={20} />} label="Alumnos" active={active === 'alumnos'} onClick={onClose} />
           <NavItem href="/admin/intro" icon={<Target size={20} />} label="Pruebas" active={active === 'intro'} onClick={onClose} />
           <NavItem href="/admin/asistencia" icon={<ClipboardCheck size={20} />} label="Asistencia" active={active === 'asistencia'} onClick={onClose} />
-          <NavItem href="/admin/membresias" icon={<BadgeCheck size={20} />} label="Membresias" active={active === 'membresias'} onClick={onClose} />
+          <NavItem href="/admin/membresias" icon={<BadgeCheck size={20} />} label="Membresías" active={active === 'membresias'} onClick={onClose} />
           <NavItem href="/admin/finanzas" icon={<Banknote size={20} />} label="Finanzas" active={active === 'finanzas'} onClick={onClose} />
           <NavItem href="/admin/notificaciones" icon={<Bell size={20} />} label="Notificaciones" active={active === 'notificaciones'} onClick={onClose} />
         </nav>
 
         <div className="relative space-y-1 border-t border-slate-800 p-3">
-          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Administracion</p>
-          <NavItem href="/admin/ajustes" icon={<Settings size={20} />} label="Configuracion" active={active === 'ajustes'} onClick={onClose} />
+          <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Administración</p>
+          <NavItem href="/admin/ajustes" icon={<Settings size={20} />} label="Configuración" active={active === 'ajustes'} onClick={onClose} />
           <button
             onClick={signOut}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex w-full items-center gap-3 min-h-12 rounded-xl px-3 py-3 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
           >
             <LogOut size={20} className="text-slate-400" />
-            <span>Cerrar sesion</span>
+            <span>Cerrar sesión</span>
           </button>
         </div>
       </aside>

@@ -47,10 +47,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const confirmButtonClass =
     state?.opts?.tone === 'warning'
-      ? 'bg-warning text-black hover:brightness-110'
+      ? 'bg-warning text-white hover:bg-amber-800'
       : state?.opts?.tone === 'danger'
-        ? 'bg-danger text-white hover:brightness-110'
-        : 'bg-accent text-black hover:brightness-110'
+        ? 'bg-danger text-white hover:bg-red-800'
+        : 'bg-accent text-white hover:bg-orange-800'
 
   return (
     <ConfirmContext.Provider value={{ confirm }}>
@@ -78,14 +78,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => handle(false)}
-                className="rounded-xl border border-line px-4 py-2 text-sm font-medium text-textsec transition hover:text-textpri"
+                className="min-h-11 rounded-xl border border-line px-4 py-2 text-sm font-medium text-textsec transition hover:text-textpri"
               >
                 {state.opts?.cancelLabel ?? 'Cancelar'}
               </button>
               <button
                 type="button"
                 onClick={() => handle(true)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${confirmButtonClass}`}
+                className={`min-h-11 rounded-xl px-4 py-2 text-sm font-semibold transition ${confirmButtonClass}`}
               >
                 {state.opts?.confirmLabel ?? 'Aceptar'}
               </button>

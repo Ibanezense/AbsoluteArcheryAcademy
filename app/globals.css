@@ -4,19 +4,27 @@
 
 :root {
   color-scheme: light;
+  --color-bg: 243 246 248;
+  --color-card: 255 255 255;
+  --color-ink: 16 30 42;
+  --color-muted: 82 98 113;
+  --color-accent: 194 65 12;
+  --color-line: 219 227 233;
+  --sport-navy: #101e2a;
+  --sport-highlight: #fb923c;
+  --surface-radius: 1.125rem;
 }
 
 html {
   min-height: 100%;
-  background: #f8f9fa;
+  background: rgb(var(--color-bg));
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 112px);
 }
 
 body {
   @apply min-h-screen bg-bg text-textpri font-sans antialiased;
   font-feature-settings: "liga" 1, "calt" 1;
-  background-image:
-    radial-gradient(circle at top left, rgba(249, 115, 22, 0.08), transparent 22rem),
-    linear-gradient(180deg, #fbfbfc 0%, #f3f4f6 100%);
+  line-height: 1.6;
 }
 
 h1,
@@ -26,6 +34,7 @@ h4,
 h5,
 h6 {
   @apply font-heading text-textpri;
+  text-wrap: balance;
 }
 
 a {
@@ -39,33 +48,58 @@ textarea {
   font: inherit;
 }
 
+button:not(:disabled), select:not(:disabled), summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--color-accent));
+  outline-offset: 4px;
+}
+::selection { background: #fed7aa; color: #101e2a; }
+
 .btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium text-white shadow-card transition;
-  @apply bg-accent hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25;
+  @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white shadow-card transition-colors;
+  @apply bg-accent hover:bg-orange-800 active:bg-orange-900 disabled:opacity-50 disabled:shadow-none;
 }
 
 .btn-outline {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 font-medium text-textpri shadow-card transition;
-  @apply hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/20;
+  @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-sm font-semibold text-textpri shadow-card transition-colors;
+  @apply hover:border-slate-400 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50;
 }
 
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white/70 px-4 py-3 font-medium text-textpri transition;
-  @apply hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/15;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-sm font-semibold text-textpri transition-colors;
+  @apply hover:bg-slate-50 active:bg-slate-100 disabled:opacity-50;
 }
 
 .btn-sm {
-  @apply rounded-lg px-3 py-2 text-sm;
+  @apply min-h-11 rounded-lg px-3 py-2 text-sm;
 }
 
 .card {
-  @apply rounded-2xl border border-line bg-card shadow-card;
+  @apply border border-line bg-card shadow-card;
+  border-radius: var(--surface-radius);
 }
 
 .input {
-  @apply w-full rounded-xl border border-line bg-white px-4 py-3 text-textpri outline-none transition;
-  @apply placeholder:text-textsec focus:border-accent/40 focus:ring-2 focus:ring-accent/20;
+  @apply min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-textpri transition-colors;
+  @apply placeholder:text-slate-500 focus:border-accent focus:ring-2 focus:ring-accent/15 disabled:bg-slate-100;
 }
+
+@layer components {
+  .surface-panel {
+    border: 1px solid rgb(var(--color-line));
+    border-radius: var(--surface-radius);
+    background: rgb(var(--color-card));
+    box-shadow: 0 3px 12px -5px rgba(16, 30, 42, 0.10);
+  }
+}
+.sport-dark { background-color: var(--sport-navy); color: #fff; }
+.sport-dark :is(a, button):focus-visible { outline-color: var(--sport-highlight); }
+.sport-dark .bg-white\/5 { background-color: rgba(255,255,255,.05) !important; }
+.sport-dark .bg-white\/10 { background-color: rgba(255,255,255,.10) !important; }
+.sport-dark .border-white\/10 { border-color: rgba(255,255,255,.10) !important; }
+.sport-dark .hover\:bg-white\/10:hover { background-color: rgba(255,255,255,.10) !important; }
+.sport-dark .hover\:bg-white\/5:hover { background-color: rgba(255,255,255,.05) !important; }
 
 .border-white\/10 {
   border-color: rgba(148, 163, 184, 0.18) !important;
@@ -96,10 +130,8 @@ textarea {
 }
 
 /* Administrative workspace: scoped so the student and guardian portals keep their theme. */
-.admin-workspace { --admin-ink: #182435; font-size: 0.875rem; }
+.admin-workspace { --admin-ink: #101e2a; font-size: 0.9375rem; }
 .admin-workspace h1, .admin-workspace h2, .admin-workspace h3 { letter-spacing: -0.025em; }
-.admin-workspace .font-black { font-weight: 650; }
-.admin-workspace [class*="shadow-["] { box-shadow: none; }
 .admin-workspace [class*="bg-[#07111d]"] h2,
 .admin-workspace [class*="bg-[#07111d]"] h3 { color: #fff; }
 .admin-workspace [class*="bg-[#07111d]"] [class*="text-slate-500"] { color: #cbd5e1; }
@@ -111,9 +143,11 @@ textarea {
 .admin-workspace summary { list-style-position: inside; }
 .admin-workspace aside a { min-height: 44px; }
 @media (prefers-reduced-motion: reduce) {
-  .admin-workspace *, .admin-workspace *::before, .admin-workspace *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

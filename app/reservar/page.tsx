@@ -83,13 +83,13 @@ export default function ReservarPage() {
   if (contextLoading || loading) return <StudentPageSkeleton variant="booking" />
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] text-textpri">
+    <div className="min-h-screen bg-bg text-textpri">
       <MobileStudentHeader title="Reservar clase" subtitle="Elige tu próximo entrenamiento" showBack />
       <div className="space-y-5 px-4 py-5 md:px-6">
         {account?.role === 'guardian' && activeStudent && <StudentCard className="p-4 text-sm">Reservando para <strong>{activeStudent.full_name}</strong></StudentCard>}
         <StudentCard className="overflow-hidden p-0">
-          <div className="bg-[#07111d] p-5 text-white sm:flex sm:items-center sm:justify-between sm:gap-6">
-            <div><h2 className="text-xl font-black">Agenda semanal</h2><p className="mt-1 text-sm text-slate-300">Revisa los horarios y confirma los detalles antes de reservar.</p></div>
+          <div className="sport-dark p-5 text-white sm:flex sm:items-center sm:justify-between sm:gap-6">
+            <div><h2 className="text-2xl font-bold text-white">Agenda semanal</h2><p className="mt-1 text-sm text-slate-300">Revisa los horarios y confirma los detalles antes de reservar.</p></div>
             {dashboard && <p className="mt-3 shrink-0 text-sm sm:mt-0"><strong className="text-orange-200">{dashboard.classes_remaining ?? '—'} clases disponibles</strong><br /><span className="text-slate-300">{dashboard.membership_end ? `Vigencia hasta ${dashboard.membership_end.split('-').reverse().join('/')}` : 'Consulta tu membresía'} · <Link className="underline underline-offset-2" href="/membresias">Ver plan</Link></span></p>}
           </div>
           <div className="flex items-center justify-between gap-3 p-4">
@@ -102,7 +102,7 @@ export default function ReservarPage() {
           <div className="grid items-start gap-5 lg:grid-cols-2">
             {days.map(({ date, sessions: daySessions }) => (
               <section key={date.format('YYYY-MM-DD')} className="space-y-3" aria-label={date.format('dddd D [de] MMMM')}>
-                <h2 className="px-1 text-sm font-black capitalize text-slate-700">{date.format('dddd D [de] MMMM')}</h2>
+                <h2 className="px-1 text-xl font-bold capitalize text-slate-700">{date.format('dddd D [de] MMMM')}</h2>
                 {daySessions.map((session) => (
                   <StudentCard key={session.session_id} className="p-4">
                     <div className="flex items-start gap-3">

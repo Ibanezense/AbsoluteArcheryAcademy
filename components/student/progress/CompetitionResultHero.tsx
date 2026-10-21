@@ -17,7 +17,7 @@ export function CompetitionResultHero({ result }: { result: CompetitionParticipa
   const statuses = result.finalStatuses.length ? result.finalStatuses : ['unknown']
   if (award)
     return (
-      <div className="relative isolate overflow-hidden bg-[#0a1828] px-4 py-5 text-white min-[360px]:px-5 sm:px-7 sm:py-6">
+      <div className="sport-dark relative isolate overflow-hidden px-4 py-5 text-white min-[360px]:px-5 sm:px-7 sm:py-6">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-12 -top-24 -z-10 h-72 w-72 rounded-full border-[35px] border-white/[0.035]"
@@ -29,11 +29,11 @@ export function CompetitionResultHero({ result }: { result: CompetitionParticipa
               Resultado final
             </p>
             <h4
-              className={`mt-2 text-sm font-semibold sm:text-base ${award.metal === 'gold' ? 'text-amber-200' : award.metal === 'silver' ? 'text-slate-200' : 'text-orange-200'}`}
+              className={`mt-2 font-sans text-sm font-semibold sm:text-base ${award.metal === 'gold' ? 'text-amber-200' : award.metal === 'silver' ? 'text-slate-200' : 'text-orange-200'}`}
             >
               {award.label}
             </h4>
-            <p className="mt-1 font-heading text-[clamp(1.75rem,8vw,3.3rem)] font-bold leading-tight tracking-[-0.045em] text-white tabular-nums">{`${award.place}.º puesto`}</p>
+            <p className="mt-1 font-heading text-[clamp(2.5rem,10vw,4.5rem)] font-bold leading-tight tracking-tight text-white tabular-nums">{`${award.place}.º puesto`}</p>
             <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-300">
               <BadgeCheck className="h-4 w-4 text-emerald-300" aria-hidden="true" />
               Oficial

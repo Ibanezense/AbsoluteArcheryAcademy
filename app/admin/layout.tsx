@@ -29,11 +29,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminGuard>
-      <div className="admin-workspace flex min-h-screen bg-slate-50">
+      <div className="admin-workspace flex min-h-screen bg-[#f2f5f7]">
         <AdminSidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
         <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
-          <header className="sticky top-0 z-30 border-b border-slate-800 bg-[#101b28] px-4 py-2 lg:hidden">
+          <header className="sport-dark sticky top-0 z-30 border-b border-slate-800 bg-[#101e2a] px-4 py-3 lg:hidden">
             <div className="flex items-center justify-between">
               <div>
                 <Image
@@ -49,7 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button
                 onClick={() => setIsSidebarOpen(true)}
                 className="grid h-11 w-11 place-items-center rounded-lg text-white transition hover:bg-slate-800"
-                aria-label="Abrir menu"
+                aria-label="Abrir menú" aria-expanded={isSidebarOpen}
               >
                 <Menu size={22} />
               </button>
@@ -57,7 +57,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </header>
 
           <main className="flex-1">
-            <div className="w-full px-4 py-4 pb-24 lg:px-8 lg:py-6 lg:pb-10">
+            <div className="w-full px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8 lg:pb-12 xl:px-10">
               <div className="mx-auto max-w-[1680px]">{children}</div>
             </div>
           </main>

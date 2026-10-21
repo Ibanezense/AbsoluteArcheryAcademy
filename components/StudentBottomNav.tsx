@@ -36,23 +36,24 @@ const NavItem = memo(function NavItem({
   return (
     <Link
       href={href}
-      className={`relative flex min-h-[68px] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl px-0.5 text-[0.6875rem] max-[359px]:text-[0.625rem] sm:text-[0.8rem] transition-colors ${
+      className={`relative flex min-h-[64px] min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xl px-0.5 text-[0.6875rem] max-[359px]:text-[0.625rem] sm:text-[0.8rem] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-orange-300 ${
         active
-          ? 'font-semibold text-accent'
-          : 'font-medium text-white hover:text-white'
+          ? 'bg-white/10 font-bold text-orange-300'
+          : 'font-medium text-slate-300 hover:bg-white/10 hover:text-white'
       }`}
       aria-current={active ? 'page' : undefined}
     >
       <Icon
-        size={26}
+        aria-hidden="true"
+        size={23}
         strokeWidth={active ? 2.35 : 2.15}
         className={
-          active ? 'text-accent opacity-100' : 'text-white opacity-100'
+          active ? 'text-orange-300' : 'text-slate-300'
         }
       />
       <span className="whitespace-nowrap">{label}</span>
       {active && (
-        <span className="absolute bottom-0 h-1 w-12 rounded-full bg-accent shadow-[0_0_14px_rgba(249,115,22,0.7)]" />
+        <span className="absolute top-0 h-0.5 w-7 rounded-full bg-orange-300" />
       )}
     </Link>
   )
@@ -80,9 +81,9 @@ const StudentBottomNav = memo(function StudentBottomNav() {
     <nav
       role="navigation"
       aria-label="Navegación del alumno"
-      className="fixed inset-x-0 bottom-0 z-40 bg-[#020B14] pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-14px_30px_rgba(2,11,20,0.24)]"
+      className="sport-dark fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-navy pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 shadow-[0_-8px_28px_rgba(16,30,42,0.12)]"
     >
-      <div className="mx-auto flex max-w-[1120px] items-center px-2 md:px-8">
+      <div className="mx-auto flex max-w-[1120px] items-center gap-1 px-2 md:gap-2 md:px-8">
         {items.map((item) => (
           <NavItem
             key={item.key}

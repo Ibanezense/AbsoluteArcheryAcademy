@@ -15,17 +15,17 @@ export interface ButtonProps
 }
 
 const base =
-	"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:pointer-events-none disabled:opacity-50"
+	"inline-flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50"
 
 const variants: Record<Variant, string> = {
 	default:
-		"bg-white/10 hover:bg-white/20 text-textpri border border-line",
+		"bg-white hover:bg-slate-50 text-textpri border border-line shadow-card",
 	outline:
-		"border border-line bg-transparent hover:bg-white/10 text-textpri",
+		"border border-line bg-transparent hover:bg-slate-100 text-textpri",
 	ghost:
-		"bg-transparent hover:bg-white/10 text-textsec",
+		"bg-transparent hover:bg-slate-100 text-textsec",
 	accent:
-		"bg-accent hover:brightness-105 text-white",
+		"bg-accent hover:bg-orange-800 text-white shadow-card",
 	destructive:
 		"bg-danger hover:brightness-105 text-white",
 }

@@ -35,7 +35,7 @@ export function ProgressSummary({
                   ? 'Distancia pendiente de confirmar'
                   : 'Distancia asignada'}
             </h2>
-            <p className="mt-1 text-3xl font-bold tracking-tight">
+            <p className="mt-1 font-heading text-5xl font-bold leading-none tracking-tight">
               {assignedDistance === null ? 'Por asignar' : `${assignedDistance} m`}
             </p>
           </div>
@@ -194,11 +194,11 @@ function RecordCard({
   return (
     <article
       aria-label={title}
-      className="relative isolate overflow-hidden rounded-[1.35rem] border border-slate-700 bg-[#0a1828] p-4 text-white shadow-[0_12px_28px_-14px_rgba(2,11,20,0.65)] sm:p-6"
+      className="sport-dark relative isolate overflow-hidden rounded-2xl border border-slate-700 p-5 text-white shadow-soft sm:p-6"
     >
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-16 -top-16 -z-10 h-48 w-48 rounded-full border-[24px] border-white/[0.035]"
+        className="pointer-events-none absolute -right-16 top-0 -z-10 h-full w-40 -skew-x-[20deg] border-x-[16px] border-white/[0.035]"
       />
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -206,7 +206,7 @@ function RecordCard({
             <Sparkles className="h-3 w-3 shrink-0" aria-hidden="true" />
             Récord personal
           </p>
-          <h3 className="mt-2 text-sm font-semibold text-white sm:text-base">
+          <h3 className="mt-2 font-sans text-sm font-semibold text-white sm:text-base">
             {control.arrows} flechas
           </h3>
         </div>
@@ -214,7 +214,7 @@ function RecordCard({
           <Trophy className="h-4 w-4" aria-hidden="true" />
         </span>
       </div>
-      <p className="mt-5 font-heading text-[clamp(2.65rem,12vw,4.5rem)] font-bold leading-none tracking-[-0.055em] text-white tabular-nums">
+      <p className="mt-5 font-heading text-[clamp(3.5rem,16vw,6rem)] font-bold leading-none tracking-tight text-white tabular-nums">
         {control.score}
       </p>
       <p className="mt-2 text-xs text-slate-300">de {control.arrows * 10} puntos</p>

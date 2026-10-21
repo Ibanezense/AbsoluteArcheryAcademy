@@ -19,7 +19,7 @@ type StudentCardProps = {
 
 export function StudentCard({ children, className = '', variant = 'default' }: StudentCardProps) {
   return (
-    <div className={`rounded-[1.35rem] border ${variantClasses[variant]} ${className}`}>
+    <div className={`rounded-2xl border ${variantClasses[variant]} ${className}`}>
       {children}
     </div>
   )
@@ -29,7 +29,7 @@ export function StudentNotice({ children, className = '' }: { children: ReactNod
   return (
     <StudentCard variant="info" className={`px-4 py-3 ${className}`}>
       <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-blue-300 text-base font-black text-blue-600">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-blue-300 text-base font-black text-blue-600">
           i
         </span>
         <div className="min-w-0 flex-1">{children}</div>

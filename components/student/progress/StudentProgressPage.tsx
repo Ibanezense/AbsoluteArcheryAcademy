@@ -28,7 +28,7 @@ export default function StudentProgressPage() {
       : null
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[#F7F8FA] pb-8 text-textpri">
+      <div className="min-h-screen bg-bg pb-8 text-textpri">
         <MobileStudentHeader
           title="Mi progreso"
           subtitle={
@@ -55,7 +55,7 @@ export default function StudentProgressPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-bold">{context.activeStudent?.full_name}</p>
+                  <p className="font-heading text-2xl font-bold tracking-tight">{context.activeStudent?.full_name}</p>
                   {!showCompetitions && (
                     <p className="mt-1 text-xs text-textsec">
                       {data?.checked_at
@@ -87,7 +87,7 @@ export default function StudentProgressPage() {
                 <div
                   role="tablist"
                   aria-label="Fuentes de progreso"
-                  className="grid grid-cols-2 rounded-2xl border border-line bg-white p-1"
+                  className="grid grid-cols-2 gap-1 rounded-xl border border-line bg-slate-200/60 p-1.5"
                 >
                   {(['training', 'competitions'] as const).map((source) => {
                     const active = source === (showCompetitions ? 'competitions' : 'training')
@@ -117,7 +117,7 @@ export default function StudentProgressPage() {
                           setSection(next)
                           document.getElementById(`${tabsId}-${next}`)?.focus()
                         }}
-                        className={`min-h-11 rounded-xl px-4 py-2 text-sm font-semibold transition ${active ? 'bg-slate-950 text-white shadow-sm' : 'text-textsec hover:bg-slate-50'}`}
+                        className={`min-h-12 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${active ? 'bg-navy text-white shadow-sm' : 'text-textsec hover:bg-white'}`}
                       >
                         {source === 'training' ? 'Controles' : 'Competencias'}
                       </button>

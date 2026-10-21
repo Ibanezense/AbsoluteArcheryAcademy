@@ -147,11 +147,11 @@ function whatsappHref(phone?: string | null) {
 
 function SectionHeader({ title, helper }: { title: string; helper?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <h2 className="text-lg font-bold tracking-[-0.02em] text-slate-950">{title}</h2>
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h2 className="font-heading text-2xl font-bold tracking-tight text-slate-950">{title}</h2>
       {helper && (
         <>
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <span aria-hidden="true" className="hidden h-1 w-4 bg-accent sm:block" />
           <p className="text-sm text-slate-500">{helper}</p>
         </>
       )}
@@ -161,7 +161,7 @@ function SectionHeader({ title, helper }: { title: string; helper?: string }) {
 
 function AdminSurface({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
+    <section className={`surface-panel ${className}`}>
       {children}
     </section>
   )
@@ -184,7 +184,7 @@ function IconBadge({ icon, tone = 'orange' }: { icon: ReactNode; tone?: 'orange'
                 : 'border-orange-200 bg-orange-50 text-accent'
 
   return (
-    <div className={`grid h-11 w-11 place-items-center rounded-2xl border ${toneClass}`}>
+    <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${toneClass}`}>
       {icon}
     </div>
   )
@@ -203,7 +203,7 @@ function StudentSearchBox() {
         onChange={(event) => setSearch(event.target.value)}
         aria-label="Buscar alumno, DNI o teléfono"
         placeholder="Buscar alumno, DNI o telefono..."
-        className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-950 shadow-[0_10px_30px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
+        className="h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-accent/40 focus:ring-2 focus:ring-orange-100"
       />
 
       {showResults && (
@@ -273,21 +273,21 @@ function WeeklyCard({
   const iconTone = tone === 'critical' ? 'red' : tone === 'warning' ? 'amber' : 'orange'
 
   return (
-    <article className={`group relative overflow-hidden rounded-xl border p-3 transition hover:border-orange-300 ${toneClass}`}>
-      <Link href={href} aria-label={action} className="absolute inset-0 z-10" />
-      <div className="relative hidden items-start justify-between gap-3 sm:flex">
+    <article className={`group relative overflow-hidden rounded-2xl border p-4 shadow-[0_2px_6px_rgba(16,30,42,0.025)] transition-colors hover:border-orange-300 sm:p-5 ${toneClass}`}>
+      <Link href={href} aria-label={action} className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
+      <div className="relative flex items-start justify-between gap-3">
         <IconBadge icon={icon} tone={iconTone} />
         <ArrowRight className="mt-3 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-accent" />
       </div>
-      <div className="relative mt-1">
-        <p className="text-sm font-semibold text-slate-700">{title}</p>
+      <div className="relative mt-4">
+        <p className="text-xs font-semibold leading-5 text-slate-600 sm:text-sm">{title}</p>
         <div className="mt-2 flex items-end justify-between gap-3">
-          <p className="font-heading text-2xl font-semibold leading-none tracking-tight text-slate-950">{value}</p>
-          <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500 sm:inline-flex">
+          <p className="font-heading text-4xl font-bold tabular-nums leading-none tracking-tight text-slate-950 sm:text-5xl">{value}</p>
+          <span className="hidden border-l border-slate-200 pl-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 sm:inline-flex">
             Semana
           </span>
         </div>
-        <p className="mt-1 hidden max-w-[12rem] text-xs leading-5 text-slate-500 sm:block">{helper}</p>
+        <p className="mt-3 hidden max-w-[14rem] text-xs leading-5 text-slate-600 sm:block">{helper}</p>
       </div>
     </article>
   )
@@ -299,11 +299,11 @@ function WeeklySummary() {
   const summary = query.data
   return <section aria-labelledby="weekly-summary-title" className="space-y-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <div><h2 id="weekly-summary-title" className="text-lg font-semibold text-slate-950">Esta semana</h2><p className="mt-1 text-sm text-slate-500">Lunes a domingo · {formatWeeklyRange(query.week.startDate, query.week.endDate)}</p></div>
+      <div><h2 id="weekly-summary-title" className="font-heading text-2xl font-bold tracking-tight text-slate-950">Esta semana</h2><p className="mt-1 text-sm text-slate-500">Lunes a domingo · {formatWeeklyRange(query.week.startDate, query.week.endDate)}</p></div>
       <p className="text-xs text-slate-500">Se actualiza cada lunes · hora de Lima</p>
     </div>
     {query.isPending ? <p role="status" className="py-6 text-sm text-slate-500">Cargando resumen semanal…</p> : query.isError || !summary ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p>No pudimos cargar los indicadores de esta semana.</p><button type="button" onClick={() => void query.refetch()} className="mt-2 min-h-11 font-medium underline">Reintentar resumen semanal</button></div> : <>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <WeeklyCard title="Reservas de la semana" value={summary.reservations} helper="Alumnos y pruebas, sin canceladas" action="Ver agenda" href="/admin/asistencia" icon={<CalendarDays className="h-5 w-5" />} />
         <WeeklyCard title="Clases programadas" value={summary.scheduledSessions} helper="Turnos de lunes a domingo" action="Ver turnos" href="/admin/sesiones" icon={<CalendarClock className="h-5 w-5" />} />
         <WeeklyCard title="Cupos libres esta semana" value={summary.availableSlots ?? 'N/D'} helper="En turnos que aún no comenzaron" action="Nueva reserva" href="/admin/sesiones" icon={<Gauge className="h-5 w-5" />} />
@@ -332,9 +332,9 @@ function AlertTask({
   const isCritical = getAlertSeverity(numericCount) === 'critical'
   const isWarning = getAlertSeverity(numericCount) === 'warning'
   const toneClass = isCritical
-    ? 'border-rose-200 bg-gradient-to-br from-rose-50 to-orange-50'
+    ? 'border-rose-200 bg-rose-50/70'
     : isWarning
-      ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50'
+      ? 'border-amber-200 bg-amber-50/70'
       : 'border-slate-200 bg-white'
   const badgeClass = isCritical
     ? 'bg-rose-500 text-white'
@@ -343,17 +343,17 @@ function AlertTask({
       : 'bg-slate-100 text-slate-700'
 
   return (
-    <article className={`rounded-xl border p-3 ${toneClass}`}>
+    <article className={`rounded-2xl border p-4 ${toneClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="max-w-[11rem] text-sm font-bold leading-5 text-slate-950">{title}</p>
           <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
         </div>
-        <span className={`rounded-xl px-3 py-1.5 text-sm font-black shadow-card ${badgeClass}`}>
+        <span className={`rounded-lg px-2.5 py-1 font-heading text-2xl font-bold tabular-nums ${badgeClass}`}>
           {count === null ? 'N/D' : count}
         </span>
       </div>
-      <Link href={href} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent">
+      <Link href={href} className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-accent">
         {action}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -373,11 +373,11 @@ function MonthlyMetric({
   icon: ReactNode
 }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(15,23,42,0.055)]">
+    <article className="surface-panel p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="max-w-[8rem] text-sm font-semibold leading-5 text-slate-700">{title}</p>
-          <p className="mt-3 font-heading text-3xl font-black tracking-[-0.045em] text-slate-950">{value}</p>
+          <p className="mt-3 font-heading text-4xl font-bold tabular-nums tracking-tight text-slate-950">{value}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2 text-slate-500">{icon}</div>
       </div>
@@ -443,7 +443,7 @@ function AgendaItem({ item }: { item: AdminDashboardAgendaItem }) {
   const whatsApp = whatsappHref(item.phone)
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.04)]">
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="space-y-2">
@@ -520,9 +520,10 @@ function WeeklyAgenda({
             <button
               key={item.key}
               onClick={() => setFilter(item.key)}
-              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              aria-pressed={filter === item.key}
+              className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
                 filter === item.key
-                  ? 'border-accent bg-accent text-white shadow-[0_10px_25px_rgba(249,115,22,0.22)]'
+                  ? 'border-[#101e2a] bg-[#101e2a] text-white'
                   : 'border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-950'
               }`}
             >
@@ -636,16 +637,16 @@ export default function AdminDashboard() {
   )
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-8">
         <AdminPageHeader
           eyebrow={currentDate}
           title="Inicio"
-          description="Tu academia, hoy"
+          description="Agenda, alumnos y seguimiento de tu academia."
           actions={
             <>
               <StudentSearchBox />
               <button
-                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-accent px-5 font-bold text-white shadow-[0_16px_35px_rgba(249,115,22,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
+                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-white transition-colors hover:bg-orange-800"
                 onClick={() => setIsQuickBookingOpen(true)}
               >
                 <Plus className="h-5 w-5" />
@@ -661,7 +662,7 @@ export default function AdminDashboard() {
 
         <section className="space-y-3">
           <SectionHeader title="Pendientes importantes" helper="Tareas que requieren seguimiento operativo." />
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             <AlertTask
               title="Membresias por vencer"
               count={dashboard.alerts.expiringMemberships}
@@ -709,12 +710,12 @@ export default function AdminDashboard() {
 
         <WeekendIntroCapacity />
 
-        <details className="admin-monthly-summary rounded-xl border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer py-1 text-sm font-semibold text-slate-700">Resultados y análisis del mes</summary>
+        <details className="admin-monthly-summary surface-panel p-5">
+          <summary className="min-h-11 cursor-pointer py-2 font-heading text-xl font-semibold text-slate-800">Resultados y análisis del mes</summary>
           <div className="mt-4 space-y-4">
         <section className="space-y-3">
           <SectionHeader title="Resumen del mes" helper="Resultados del mes actual." />
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <MonthlyMetric
               title="Alumnos activos"
               value={dashboard.monthly.activeStudents}
@@ -760,7 +761,7 @@ export default function AdminDashboard() {
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
             <button
               onClick={() => setIsQuickBookingOpen(true)}
-              className="flex items-center gap-2 rounded-2xl border border-accent bg-accent px-3 py-3 text-sm font-bold text-white shadow-[0_14px_30px_rgba(249,115,22,0.22)] transition hover:-translate-y-0.5"
+              className="flex min-h-12 items-center gap-2 rounded-xl border border-accent bg-accent px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-800"
             >
               <Plus className="h-4 w-4" />
               Nueva reserva
@@ -769,7 +770,7 @@ export default function AdminDashboard() {
               <Link
                 key={action.label}
                 href={action.href}
-                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700 transition hover:-translate-y-0.5 hover:border-accent/30 hover:text-accent"
+                className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-accent/30 hover:bg-orange-50 hover:text-accent"
               >
                 {action.icon}
                 {action.label}
