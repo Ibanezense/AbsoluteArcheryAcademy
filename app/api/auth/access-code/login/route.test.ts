@@ -54,4 +54,33 @@ describe('POST /api/auth/access-code/login', () => {
     expect(payload.error).toBe('Demasiados intentos fallidos. Intenta nuevamente en unos minutos.')
     expect(mockRecordAccessCodeLoginAttempt).not.toHaveBeenCalled()
   })
+  it.each([
+    { status: 'active', blocked: false, profileActive: true, expected: 200 },
+    { status: 'expired', blocked: false, profileActive: true, expected: 200 },
+    { status: 'paused', blocked: false, profileActive: true, expected: 200 },
+    { status: 'inactive', blocked: false, profileActive: true, expected: 403 },
+    { status: 'retired', blocked: false, profileActive: true, expected: 403 },
+    { status: 'withdrawn', blocked: false, profileActive: true, expected: 403 },
+    { status: 'blocked', blocked: false, profileActive: true, expected: 403 },
+    { status: 'suspended', blocked: false, profileActive: true, expected: 403 },
+    { status: 'expired', blocked: true, profileActive: true, expected: 403 },
+    { status: 'paused', blocked: false, profileActive: false, expected: 403 },
+    { status: null, blocked: false, profileActive: true, expected: 403 },
+  ])('enforces account access for $status, blocked=$blocked, profileActive=$profileActive', async ({ status, blocked, profileActive, expected }) => {
+    mockCheckAccessCodeLoginRateLimit.mockResolvedValue({ blocked: false })
+    const generateLink = vi.fn().mockResolvedValue({ data: { properties: { email_otp: 'test-otp' } }, error: null })
+    const admin = {
+      from: vi.fn((table: string) => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({
+        data: table === 'profiles' ? { id: 'student-profile', role: 'student', full_name: 'Test', is_active: profileActive } : status === null ? null : { operational_status: status, account_access_blocked: blocked }, error: null,
+      }) }) }) })),
+      auth: { admin: { getUserById: vi.fn().mockResolvedValue({ data: { user: { email: 'test@example.com' } }, error: null }), generateLink } },
+    }
+    const auth = { auth: { verifyOtp: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-access', refresh_token: 'test-refresh' } }, error: null }) } }
+    mockCreateClient.mockImplementation((_url: string, key: string) => key === 'service-key' ? admin : auth)
+    const { POST } = await import('./route')
+    const response = await POST(new Request('http://localhost/api/auth/access-code/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ accessCode: 'ABC123' }) }))
+    expect(response.status).toBe(expected)
+    if (expected === 403) expect(generateLink).not.toHaveBeenCalled()
+    else expect((await response.json()).redirectTo).toBe('/')
+  })
 })

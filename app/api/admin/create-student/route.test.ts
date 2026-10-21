@@ -388,9 +388,10 @@ describe('PUT /api/admin/create-student', () => {
 
   it.each([
     { contact: undefined, status: 200 },
+    { contact: undefined, status: 200, academicActive: false },
     { contact: { full_name: 'Tutor', email: 'cct@example.com', dni: '01234567' }, status: 200 },
     { contact: { full_name: 'Tutor', email: 'cct@example.com', dni: '123' }, status: 400 },
-  ])('preserves account access while validating optional guardian billing contact: $status', async ({ contact, status }) => {
+  ])('preserves account access while validating optional guardian billing contact: $status', async ({ contact, status, academicActive }) => {
     const studentSelectMaybeSingle = vi.fn().mockResolvedValue({
       data: {
         id: 'student-1',
@@ -499,7 +500,7 @@ describe('PUT /api/admin/create-student', () => {
           student: {
             full_name: 'Alumno CCT',
             email: 'cct@example.com',
-            is_active: true,
+            is_active: academicActive ?? true,
             guardian_contact: contact,
           },
         }),
@@ -525,6 +526,8 @@ describe('PUT /api/admin/create-student', () => {
       })
     )
     expect(studentSelectMaybeSingle).toHaveBeenCalled()
+    expect(profilesUpdate).toHaveBeenCalled()
+    expect(profilesUpdate.mock.calls[0][0]).not.toHaveProperty('is_active')
   })
 })
 

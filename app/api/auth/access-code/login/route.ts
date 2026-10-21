@@ -107,6 +107,22 @@ export async function POST(req: Request) {
       )
     }
 
+    if (profile.role === 'student') {
+      const { data: student, error: studentError } = await admin
+        .from('students')
+        .select('operational_status, account_access_blocked')
+        .eq('self_profile_id', profile.id)
+        .maybeSingle()
+
+      if (studentError) {
+        return NextResponse.json({ error: 'No se pudo verificar el acceso. Intenta nuevamente.' }, { status: 503 })
+      }
+      if (!student || student.account_access_blocked === true || !['active', 'expired', 'paused'].includes(student.operational_status)) {
+        await recordAccessCodeLoginAttempt(admin, { request: req, accessCode, secret: serviceKey, success: false })
+        return NextResponse.json({ error: 'Esta cuenta esta inactiva. Contacta al administrador.' }, { status: 403 })
+      }
+    }
+
     const { data: userData, error: userError } = await admin.auth.admin.getUserById(profile.id)
     if (userError || !userData.user?.email) {
       return NextResponse.json(

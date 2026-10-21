@@ -756,12 +756,12 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
     const accepted = await confirm(
       manualInactive
         ? 'El sistema volverá a calcular el estado del alumno según sus membresías y clases disponibles.'
-        : 'El alumno quedará marcado como inactivo. Su cuenta seguirá habilitada, pero no se crearán clases ni membresías.',
+        : 'El alumno quedará inactivo y no podrá ingresar a la plataforma.',
       {
         title: manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo',
         description: manualInactive
           ? 'Esta acción no asigna clases ni crea una membresía.'
-          : 'Esta acción no bloquea el acceso a su cuenta.',
+          : 'Las membresías vencidas y en pausa permiten ingresar; el estado inactivo impide el acceso.',
         confirmLabel: manualInactive ? 'Quitar estado inactivo' : 'Marcar como inactivo',
         cancelLabel: 'Cancelar',
         tone: manualInactive ? 'default' : 'danger',

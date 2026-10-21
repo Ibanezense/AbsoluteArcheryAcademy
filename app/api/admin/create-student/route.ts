@@ -637,6 +637,7 @@ async function handleCreate(req: Request) {
       .from('students')
       .insert({
         ...student,
+        ...(student.is_active === false ? { operational_status: 'inactive', operational_status_reason: 'Estado inactivo asignado al crear el alumno' } : {}),
         is_country_club_tiabaya_member: student.is_country_club_tiabaya_member,
         self_profile_id: selfProfileId,
         created_by: actorId,
@@ -776,7 +777,6 @@ async function handleUpdate(req: Request) {
           email: student.email,
           phone: student.phone,
           dni: student.dni,
-          is_active: student.is_active,
         })
         .eq('id', existingSelfProfileId)
 

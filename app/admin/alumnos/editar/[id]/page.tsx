@@ -419,7 +419,7 @@ export default function AdminAlumnoEditorPage() {
                           onChange={(event) => setStudentForm((current) => ({ ...current, phone: event.target.value }))}
                         />
                       </div>
-                      <div className="grid gap-2">
+                      {isNew ? <div className="grid gap-2">
                         <label className="text-sm text-textsec">Estado</label>
                         <select
                           className="input"
@@ -429,7 +429,10 @@ export default function AdminAlumnoEditorPage() {
                           <option value="true">Activo</option>
                           <option value="false">Inactivo</option>
                         </select>
-                      </div>
+                      </div> : <div className="grid gap-2">
+                        <p className="text-sm text-textsec">Acceso a la plataforma</p>
+                        <p className="text-sm">Las cuentas vencidas y en pausa pueden ingresar. Para desactivar el acceso, marca al alumno como inactivo desde su ficha.</p>
+                      </div>}
                     </div>
                   </div>
                 </div>
