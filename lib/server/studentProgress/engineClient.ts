@@ -480,6 +480,7 @@ export async function engineDataset(
         competitor_id: competitorId,
         external_id: studentId,
         dataset_version_id: versionId,
+        class_context: 'scope-v1',
       },
       'reader',
       undefined,

@@ -51,6 +51,8 @@ export type AcademyCompetitionSnapshot = {
     division: string | null
     age_class: string | null
     gender: string | null
+    competition_scope?: 'national' | 'open' | 'unknown'
+    source_category_code?: string
   }>
   participations: Array<{
     participation_id: string

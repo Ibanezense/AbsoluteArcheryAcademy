@@ -21,6 +21,8 @@ export type CompetitionParticipationView = {
   finalPosition: CompetitionPosition
   finalStatuses: string[]
   sourceParticipationIds?: string[]
+  tournamentKey?: string
+  competitionScope?: 'national' | 'open' | 'unknown'
 }
 
 function positive(value: number | null | undefined): value is number {
@@ -54,6 +56,11 @@ type Fragment = {
 }
 
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+function tournamentKey(dataset: AcademyCompetitionSnapshot, participation: AcademyCompetitionSnapshot['participations'][number]) {
+  const words = normalize(dataset.competitor.display_name).split(' ').filter(Boolean)
+  const athlete = words.length >= 2 ? words.sort().join(' ') : dataset.competitor.competitor_id
+  return JSON.stringify([dataset.consumer_subject.namespace, dataset.consumer_subject.external_id, dataset.dataset_id, dataset.dataset_version_id, dataset.dataset_version, dataset.tournament.tournament_id, participation.tournament_id, athlete])
+}
 function documentedCategory(fragment: Fragment) {
   return [fragment.category?.label, fragment.category?.division, fragment.category?.age_class, fragment.category?.gender]
     .some(value => !!value && !['unknown', 'unspecified', 'not documented', 'categoria no documentada'].includes(normalize(value)))
@@ -66,13 +73,11 @@ function competitionGroups(datasets: AcademyCompetitionSnapshot[]): Fragment[][]
   for (const dataset of datasets) {
     const removed = (kind: string, id: string) => dataset.tombstones.some(row => [kind, `${kind}s`].includes(row.entity_type) && row.entity_id === id)
     if (removed('competitor', dataset.competitor.competitor_id)) continue
-    const words = normalize(dataset.competitor.display_name).split(' ').filter(Boolean)
-    const athlete = words.length >= 2 ? words.sort().join(' ') : dataset.competitor.competitor_id
     for (const participation of dataset.participations) {
       const identity = JSON.stringify([dataset.dataset_id, dataset.dataset_version_id, participation.participation_id])
       if (seen.has(identity) || removed('participation', participation.participation_id)) continue
       seen.add(identity)
-      const scope = JSON.stringify([dataset.consumer_subject.namespace, dataset.consumer_subject.external_id, dataset.dataset_id, dataset.dataset_version_id, dataset.dataset_version, dataset.tournament.tournament_id, participation.tournament_id, athlete])
+      const scope = tournamentKey(dataset, participation)
       const fragment: Fragment = {
         dataset, participation,
         category: dataset.competitive_classes.find(row => row.competitive_class_id === participation.competitive_class_id),
@@ -147,6 +152,8 @@ export function projectCompetitionProgress(
         eventStart: dataset.tournament.start_date,
         eventEnd: dataset.tournament.end_date,
         categoryLabel: category?.label || 'Categoría no documentada',
+        tournamentKey: tournamentKey(dataset, participation),
+        competitionScope: category?.competition_scope || 'unknown',
         participationStatus: participationStatus(group),
         sourceParticipationIds: group.map(row => row.participation.participation_id).sort(),
         qualifications: qualifications.map((row) => {
@@ -184,4 +191,30 @@ export function projectCompetitionProgress(
     (a, b) =>
       (b.eventStart || '').localeCompare(a.eventStart || '') || a.key.localeCompare(b.key)
   )
+}
+
+export type CompetitionTournamentView = {
+  key: string
+  eventName: string
+  eventStart: string | null
+  eventEnd: string | null
+  categoryLabels: string[]
+  participations: CompetitionParticipationView[]
+}
+
+/** A tournament is one visual container; its standings remain independent. */
+export function projectCompetitionTournaments(datasets: AcademyCompetitionSnapshot[]): CompetitionTournamentView[] {
+  const events = new Map<string, CompetitionTournamentView>()
+  for (const participation of projectCompetitionProgress(datasets)) {
+    const key = participation.tournamentKey!
+    let event = events.get(key)
+    if (!event) {
+      event = { key, eventName: participation.eventName, eventStart: participation.eventStart, eventEnd: participation.eventEnd, categoryLabels: [], participations: [] }
+      events.set(key, event)
+    }
+    event.participations.push(participation)
+    const label = participation.categoryLabel
+    if (!['unknown', 'categoria no documentada'].includes(normalize(label)) && !event.categoryLabels.some(value => normalize(value) === normalize(label))) event.categoryLabels.push(label)
+  }
+  return [...events.values()]
 }

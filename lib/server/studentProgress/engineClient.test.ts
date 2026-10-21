@@ -67,6 +67,14 @@ describe('TE consumer validation', () => {
     const f = competitionFixture()
     expect(validateEngineSnapshot(f, f.consumer_subject.external_id, 'cmp_alpha')).toEqual(f)
   })
+  it('accepts documented National/Open category context and rejects invented scopes', () => {
+    const f = competitionFixture()
+    for (const scope of ['national', 'open', 'unknown', 'invented']) {
+      const value = { ...f, competitive_classes: [{ ...f.competitive_classes[0], competition_scope: scope, source_category_code: 'RU15W' }] }
+      if (scope === 'invented') expect(() => validateEngineSnapshot(value, f.consumer_subject.external_id, 'cmp_alpha')).toThrow()
+      else expect(validateEngineSnapshot(value, f.consumer_subject.external_id, 'cmp_alpha')).toEqual(value)
+    }
+  })
   it('rejects another identity, incomplete payload and nonindividual categories', () => {
     const f = competitionFixture()
     expect(() =>
@@ -146,6 +154,7 @@ describe('TE dataset transport envelope', () => {
     await expect(
       engineDataset(fixture.consumer_subject.external_id, 'cmp_alpha', 'version_1')
     ).resolves.toEqual(fixture)
+    expect(new URL(vi.mocked(fetch).mock.calls[0][0] as string).searchParams.get('class_context')).toBe('scope-v1')
   })
   it('rejects a transport version that contradicts the canonical payload', async () => {
     const fixture = setup(2)

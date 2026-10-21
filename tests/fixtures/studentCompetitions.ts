@@ -86,3 +86,23 @@ export function fragmentedCompetitionSnapshots(): AcademyCompetitionSnapshot[] {
     })
   })
 }
+
+export function historicalTournament() {
+  return ['qualification', 'registration', 'national', 'open'].map((stage, index) => {
+    const source = competitionSnapshot()
+    const id = `participation-${stage}`
+    source.competitor.competitor_id = `competitor-${stage}`
+    source.tournament.start_date = '2025-09-05'
+    source.competitive_classes[0] = {
+      ...source.competitive_classes[0], competitive_class_id: `class-${stage}`,
+      label: index % 2 ? 'Recurvo damas sub 15' : 'recurvo damas sub 15',
+      age_class: 'recurvo damas sub 15', gender: 'female',
+      competition_scope: stage === 'national' || stage === 'open' ? stage : 'unknown',
+      source_category_code: 'RU15W',
+    }
+    source.participations[0] = { ...source.participations[0], participation_id: id, competitor_id: source.competitor.competitor_id, competitive_class_id: `class-${stage}` }
+    source.qualifications = stage === 'qualification' ? [{ ...source.qualifications[0], participation_id: id, score: 544, distance_m: 40 }] : []
+    source.final_results = stage === 'national' || stage === 'open' ? [{ final_result_id: `final-${stage}`, participation_id: id, final_position: stage === 'national' ? 6 : 4, result_status: 'official', source_kind: 'supplied' }] : []
+    return source
+  })
+}

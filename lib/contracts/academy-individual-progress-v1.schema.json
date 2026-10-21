@@ -149,6 +149,16 @@
               "open",
               "unknown"
             ]
+          },
+          "competition_scope": {
+            "enum": [
+              "national",
+              "open",
+              "unknown"
+            ]
+          },
+          "source_category_code": {
+            "type": "string"
           }
         }
       }

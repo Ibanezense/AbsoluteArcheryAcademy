@@ -8,12 +8,38 @@ import {
 } from '@/tests/fixtures/studentCompetitions'
 import { CompetitionHistory } from '@/components/student/progress/CompetitionHistory'
 import { CompetitionSourceState } from '@/components/student/progress/CompetitionSourceState'
+import { historicalTournament } from '@/tests/fixtures/studentCompetitions'
 
 describe('competition results presentation', () => {
+  it('renders one historical tournament with one score and labeled National and Open results', () => {
+    const html = renderToStaticMarkup(createElement(CompetitionHistory, { datasets: historicalTournament() }))
+    expect((html.match(/<article/g) || [])).toHaveLength(1)
+    expect(html).toContain('Nacional')
+    expect(html).toContain('Open')
+    expect(html).toContain('6.º puesto')
+    expect(html).toContain('4.º puesto')
+    expect((html.match(/>544</g) || [])).toHaveLength(1)
+    expect(html).not.toContain('Sin puntaje de clasificación publicado')
+    expect(html).not.toContain('Posición por revisar')
+    expect(html).not.toContain('\uFFFD')
+  })
+  it('labels every score when the same tournament has different legitimate categories', () => {
+    const first = snapshot(), second = snapshot()
+    second.participations[0].participation_id = 'compound-participation'
+    second.participations[0].competitive_class_id = 'compound-class'
+    second.competitive_classes[0] = { ...second.competitive_classes[0], competitive_class_id: 'compound-class', label: 'Compuesto', division: 'compound', competition_scope: 'open' }
+    second.qualifications[0] = { ...second.qualifications[0], participation_id: 'compound-participation', qualification_id: 'compound-score', score: 650 }
+    const html = renderToStaticMarkup(createElement(CompetitionHistory, { datasets: [first, second] }))
+    expect((html.match(/<article/g) || [])).toHaveLength(1)
+    expect(html).toMatch(/Recurvo individual[^<]*Registro \d/)
+    expect(html).toMatch(/Compuesto[^<]*Open/)
+    expect(html).toContain('493')
+    expect(html).toContain('650')
+  })
   it('renders one complete result when classification and final arrive under separate source IDs', () => {
     const html = renderToStaticMarkup(createElement(CompetitionHistory, { datasets: fragmentedCompetitionSnapshots() }))
     expect((html.match(/<article/g) || [])).toHaveLength(1)
-    expect(html).toContain('1 participación verificada')
+    expect(html).toContain('1 torneo verificado')
     expect(html).toContain('Medalla de oro')
     expect(html).toContain('1.º puesto')
     expect(html).toContain('557')
