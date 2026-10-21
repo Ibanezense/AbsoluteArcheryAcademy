@@ -80,6 +80,7 @@ import {
 } from '@/lib/utils/adminStudentProfile'
 import { getStudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 import { getLimaDateKey, MEMBERSHIP_TIMEZONE } from '@/lib/utils/membershipCycles'
+import { membershipCycleEndDate } from '@/lib/utils/monthlyMembership'
 import {
   buildStudentAttendanceHistory,
   formatAttendanceMembershipMonth,
@@ -1788,7 +1789,7 @@ function MembershipAssignmentDrawer({ open, studentName, plans, plansLoading, fo
   const basePrice = selectedPlan?.base_price || 0
   const discountAmount = form.discount_type === 'percentage' ? Math.min(basePrice, basePrice * discountValue / 100) : form.discount_type === 'amount' ? Math.min(basePrice, discountValue) : 0
   const total = Math.max(basePrice - discountAmount, 0)
-  const endDate = selectedPlan?.duration_days ? dayjs(form.start_date).add(selectedPlan.duration_days - 1, 'day').format('DD MMM YYYY') : 'Sin fecha fija'
+  const endDate = selectedPlan?.duration_days && form.start_date ? dayjs(membershipCycleEndDate(form.start_date, selectedPlan.duration_days)).format('DD MMM YYYY') : 'Sin fecha fija'
 
   if (!open) return null
   return (

@@ -11,9 +11,10 @@ import { TrainingHistory } from './TrainingHistory'
 import { TrainingEvolutionChart } from './TrainingEvolutionChart'
 
 export function TrainingWorkspace({ data }: { data: TrainingProgressResponse }) {
-  const [distance, setDistance] = useState<number | null>(data.assigned_distance_m)
+  const initialDistance = data.summary?.reference.summary_distance_m ?? data.assigned_distance_m
+  const [distance, setDistance] = useState<number | null>(initialDistance)
   const [format, setFormat] = useState<TrainingFilter['format']>(() =>
-    selectInitialTrainingFormat(data.controls, data.assigned_distance_m)
+    selectInitialTrainingFormat(data.controls, initialDistance)
   )
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')

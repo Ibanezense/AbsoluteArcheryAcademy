@@ -54,13 +54,18 @@ export function summarizeTrainingControls(
 ): TrainingSummary {
   const valid = controls.filter((row) => row.status === 'valid')
   const global = latest(valid)
-  const assigned = valid.filter((row) => row.distance === assignedDistance)
+  const hasAssigned = valid.some((row) => row.distance === assignedDistance)
+  const previousDistance = global.distances.length === 1 ? global.distances[0] : null
+  const summaryDistance = assignedDistance === null ? null : hasAssigned ? assignedDistance : previousDistance
+  const assigned = valid.filter((row) => row.distance === summaryDistance)
   const last = assignedDistance === null ? global : latest(assigned)
   const kind =
     assignedDistance === null
       ? 'pending'
       : !global.control
         ? 'assigned'
+        : !hasAssigned && summaryDistance !== null
+          ? 'previous'
         : global.distances.length > 1
           ? 'uncertain'
           : global.distances[0] !== assignedDistance
@@ -70,6 +75,7 @@ export function summarizeTrainingControls(
     reference: {
       kind,
       assigned_distance_m: assignedDistance,
+      summary_distance_m: summaryDistance,
       latest_distances_m: global.distances,
       latest_date: global.date,
     },

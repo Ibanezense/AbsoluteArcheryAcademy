@@ -18,6 +18,7 @@ export function ProgressSummary({
   assignedDistance: number | null
 }) {
   const reference = summary?.reference
+  const recordDistance = reference?.summary_distance_m === undefined ? assignedDistance : reference.summary_distance_m
   const discrepancy = reference && ['discrepant', 'uncertain'].includes(reference.kind)
   return (
     <section aria-label="Resumen de entrenamiento" className="space-y-4">
@@ -55,9 +56,14 @@ export function ProgressSummary({
             </p>
           </div>
         )}
-        {assignedDistance !== null && (
+        {reference?.kind === 'previous' && (
+          <p className="mt-4 rounded-xl border border-orange-100 bg-orange-50 p-3 text-sm leading-6 text-orange-900">
+            Aún no tienes controles válidos a {assignedDistance} m. Conservamos tus récords a {recordDistance} m hasta que registres tu primer puntaje en la distancia actual.
+          </p>
+        )}
+        {recordDistance !== null && (
           <p className="mt-4 text-xs leading-relaxed text-textsec">
-            El resumen muestra tus controles válidos a {assignedDistance} m en todas las
+            El resumen muestra tus controles válidos a {recordDistance} m en todas las
             fechas. Los filtros de abajo solo cambian la gráfica y el historial.
           </p>
         )}
@@ -84,12 +90,12 @@ export function ProgressSummary({
           </p>
         </div>
       )}
-      {summary && assignedDistance !== null && (
+      {summary && recordDistance !== null && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 px-1">
             <h2 className="text-base font-bold">Tus récords personales</h2>
             <span className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-textsec">
-              {assignedDistance} m
+              {recordDistance} m{reference?.kind === 'previous' ? ' · Distancia anterior' : ''}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:gap-4">

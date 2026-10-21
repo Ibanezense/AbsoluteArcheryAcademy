@@ -1,0 +1,258 @@
+diff --git a/db/migrations/0007_academy_athlete_groups.sql b/db/migrations/0007_academy_athlete_groups.sql
+new file mode 100644
+index 0000000..2e17b2d
+--- /dev/null
++++ b/db/migrations/0007_academy_athlete_groups.sql
+@@ -0,0 +1,18 @@
++-- Stable name and identifying facts confirmed by the academy. Sporting source rows are untouched.
++CREATE TABLE IF NOT EXISTS academy_athlete_groups (
++  competitor_id TEXT NOT NULL,
++  external_id TEXT NOT NULL,
++  confirmed_name TEXT NOT NULL,
++  confirmed_identity TEXT NOT NULL DEFAULT '{}',
++  confirmed_at TEXT NOT NULL,
++  PRIMARY KEY(competitor_id,external_id)
++);
++CREATE INDEX IF NOT EXISTS ix_academy_athlete_group_external ON academy_athlete_groups(external_id);
++-- Existing manually confirmed links retain their current published name as the approved group anchor.
++INSERT OR IGNORE INTO academy_athlete_groups(competitor_id,external_id,confirmed_name,confirmed_identity,confirmed_at)
++SELECT b.competitor_id,b.external_id,c.display_name,c.canonical_json,b.verified_at
++FROM external_bridges b JOIN competitors c ON c.competitor_id=b.competitor_id
++JOIN dataset_versions v ON v.dataset_version_id=c.dataset_version_id
++WHERE b.namespace='academy_reservas_student' AND b.link_status='confirmed'
++  AND v.status='published' AND v.is_current=1
++  AND v.dataset_version_id=(SELECT cv.dataset_version_id FROM competitors cc JOIN dataset_versions cv ON cv.dataset_version_id=cc.dataset_version_id WHERE cc.competitor_id=b.competitor_id AND cv.status='published' AND cv.is_current=1 ORDER BY cv.published_at DESC,cv.dataset_version_id DESC LIMIT 1);
+diff --git a/src/infrastructure/queries/academy-athlete-group.mjs b/src/infrastructure/queries/academy-athlete-group.mjs
+new file mode 100644
+index 0000000..7ce3173
+--- /dev/null
++++ b/src/infrastructure/queries/academy-athlete-group.mjs
+@@ -0,0 +1,59 @@
++import { ACADEMY_NAMESPACE,AcademyApiError } from '../http/academy-auth.mjs';
++
++export const publishedIndividual=`FROM competitors c JOIN dataset_versions v ON v.dataset_version_id=c.dataset_version_id
++  WHERE v.status='published' AND v.is_current=1 AND EXISTS(SELECT 1 FROM participations p JOIN competitive_classes cc ON cc.dataset_version_id=p.dataset_version_id AND cc.competitive_class_id=p.competitive_class_id WHERE p.dataset_version_id=c.dataset_version_id AND p.competitor_id=c.competitor_id AND cc.event_type='individual')`;
++const precomposed=Array.from('áéíóúüñÁÉÍÓÚÜÑ').reduce((sql,letter)=>`replace(${sql},'${letter}','${letter.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}')`,'display_name');
++export const foldedAcademyName='lower('+Array.from('\u0301\u0308\u0303').reduce((sql,mark)=>`replace(${sql},'${mark}','')`,precomposed)+')';
++export function athleteNameKey(name){
++  return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').trim().split(/\s+/).filter(Boolean).sort().join(' ');
++}
++function facts(row){
++  try{return typeof row.canonical_json==='string'?JSON.parse(row.canonical_json):{};}
++  catch{throw new AcademyApiError(503,'IDENTITY_SOURCE_INVALID');}
++}
++export async function searchAcademyAthletes(client,query){
++  const words=String(query).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().split(/\s+/).filter(Boolean);
++  if(!words.length)return [];
++  const result=await client.execute({sql:`WITH eligible AS (SELECT c.*,ROW_NUMBER() OVER(PARTITION BY c.competitor_id ORDER BY v.published_at DESC,v.dataset_version_id DESC) AS rn ${publishedIndividual}) SELECT * FROM eligible WHERE rn=1 AND ${words.map(()=>`${foldedAcademyName} LIKE ? ESCAPE '\\'`).join(' AND ')} ORDER BY ${foldedAcademyName},competitor_id LIMIT 1001`,args:words.map(word=>`%${word.replace(/[\\%_]/g,'\\$&')}%`)});
++  return result.rows;
++}
++export async function matchingAcademyAthlete(client,competitorId,stored=null){
++  const anchor=await client.execute({sql:`SELECT c.* ${publishedIndividual} AND c.competitor_id=? ORDER BY v.published_at DESC,v.dataset_version_id DESC LIMIT 1`,args:[competitorId]});
++  if(!anchor.rows.length)throw new AcademyApiError(404,'PUBLISHED_INDIVIDUAL_NOT_FOUND');
++  const name=String(stored?.confirmed_name??anchor.rows[0].display_name),key=athleteNameKey(name);
++  if(key!==athleteNameKey(anchor.rows[0].display_name))throw new AcademyApiError(409,'ATHLETE_NAME_CHANGED');
++  const rows=await searchAcademyAthletes(client,key);
++  if(rows.length>1000)throw new AcademyApiError(409,'ATHLETE_GROUP_REQUIRES_REVIEW');
++  const matched=key.split(' ').length<2?[anchor.rows[0]]:rows.filter(row=>athleteNameKey(row.display_name)===key);
++  if(!matched.some(row=>row.competitor_id===competitorId)||matched.length>200)throw new AcademyApiError(409,'ATHLETE_GROUP_REQUIRES_REVIEW');
++  const identities=[...matched.map(facts),...(stored?[facts({canonical_json:stored.confirmed_identity})]:[])];
++  const identity={};
++  for(const field of ['birth_date','world_archery_id','federation_id']){
++    const known=new Set(identities.map(row=>row[field]).filter(value=>value!==null&&value!==undefined&&String(value).trim()!=='').map(value=>String(value).trim()));
++    if(known.size>1)throw new AcademyApiError(409,'ATHLETE_IDENTITY_CONFLICT');
++    if(known.size===1)identity[field]=[...known][0];
++  }
++  if(matched.some(row=>row.identity_status==='ambiguous'))throw new AcademyApiError(409,'ATHLETE_IDENTITY_CONFLICT');
++  return {anchor:anchor.rows[0],identity,members:matched.sort((a,b)=>String(a.competitor_id).localeCompare(String(b.competitor_id)))};
++}
++export async function assertAthleteOwners(client,members,externalId){
++  const ids=members.map(row=>String(row.competitor_id));
++  const owners=await client.execute({sql:`SELECT 1 FROM external_bridges WHERE namespace=? AND link_status='confirmed' AND external_id<>? AND competitor_id IN (${ids.map(()=>'?').join(',')}) LIMIT 1`,args:[ACADEMY_NAMESPACE,externalId,...ids]});
++  if(owners.rows.length)throw new AcademyApiError(409,'IDENTITY_ALREADY_ASSIGNED');
++}
++export async function academyAthleteMembers(client,competitorId,externalId){
++  const anchor=await client.execute({sql:'SELECT g.* FROM academy_athlete_groups g JOIN external_bridges b ON b.competitor_id=g.competitor_id AND b.external_id=g.external_id WHERE b.namespace=? AND b.link_status=\'confirmed\' AND g.competitor_id=? AND g.external_id=?',args:[ACADEMY_NAMESPACE,competitorId,externalId]});
++  if(!anchor.rows.length)throw new AcademyApiError(403,'UNCONFIRMED_EXTERNAL_BRIDGE');
++  const group=await matchingAcademyAthlete(client,competitorId,anchor.rows[0]);
++  await assertAthleteOwners(client,group.members,externalId);
++  return {contract_version:'te-academy-athlete-members-v1',checked_at:new Date().toISOString(),external_id:externalId,anchor_competitor_id:competitorId,competitor_ids:group.members.map(row=>String(row.competitor_id))};
++}
++export async function requireRelatedAthleteBridge(client,competitorId,externalId){
++  const groups=await client.execute({sql:"SELECT g.competitor_id FROM academy_athlete_groups g JOIN external_bridges b ON b.competitor_id=g.competitor_id AND b.external_id=g.external_id WHERE g.external_id=? AND b.namespace=? AND b.link_status='confirmed' LIMIT 201",args:[externalId,ACADEMY_NAMESPACE]});
++  if(groups.rows.length>200)throw new AcademyApiError(409,'ATHLETE_GROUP_REQUIRES_REVIEW');
++  for(const group of groups.rows){
++    const data=await academyAthleteMembers(client,String(group.competitor_id),externalId);
++    if(data.competitor_ids.includes(competitorId))return;
++  }
++  throw new AcademyApiError(403,'UNCONFIRMED_EXTERNAL_BRIDGE');
++}
+diff --git a/src/infrastructure/queries/academy-identity.mjs b/src/infrastructure/queries/academy-identity.mjs
+index 664ea65..7dd4bc2 100644
+--- a/src/infrastructure/queries/academy-identity.mjs
++++ b/src/infrastructure/queries/academy-identity.mjs
+@@ -2,0 +3 @@ import { ACADEMY_NAMESPACE,AcademyApiError } from "../http/academy-auth.mjs";
++import { athleteNameKey,matchingAcademyAthlete,assertAthleteOwners,searchAcademyAthletes } from './academy-athlete-group.mjs';
+@@ -7,8 +8,10 @@ const candidate=row=>({competitor_id:String(row.competitor_id),display_name:Stri
+-// SQLite lower() folds ASCII only; fold Spanish diacritics explicitly without changing stored names.
+-const precomposedName=Array.from("áéíóúüñÁÉÍÓÚÜÑ").reduce((sql,letter)=>`replace(${sql},'${letter}','${letter.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}')`,"display_name");
+-const foldedName="lower("+Array.from("\u0301\u0308\u0303").reduce((sql,mark)=>`replace(${sql},'${mark}','')`,precomposedName)+")";
+-export async function academyIdentitySearch(client,query) {
+-  const words=[...new Set(query.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().split(/\s+/).filter(Boolean))];
+-  if(!words.length)return {candidates:[],has_more:false};
+-  const result=await client.execute({sql:`WITH eligible AS (SELECT c.competitor_id,c.display_name,c.identity_status,ROW_NUMBER() OVER(PARTITION BY c.competitor_id ORDER BY v.published_at DESC,v.dataset_version_id DESC) AS rn ${publishedIndividual}) SELECT competitor_id,display_name,identity_status FROM eligible WHERE rn=1 AND ${words.map(()=>`${foldedName} LIKE ? ESCAPE '\\'`).join(' AND ')} ORDER BY ${foldedName},competitor_id LIMIT 21`,args:words.map(word=>`%${word.replace(/[\\%_]/g,"\\$&")}%`)});
+-  return {candidates:result.rows.slice(0,20).map(candidate),has_more:result.rows.length>20};
++export async function academyIdentitySearch(client,query,externalId=null) {
++  const matches=await searchAcademyAthletes(client,query);
++  const groups=new Map();
++  for(const row of matches){const key=athleteNameKey(row.display_name);const groupKey=key.split(' ').length<2?String(row.competitor_id):key;if(!groups.has(groupKey))groups.set(groupKey,row);}
++  if(externalId){
++    const existing=await client.execute({sql:"SELECT g.competitor_id,g.confirmed_name FROM academy_athlete_groups g JOIN external_bridges b ON b.competitor_id=g.competitor_id AND b.external_id=g.external_id WHERE g.external_id=? AND b.namespace=? AND b.link_status='confirmed' ORDER BY g.competitor_id",args:[externalId,ACADEMY_NAMESPACE]});
++    const preferred=new Set();
++    for(const anchor of existing.rows){const key=athleteNameKey(anchor.confirmed_name),row=matches.find(member=>member.competitor_id===anchor.competitor_id&&athleteNameKey(member.display_name)===key);if(row&&groups.has(key)&&!preferred.has(key)){groups.set(key,row);preferred.add(key);}}
++  }
++  return {candidates:[...groups.values()].slice(0,20).map(candidate),has_more:groups.size>20||matches.length>1000};
+@@ -18,0 +22 @@ export async function academyIdentityPreview(client,competitorId) {
++  const group=await matchingAcademyAthlete(client,competitorId),ids=group.members.map(row=>String(row.competitor_id));
+@@ -20 +24 @@ export async function academyIdentityPreview(client,competitorId) {
+-    FROM dataset_versions v JOIN tournaments t ON t.dataset_version_id=v.dataset_version_id JOIN participations p ON p.dataset_version_id=v.dataset_version_id JOIN competitive_classes cc ON cc.dataset_version_id=p.dataset_version_id AND cc.competitive_class_id=p.competitive_class_id WHERE v.status='published' AND v.is_current=1 AND p.competitor_id=? AND cc.event_type='individual' ORDER BY t.start_date DESC,v.dataset_id,cc.competitive_class_id`,args:[competitorId]});
++    FROM dataset_versions v JOIN tournaments t ON t.dataset_version_id=v.dataset_version_id JOIN participations p ON p.dataset_version_id=v.dataset_version_id JOIN competitive_classes cc ON cc.dataset_version_id=p.dataset_version_id AND cc.competitive_class_id=p.competitive_class_id WHERE v.status='published' AND v.is_current=1 AND p.competitor_id IN (${ids.map(()=>'?').join(',')}) AND cc.event_type='individual' ORDER BY t.start_date DESC,v.dataset_id,cc.competitive_class_id`,args:ids});
+@@ -43,0 +48,2 @@ export async function applyAcademyIdentityCommand(client,body) {
++      const group=await matchingAcademyAthlete(tx,competitorId);
++      await assertAthleteOwners(tx,group.members,externalId);
+@@ -45,0 +52 @@ export async function applyAcademyIdentityCommand(client,body) {
++      await tx.execute({sql:'INSERT INTO academy_athlete_groups(competitor_id,external_id,confirmed_name,confirmed_identity,confirmed_at) VALUES(?,?,?,?,?) ON CONFLICT(competitor_id,external_id) DO UPDATE SET confirmed_name=excluded.confirmed_name,confirmed_identity=excluded.confirmed_identity,confirmed_at=excluded.confirmed_at',args:[competitorId,externalId,String(group.anchor.display_name),JSON.stringify(group.identity),new Date().toISOString()]});
+diff --git a/src/infrastructure/queries/academy-progress-read-model.mjs b/src/infrastructure/queries/academy-progress-read-model.mjs
+index 711fbb0..a0b508b 100644
+--- a/src/infrastructure/queries/academy-progress-read-model.mjs
++++ b/src/infrastructure/queries/academy-progress-read-model.mjs
+@@ -2,0 +3 @@ import { contractValidators,assertContract } from "../../canonical/validate.mjs"
++import { requireRelatedAthleteBridge } from './academy-athlete-group.mjs';
+@@ -14 +15 @@ export async function requireAcademyBridge(client,competitorId,externalId) {
+-  if(!bridge.rows.length)throw new AcademyApiError(403,"UNCONFIRMED_EXTERNAL_BRIDGE");
++  if(!bridge.rows.length)await requireRelatedAthleteBridge(client,competitorId,externalId);
+diff --git a/src/infrastructure/http/academy-consumer-api.mjs b/src/infrastructure/http/academy-consumer-api.mjs
+index a11ab5d..0a32831 100644
+--- a/src/infrastructure/http/academy-consumer-api.mjs
++++ b/src/infrastructure/http/academy-consumer-api.mjs
+@@ -2,0 +3 @@ import { academyDataset,academyHistory } from "../queries/academy-progress-read-
++import { academyAthleteMembers } from '../queries/academy-athlete-group.mjs';
+@@ -11,0 +13,6 @@ export async function handleAcademyConsumer(request,database,environment) {
++    if(operation==='members'){
++      if(params.has('after')||params.has('dataset_version_id'))throw new AcademyApiError(400,'INVALID_OPERATION');
++      const tx=await database.transaction('read');
++      try{const value=await academyAthleteMembers(tx,competitorId,externalId);await tx.commit();return academyReply(200,value);}
++      catch(error){if(!tx.closed)await tx.rollback();throw error;}finally{tx.close();}
++    }
+diff --git a/src/infrastructure/http/academy-identity-api.mjs b/src/infrastructure/http/academy-identity-api.mjs
+index f8a0a89..88caed2 100644
+--- a/src/infrastructure/http/academy-identity-api.mjs
++++ b/src/infrastructure/http/academy-identity-api.mjs
+@@ -16 +16 @@ export function createAcademyIdentityApi({database,environment=process.env}) {
+-          uniqueParameters(params,["operation","q"]);
++          uniqueParameters(params,["operation","q","external_id"]);
+@@ -18 +18,2 @@ export function createAcademyIdentityApi({database,environment=process.env}) {
+-          value=await academyIdentitySearch(database,q.trim());
++          const externalId=params.get('external_id');if(externalId!==null&&!academyUuid(externalId))throw new AcademyApiError(400,'INVALID_IDENTITY_SUBJECT');
++          value=await academyIdentitySearch(database,q.trim(),externalId);
+diff --git a/tests/integration/academy-athlete-group.test.mjs b/tests/integration/academy-athlete-group.test.mjs
+new file mode 100644
+index 0000000..7331613
+--- /dev/null
++++ b/tests/integration/academy-athlete-group.test.mjs
+@@ -0,0 +1,68 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { createClient } from '@libsql/client';
++import { readFile,mkdtemp } from 'node:fs/promises';
++import os from 'node:os';
++import path from 'node:path';
++import { randomUUID } from 'node:crypto';
++import { performance } from 'node:perf_hooks';
++import { athleteNameKey, matchingAcademyAthlete, academyAthleteMembers } from '../../src/infrastructure/queries/academy-athlete-group.mjs';
++import { applyAcademyIdentityCommand,academyIdentitySearch } from '../../src/infrastructure/queries/academy-identity.mjs';
++import { requireAcademyBridge } from '../../src/infrastructure/queries/academy-progress-read-model.mjs';
++
++test('full names normalize order and accents, while preserving repeated tokens and rejecting partial names',()=>{
++  assert.equal(athleteNameKey('Chávez Guevara Alejandro Joaquín'),athleteNameKey('Alejandro Joaquín Chávez Guevara'));
++  assert.notEqual(athleteNameKey('Alejandro Chávez'),athleteNameKey('Alejandro Joaquín Chávez Guevara'));
++  assert.notEqual(athleteNameKey('Jose Jose Perez'),athleteNameKey('Jose Perez'));
++});
++test('one confirmed athlete covers future tournaments; ownership conflicts, identity contradictions and revocation fail closed',async()=>{
++  const root=await mkdtemp(path.join(os.tmpdir(),'te-athlete-group-'));
++  const db=createClient({url:`file:${path.join(root,'test.db').replaceAll('\\','/')}`});
++  const external='00000000-0000-4000-8000-000000000001';
++  try{
++    await db.executeMultiple(`CREATE TABLE dataset_versions(dataset_version_id TEXT PRIMARY KEY,dataset_id TEXT,status TEXT,is_current INTEGER,published_at TEXT);
++      CREATE TABLE competitors(dataset_version_id TEXT,competitor_id TEXT,display_name TEXT,identity_status TEXT,canonical_json TEXT DEFAULT '{}');
++      CREATE TABLE participations(dataset_version_id TEXT,competitor_id TEXT,competitive_class_id TEXT);
++      CREATE TABLE tournaments(dataset_version_id TEXT,name TEXT,start_date TEXT);
++      CREATE TABLE competitive_classes(dataset_version_id TEXT,competitive_class_id TEXT,event_type TEXT,canonical_json TEXT);
++      CREATE TABLE external_bridges(competitor_id TEXT,namespace TEXT,external_id TEXT,link_status TEXT,verified_at TEXT,PRIMARY KEY(competitor_id,namespace,external_id));
++      INSERT INTO dataset_versions VALUES('v1','ds1','published',1,'2026-10-01T00:00:00Z');
++      INSERT INTO tournaments VALUES('v1','Event','2026-10-01');
++      INSERT INTO competitors VALUES('v1','c1','Alejandro Joaquín Chávez Guevara','unresolved','{}'),('v1','c2','Chavez Guevara Alejandro Joaquin','unresolved','{}'),('v1','partial','Alejandro Chavez','unresolved','{}');
++      INSERT INTO participations VALUES('v1','c1','class1'),('v1','c2','class1'),('v1','partial','class1');
++      INSERT INTO competitive_classes VALUES('v1','class1','individual','{"label":"Recurvo"}');`);
++    await db.executeMultiple(await readFile(new URL('../../db/migrations/0006_academy_identity.sql',import.meta.url),'utf8'));
++    await db.executeMultiple(await readFile(new URL('../../db/migrations/0007_academy_athlete_groups.sql',import.meta.url),'utf8'));
++    const cmd=(operation,generation,id='c1',owner=external)=>({operation,generation,competitor_id:id,external_id:owner,request_id:randomUUID(),actor_id:'00000000-0000-4000-8000-000000000002',evidence:'Administrator confirmed athlete'});
++    await assert.rejects(()=>academyAthleteMembers(db,'c1',external));
++    await applyAcademyIdentityCommand(db,cmd('confirm',1));
++    await db.execute("UPDATE competitors SET display_name='Chavez Guevara Alejandro Joaquin' WHERE competitor_id='c1'");
++    await db.execute("UPDATE competitors SET display_name='Alejandro Joaquin Chavez Guevara' WHERE competitor_id='c2'");
++    assert.equal((await academyIdentitySearch(db,'Alejandro Joaquin Chavez Guevara',external)).candidates[0].competitor_id,'c1','the existing athlete anchor wins over alphabetical tournament order');
++    assert.deepEqual((await academyAthleteMembers(db,'c1',external)).competitor_ids,['c1','c2']);
++    await requireAcademyBridge(db,'c2',external);
++    await assert.rejects(()=>requireAcademyBridge(db,'partial',external));
++    await db.execute("INSERT INTO competitors VALUES('v1','future','Alejandro Joaquin Chavez Guevara','unresolved','{}')");
++    await db.execute("INSERT INTO participations VALUES('v1','future','class1')");
++    assert.deepEqual((await academyAthleteMembers(db,'c1',external)).competitor_ids,['c1','c2','future']);
++    await assert.rejects(()=>applyAcademyIdentityCommand(db,cmd('confirm',1,'c2','00000000-0000-4000-8000-000000000003')));
++    await db.execute(`UPDATE competitors SET canonical_json='{"birth_date":"1990-01-01"}' WHERE competitor_id='c1'`);
++    await db.execute(`UPDATE competitors SET canonical_json='{"birth_date":"2000-01-01"}' WHERE competitor_id='c2'`);
++    await assert.rejects(()=>matchingAcademyAthlete(db,'c1'));
++    await db.execute("UPDATE competitors SET canonical_json='{}'");
++    const additions=Array.from({length:197},(_,index)=>`bulk_${index}`);
++    await db.batch(additions.flatMap(id=>[
++      {sql:"INSERT INTO competitors VALUES('v1',?,'Alejandro Joaquin Chavez Guevara','unresolved','{}')",args:[id]},
++      {sql:"INSERT INTO participations VALUES('v1',?,'class1')",args:[id]},
++    ]),'write');
++    const started=performance.now();
++    assert.equal((await academyAthleteMembers(db,'c1',external)).competitor_ids.length,200);
++    console.info(`Bounded200-member catalogue: ${Math.round(performance.now()-started)}ms (isolated SQLite)`);
++    await db.execute("INSERT INTO competitors VALUES('v1','overflow','Alejandro Joaquin Chavez Guevara','unresolved','{}')");
++    await db.execute("INSERT INTO participations VALUES('v1','overflow','class1')");
++    await assert.rejects(()=>academyAthleteMembers(db,'c1',external),error=>error.code==='ATHLETE_GROUP_REQUIRES_REVIEW');
++    await applyAcademyIdentityCommand(db,cmd('revoke',2));
++    await assert.rejects(()=>requireAcademyBridge(db,'c2',external));
++    await assert.rejects(()=>academyAthleteMembers(db,'c1',external));
++  }finally{db.close();}
++});
+diff --git a/tests/integration/academy-identity.test.mjs b/tests/integration/academy-identity.test.mjs
+index 161f089..c3dde38 100644
+--- a/tests/integration/academy-identity.test.mjs
++++ b/tests/integration/academy-identity.test.mjs
+@@ -31 +31 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
+-      CREATE TABLE competitors(dataset_version_id TEXT,competitor_id TEXT,display_name TEXT,identity_status TEXT);
++      CREATE TABLE competitors(dataset_version_id TEXT,competitor_id TEXT,display_name TEXT,identity_status TEXT,canonical_json TEXT DEFAULT '{}');
+@@ -37 +37 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
+-      INSERT INTO competitors VALUES('dsv_one','cmp_one','Ana Igual','unresolved'),('dsv_one','cmp_two','Ana Igual','unresolved');
++      INSERT INTO competitors(dataset_version_id,competitor_id,display_name,identity_status) VALUES('dsv_one','cmp_one','Ana Igual','unresolved'),('dsv_one','cmp_two','Ana Igual','unresolved');
+@@ -40,0 +41 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
++    await db.executeMultiple(await readFile(new URL('../../db/migrations/0007_academy_athlete_groups.sql',import.meta.url),'utf8'));
+@@ -42 +43 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
+-    const search=await api(request("operation=search&q=Ana"));assert.equal(search.status,200);assert.equal(search.body.candidates.length,2);
++    const search=await api(request("operation=search&q=Ana"));assert.equal(search.status,200);assert.equal(search.body.candidates.length,1);
+@@ -62,0 +64 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
++    assert.equal((await api(request('',command('revoke',2,{competitor_id:'cmp_two'})))).body.link_status,'revoked');
+@@ -65 +67 @@ test("identity commands preserve evidence, request idempotency, exclusivity and
+-    await db.execute("INSERT INTO competitors VALUES('dsv_one','cmp_race','Homonym race','unresolved')");
++    await db.execute("INSERT INTO competitors(dataset_version_id,competitor_id,display_name,identity_status) VALUES('dsv_one','cmp_race','Homonym race','unresolved')");
+diff --git a/tests/integration/foundation.test.mjs b/tests/integration/foundation.test.mjs
+index ad64986..0dc5b00 100644
+--- a/tests/integration/foundation.test.mjs
++++ b/tests/integration/foundation.test.mjs
+@@ -27 +27 @@ test("empty databases migrate, import and produce the same portable signature",
+-    assert.deepEqual(dbA.first.map((item) => item.outcome), ["applied", "applied", "applied", "applied", "applied", "applied"]);
++    assert.deepEqual(dbA.first.map((item) => item.outcome), ["applied", "applied", "applied", "applied", "applied", "applied", "applied"]);

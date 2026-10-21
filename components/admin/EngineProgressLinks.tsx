@@ -182,7 +182,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
                 : 'Retirar identidad de competencias',
             description:
               action === 'beginConfirm'
-                ? 'El alumno y sus tutores podrán consultar los resultados de este registro cuando la vinculación se verifique.'
+                ? 'El alumno y sus tutores podrán consultar todos los torneos de este arquero. Los nuevos registros con el mismo nombre completo se incorporarán automáticamente; los datos contradictorios requerirán revisión.'
                 : undefined,
             confirmLabel: action === 'beginConfirm' ? 'Confirmar identidad' : 'Retirar acceso',
             tone: action === 'beginConfirm' ? 'warning' : 'danger',
@@ -268,8 +268,7 @@ export default function EngineProgressLinks({ studentId }: { studentId: string }
           Competencias
         </h3>
         <p className="mt-1 text-sm text-slate-600">
-          Un alumno puede tener varios registros de torneos. Confirma cada identidad antes de
-          mostrar sus resultados.
+          Confirma al arquero una sola vez. Sus torneos con el mismo nombre completo se reunirán automáticamente, aunque tengan códigos diferentes.
         </p>
       </div>
       {!accountId || query.isLoading ? (

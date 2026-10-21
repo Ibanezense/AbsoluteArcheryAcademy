@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { validateEngineSnapshot, validateEngineHistory, engineDataset } from './engineClient'
+import { validateEngineSnapshot, validateEngineHistory, engineDataset, engineAthleteMembers } from './engineClient'
 export const competitionFixture = () => ({
   contract_version: 'te-academy-individual-progress-v1',
   complete: true,
@@ -118,6 +118,18 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 describe('TE dataset transport envelope', () => {
+  it('accepts only the source allowlist for the exact student and anchor', async () => {
+    const student = competitionFixture().consumer_subject.external_id
+    const body = { contract_version: 'te-academy-athlete-members-v1', checked_at: '2026-10-20T15:00:00Z', external_id: student, anchor_competitor_id: 'cmp_alpha', competitor_ids: ['cmp_alpha', 'cmp_beta'] }
+    vi.stubEnv('TOURNAMENT_ENGINE_URL', 'https://engine.example')
+    vi.stubEnv('TOURNAMENT_ENGINE_ACADEMY_TOKEN', 'r'.repeat(40))
+    vi.stubEnv('TOURNAMENT_ENGINE_ACADEMY_IDENTITY_TOKEN', 'i'.repeat(40))
+    for (const value of [body, { ...body, external_id: 'another_student' }, { ...body, competitor_ids: ['cmp_beta'] }, { ...body, competitor_ids: ['cmp_alpha', 'cmp_alpha'] }, { ...body, anchor_competitor_id: 'cmp_other' }]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(value)))
+      if (value === body) await expect(engineAthleteMembers(student, 'cmp_alpha')).resolves.toEqual(['cmp_alpha', 'cmp_beta'])
+      else await expect(engineAthleteMembers(student, 'cmp_alpha')).rejects.toMatchObject({ code: 'invalid_source' })
+    }
+  })
   function setup(dataset_version: number) {
     const fixture = competitionFixture()
     vi.stubEnv('TOURNAMENT_ENGINE_URL', 'https://engine.example')

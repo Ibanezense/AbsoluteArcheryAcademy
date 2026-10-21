@@ -5,17 +5,21 @@ import type {
 import type { ProgressLink } from '@/lib/contracts/studentProgress'
 import {
   engineHistory,
+  engineAthleteMembers,
   engineDataset,
   EngineSourceError,
   type EngineHistory,
 } from './engineClient'
 export type EngineContext = { student_id: string; links: ProgressLink[] }
 export type EngineReadResult = {
+  anchor_competitor_id?: string
+  authorized_competitor_ids?: string[]
   datasets: AcademyCompetitionSnapshot[]
   failures: number
   checked_at: string | null
 }
 type ReaderDependencies = {
+  members?: (student: string, competitor: string, signal?: AbortSignal) => Promise<string[]>
   history: (
     student: string,
     competitor: string,
@@ -30,6 +34,7 @@ type ReaderDependencies = {
   ) => Promise<AcademyCompetitionSnapshot>
 }
 const readerDependencies: ReaderDependencies = {
+  members: engineAthleteMembers,
   history: engineHistory,
   dataset: engineDataset,
 }
@@ -38,6 +43,26 @@ const oldest = (values: string[]) =>
     ? values.reduce((a, b) => (Date.parse(a) < Date.parse(b) ? a : b))
     : null
 export async function collectEngineCompetitions(
+  studentId: string,
+  competitorId: string,
+  deps: ReaderDependencies = readerDependencies,
+  signal?: AbortSignal
+): Promise<EngineReadResult> {
+  const members = deps.members ? await deps.members(studentId, competitorId, signal) : [competitorId]
+  if (!members.length || members.length > 200 || !members.includes(competitorId) || new Set(members).size !== members.length) throw new EngineSourceError(502, 'invalid_source')
+  const results: EngineReadResult[] = []
+  for (let offset = 0; offset < members.length; offset += 4) {
+    const batch = await Promise.all(members.slice(offset, offset + 4).map(id => collectIndividualCompetitions(studentId, id, deps, signal)))
+    results.push(...batch)
+  }
+  return {
+    anchor_competitor_id: competitorId, authorized_competitor_ids: members,
+    datasets: results.flatMap(result => result.datasets),
+    failures: results.reduce((count, result) => count + result.failures, 0),
+    checked_at: oldest(results.map(result => result.checked_at).filter((value): value is string => !!value)),
+  }
+}
+async function collectIndividualCompetitions(
   studentId: string,
   competitorId: string,
   deps: ReaderDependencies = readerDependencies,
@@ -190,11 +215,13 @@ export async function getCompetitionsProgress(
             let value = !force ? cache.get(key)?.value : undefined
             if (!value) {
               value = await deps.read(link.external_id)
+              const permittedIds = value.anchor_competitor_id === link.external_id && value.authorized_competitor_ids?.includes(link.external_id)
+                ? value.authorized_competitor_ids : [link.external_id]
               if (
                 value.datasets.some(
                   (d) =>
                     d.consumer_subject.external_id !== studentId ||
-                    d.competitor.competitor_id !== link.external_id
+                    !permittedIds.includes(d.competitor.competitor_id)
                 )
               )
                 throw Error('invalid_source')

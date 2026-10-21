@@ -31,7 +31,7 @@ describe('normalizeMembershipCommitments', () => {
 })
 
 describe('buildMembershipCyclePreview', () => {
-  it('builds consecutive inclusive paid cycles with UTC date-only arithmetic', () => {
+  it('anchors monthly cycle ends to the original day and keeps periods consecutive', () => {
     const preview = buildMembershipCyclePreview({
       origin: 'paid',
       startDate: '2026-08-01',
@@ -46,15 +46,15 @@ describe('buildMembershipCyclePreview', () => {
         cycleNumber: 1,
         origin: 'paid',
         startDate: '2026-08-01',
-        endDate: '2026-08-30',
+        endDate: '2026-09-01',
         classes: 8,
         amount: 180,
       },
       {
         cycleNumber: 2,
         origin: 'paid',
-        startDate: '2026-08-31',
-        endDate: '2026-09-29',
+        startDate: '2026-09-02',
+        endDate: '2026-10-01',
         classes: 8,
         amount: 180,
       },

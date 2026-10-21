@@ -23,7 +23,8 @@ export type AcademyControlsSnapshot = {
   controls: AcademyControl[]
 }
 export type ProgressReference = {
-  kind: 'current' | 'assigned' | 'pending' | 'discrepant' | 'uncertain'
+  kind: 'current' | 'assigned' | 'pending' | 'discrepant' | 'uncertain' | 'previous'
+  summary_distance_m?: number | null
   assigned_distance_m: number | null
   latest_distances_m: number[]
   latest_date: string | null

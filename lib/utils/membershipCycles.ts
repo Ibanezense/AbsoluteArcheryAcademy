@@ -1,3 +1,4 @@
+import { membershipCycleEndDate } from './monthlyMembership'
 export type MembershipOrigin = 'paid' | 'gift'
 
 export type MembershipDisplayStatus =
@@ -144,7 +145,7 @@ export function buildMembershipCyclePreview(
   let startDate = input.startDate
 
   for (let index = 0; index < input.periodCount; index += 1) {
-    const endDate = addUtcDays(startDate, input.durationDays - 1)
+    const endDate = membershipCycleEndDate(input.startDate, input.durationDays, index + 1)
 
     cycles.push({
       cycleNumber: index + 1,

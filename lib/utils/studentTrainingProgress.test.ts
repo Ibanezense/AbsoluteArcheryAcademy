@@ -28,6 +28,21 @@ const control = (
 })
 
 describe('student training progress', () => {
+  it('keeps the last trained distance records until a valid score exists at the assigned distance', () => {
+    const old = [control('40-36', 300, '2026-10-01', 40), control('40-72', 610, '2026-10-02', 40, 72)]
+    const fallback = summarizeTrainingControls(old as any, 50)
+    expect(fallback.best_36?.id).toBe('40-36')
+    expect(fallback.best_72?.id).toBe('40-72')
+    expect(fallback.reference.summary_distance_m).toBe(40)
+    expect(fallback.reference.kind).toBe('previous')
+    expect(summarizeTrainingControls([...old, control('50', 0, '2026-10-03', 50)] as any, 50).best_36?.id).toBe('50')
+    expect(summarizeTrainingControls([...old, control('bad50', 350, '2026-10-04', 50, 36, { status: 'annulled' })] as any, 50).best_36?.id).toBe('40-36')
+  })
+  it('does not invent one historical distance when the last sporting order is ambiguous', () => {
+    const s = summarizeTrainingControls([control('30', 300, '2026-10-01', 30, 36, { performed_time: null }), control('40', 320, '2026-10-01', 40)] as any, 50)
+    expect(s.reference.summary_distance_m).toBeNull()
+    expect(s.best_36).toBeNull()
+  })
   it('keeps last control separate from best and separates 36 and 72', () => {
     const rows = [
       control('best', 305, '2026-09-01'),

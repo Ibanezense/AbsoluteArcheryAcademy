@@ -1182,6 +1182,7 @@ function PlanEditorModal({
               <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Duracion en dias</span>
                 <input type="number" min={1} className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={form.duration_days} onChange={(event) => onPatch({ duration_days: event.target.value })} />
+                <span className="text-xs leading-5 text-slate-500">30 corresponde a un mes calendario: del 20 de octubre al 20 de noviembre. Otras duraciones se cuentan en días.</span>
               </label>
               <label className="grid min-w-0 grid-cols-1 gap-2">
                 <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Precio base</span>
@@ -1317,7 +1318,7 @@ function PlansCatalogTab({
                 <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.classes_included}</p><p className="text-slate-500">Clases</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-base font-black text-slate-950">{plan.weekly_class_target === 0 ? 'Sin revision semanal' : `${plan.weekly_class_target} por semana`}</p><p className="text-slate-500">Cuota semanal</p></div>
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.duration_days || '-'}</p><p className="text-slate-500">Dias</p></div>
+                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.duration_days === 30 ? '1' : plan.duration_days || '-'}</p><p className="text-slate-500">{plan.duration_days === 30 ? 'Mes calendario' : 'Días'}</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-lg font-black text-slate-950">{formatMoney(plan.base_price, plan.currency)}</p><p className="text-slate-500">Precio</p></div>
                 </div>
                 <p className="mt-4 text-xs font-bold text-slate-500">{usage} ciclos historicos o actuales asociados.</p>

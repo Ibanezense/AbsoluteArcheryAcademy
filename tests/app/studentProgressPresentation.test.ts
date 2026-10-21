@@ -60,7 +60,9 @@ describe('student progress presentation', () => {
       createElement(ProgressSummary, { summary, assignedDistance: 30 })
     )
     expect(html).toContain('Distancia asignada')
-    expect(html).toContain('Pendiente de revisión')
+    expect(html).toContain('Aún no tienes controles válidos a 30 m')
+    expect(html).toContain('Distancia anterior')
+    expect(html).toContain('280')
     expect(html).not.toContain('Distancia actual de entrenamiento')
   })
   it('distinguishes unlinked, empty and unavailable without false zeroes', () => {

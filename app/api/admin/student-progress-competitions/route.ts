@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         body.query.length > 100
       )
         throw new ProgressError(400, 'invalid_request')
-      const result = await engineSearch(body.query.trim())
+      const result = await engineSearch(body.query.trim(), studentId)
       await authorize(request, true)
       return success(result)
     }

@@ -17,6 +17,20 @@ const link = {
   updated_at: '2026-10-20T00:00:00Z',
 }
 describe('competition privacy and completeness', () => {
+  it('reads all authorized tournament identities from one confirmed athlete anchor', async () => {
+    const dataset = snapshot('dataset_1', 1, 'cmp_beta')
+    const result = await collectEngineCompetitions(student, 'cmp_alpha', {
+      members: async () => ['cmp_alpha', 'cmp_beta'],
+      history: async (_student, id) => ({ contract_version: 'te-academy-individual-progress-history-v1', complete: true, checked_at: dataset.checked_at, datasets: id === 'cmp_beta' ? [{ dataset_id: dataset.dataset_id, dataset_version_id: dataset.dataset_version_id, dataset_version: 1, published_at: dataset.checked_at, name: 'Event', start_date: '2026-10-01' }] : [], next_cursor: null }),
+      dataset: async (_student, id) => { expect(id).toBe('cmp_beta'); return dataset },
+    })
+    expect(result.datasets).toHaveLength(1)
+    expect(result.authorized_competitor_ids).toEqual(['cmp_alpha', 'cmp_beta'])
+    clearCompetitionsCache()
+    const visible = await getCompetitionsProgress(student, { context: async () => ({ student_id: student, links: [link] }), read: async () => result })
+    expect(visible.state).toBe('ready')
+    expect(visible.datasets[0].competitor.competitor_id).toBe('cmp_beta')
+  })
   it('never contacts TE for a missing local link, even if an orphan bridge exists', async () => {
     const read = vi.fn()
     expect(

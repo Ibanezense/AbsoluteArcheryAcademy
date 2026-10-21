@@ -377,11 +377,11 @@ async function requestEngine(
     invalid()
   }
 }
-export async function engineSearch(query: string) {
+export async function engineSearch(query: string, studentId?: string) {
   return validateEngineSearch(
     await requestEngine(
       '/api/v1/academy-identity',
-      { operation: 'search', q: query },
+      { operation: 'search', q: query, ...(studentId ? { external_id: studentId } : {}) },
       'identity'
     )
   )
@@ -453,6 +453,17 @@ export async function engineHistory(
       signal
     )
   )
+}
+export async function engineAthleteMembers(studentId: string, competitorId: string, signal?: AbortSignal): Promise<string[]> {
+  const row = object(await requestEngine('/api/v1/consumer', {
+    consumer: 'academy', operation: 'members', competitor_id: competitorId, external_id: studentId,
+  }, 'reader', undefined, signal))
+  keys(row, ['contract_version', 'checked_at', 'external_id', 'anchor_competitor_id', 'competitor_ids'])
+  if (row.contract_version !== 'te-academy-athlete-members-v1' || row.external_id !== studentId || row.anchor_competitor_id !== competitorId || !engineTimestamp(row.checked_at)
+    || !Array.isArray(row.competitor_ids) || row.competitor_ids.length < 1 || row.competitor_ids.length > 200
+    || !row.competitor_ids.every(id => typeof id === 'string' && engineIdPattern.test(id))
+    || !row.competitor_ids.includes(competitorId) || new Set(row.competitor_ids).size !== row.competitor_ids.length) invalid()
+  return row.competitor_ids as string[]
 }
 export async function engineDataset(
   studentId: string,
