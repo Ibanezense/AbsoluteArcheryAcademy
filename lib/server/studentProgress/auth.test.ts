@@ -21,6 +21,18 @@ function env() {
 const request = () =>
   new Request('http://localhost', { headers: { Authorization: 'Bearer real-token' } })
 describe('progress actor authorization', () => {
+  it('allows an active administrator with the normal actor JWT', async () => {
+    env()
+    const c = client({ id: 'actor', role: 'admin', is_active: true })
+    makeClient.mockReturnValue(c)
+    await expect(authorize(request(), true)).resolves.toBe(c)
+    expect(makeClient.mock.calls[0][1]).toBe('anon')
+  })
+  it('rejects an inactive administrator before reading student progress', async () => {
+    env()
+    makeClient.mockReturnValue(client({ id: 'actor', role: 'admin', is_active: false }))
+    await expect(authorize(request(), true)).rejects.toMatchObject({ status: 403 })
+  })
   it('verifies JWT with Auth server and uses actor anon client', async () => {
     env()
     const c = client({ id: 'actor', role: 'student', is_active: true })

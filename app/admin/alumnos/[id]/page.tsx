@@ -35,6 +35,7 @@ import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisu
 import { EmptyOperationalState, OperationalStatusBadge } from '@/components/admin/AdminOperationalComponents'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import StudentProgressLinks from '@/components/admin/StudentProgressLinks'
+import AdminStudentProgress from '@/components/admin/AdminStudentProgress'
 import { useProgressAvailability } from '@/components/student/progress/ProgressAvailability'
 import Avatar from '@/components/ui/Avatar'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
@@ -150,13 +151,14 @@ type SportsFormState = {
   bow_poundage: string
 }
 
-type TabId = 'profile' | 'sports' | 'attendance' | 'membership' | 'payments' | 'bookings'
+type TabId = 'profile' | 'sports' | 'progress' | 'attendance' | 'membership' | 'payments' | 'bookings'
 type BadgeTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 type AccountMode = 'student_only' | 'guardian_only' | 'student_and_guardian'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'profile', label: 'Perfil' },
   { id: 'sports', label: 'Datos deportivos' },
+  { id: 'progress', label: 'Progreso' },
   { id: 'attendance', label: 'Asistencias' },
   { id: 'membership', label: 'Membresía' },
   { id: 'payments', label: 'Pagos' },
@@ -462,6 +464,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const router = useRouter()
   const confirm = useConfirm()
   const progressEnabled = useProgressAvailability()
+  const tabs = progressEnabled ? TABS : TABS.filter(tab => tab.id !== 'progress')
   const toast = useToast()
   const membershipDeletionLockRef = useRef(false)
   const detailQuery = useStudentDetail(params.id)
@@ -475,8 +478,8 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const [activeTab, setActiveTab] = useState<TabId>('profile')
   useEffect(() => {
     const requested = searchParams.get('tab')
-    if (TABS.some((tab) => tab.id === requested)) setActiveTab(requested as TabId)
-  }, [searchParams])
+    if (TABS.some((tab) => tab.id === requested) && (requested !== 'progress' || progressEnabled)) setActiveTab(requested as TabId)
+  }, [searchParams, progressEnabled])
   const [revealedAccessTarget, setRevealedAccessTarget] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [membershipEditor, setMembershipEditor] = useState<MembershipEditorState | null>(null)
@@ -1075,7 +1078,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
       <AdminContentPanel className="overflow-hidden">
         <div role="tablist" aria-label="Secciones del perfil del alumno" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-3">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -1085,14 +1088,14 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
               aria-controls={`student-panel-${tab.id}`}
               tabIndex={activeTab === tab.id ? 0 : -1}
               onKeyDown={(event) => {
-                const index = TABS.findIndex((item) => item.id === tab.id)
-                const nextIndex = event.key === 'ArrowRight' ? (index + 1) % TABS.length
-                  : event.key === 'ArrowLeft' ? (index - 1 + TABS.length) % TABS.length
-                    : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null
+                const index = tabs.findIndex((item) => item.id === tab.id)
+                const nextIndex = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+                  : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null
                 if (nextIndex === null) return
                 event.preventDefault()
-                setActiveTab(TABS[nextIndex].id)
-                document.getElementById(`student-tab-${TABS[nextIndex].id}`)?.focus()
+                setActiveTab(tabs[nextIndex].id)
+                document.getElementById(`student-tab-${tabs[nextIndex].id}`)?.focus()
               }}
               onClick={() => setActiveTab(tab.id)}
               className={`min-h-12 whitespace-nowrap border-b-2 px-4 text-sm font-semibold transition ${
@@ -1124,6 +1127,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
       </details>}
 
       <div role="tabpanel" id={`student-panel-${activeTab}`} aria-labelledby={`student-tab-${activeTab}`}>
+        {activeTab === 'progress' && progressEnabled && <AdminStudentProgress key={data.id} studentId={data.id} onManageLinks={() => { setActiveTab('profile'); document.getElementById('student-tab-profile')?.focus() }} />}
         {activeTab === 'profile' && (<div className="space-y-5">
           <ProfileTab
             data={data}
