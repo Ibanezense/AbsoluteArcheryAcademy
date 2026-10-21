@@ -159,7 +159,6 @@ function StudentHomeContent() {
                   {dashboard.current_distance_m ? `  ·  Distancia: ${dashboard.current_distance_m}m` : ''}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white"><StatusBadge status={dashboard.student_is_active ? 'active' : 'expired'} label={dashboard.student_is_active ? 'Activo' : 'Inactivo'} /></span>
                   <span className="rounded-full bg-white"><StatusBadge status={membershipBadge.status} label={membershipBadge.label} /></span>
                 </div>
                 {(dashboard.category || dashboard.level) && (

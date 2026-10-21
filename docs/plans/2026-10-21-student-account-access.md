@@ -11,6 +11,7 @@ Cambios:
 - El estado operativo, los bloqueos y los cambios de cuenta vinculada sincronizan el acceso mediante un trigger privado. Inactivo deshabilita la cuenta; quitar ese estado respeta los bloqueos independientes.
 - El RPC administrativo no permite reactivar el acceso mientras exista un estado inactivo/protegido.
 - La edición deja de mostrar el indicador académico como un selector Activo/Inactivo. Esa operación se realiza desde la ficha con el aviso correcto.
+- El inicio del alumno muestra el estado de su membresía sin convertir el indicador de disponibilidad para reservas en una etiqueta «Inactivo».
 
 La migración `20261021191039_student_account_access_policy.sql` se aplicó con autorización expresa. Habilitó 4 cuentas vencidas/en pausa inconsistentes y deshabilitó 3 inactivas que conservaban acceso. La verificación posterior devuelve cero inconsistencias y ningún inactivo/bloqueado habilitado. Los hashes de las membresías y los pagos coinciden antes y después.
 
