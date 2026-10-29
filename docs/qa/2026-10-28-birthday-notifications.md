@@ -87,9 +87,15 @@ Caducidad de medianoche, paso a otro aviso, cambios de contexto y respuestas tar
 
 ## Cambios concretos pendientes de autorización
 
-1. Aplicar `supabase/migrations/20261028120000_student_birthday_notifications.sql`: tres tablas, restricciones/RLS, lectores compatibles, preparación/generación/cierre y trigger puntual. Sin backfill histórico ni modificaciones a pagos/reservas/saldo.
+1. Aplicar `supabase/migrations/20261029040555_student_birthday_notifications.sql`: tres tablas, restricciones/RLS, lectores compatibles, preparación/generación/cierre y trigger puntual. Sin backfill histórico ni modificaciones a pagos/reservas/saldo.
 2. Revisar disponibilidad y zona de pg_cron, aplicar `supabase/operations/student_birthday_cron.sql`: trabajo único `student-birthdays-lima`, `0 5 * * *` en UTC, 00:00 America/Lima. El script solo sustituye trabajos con ese nombre.
 3. Integrar y publicar únicamente estos cambios de aplicación desde main. Los clientes anteriores continúan funcionando con la migración aditiva; los nuevos manejan un esquema aún no activado sin romper avisos manuales.
 4. Verificar después de activar el resultado del día, permisos, alias/versión y ejecución programada real. No fabricar cierres o nacimientos para alumnos de producción.
 
 Reversión: volver al cliente anterior; ejecutar `supabase/operations/student_birthday_cron_disable.sql` solo para detener este trabajo. Conservar los cierres anuales. Si también se necesita suspender toda recuperación, deshabilitar su RPC/entrega mediante corrección revisada, sin tocar otros jobs, membresías o avisos manuales. No borrar datos para revertir.
+
+## Activación autorizada posterior
+
+El usuario autorizó la base real, el trabajo diario y la publicación desde main. Migración funcional aplicada con versión `20261029040555`; programación aplicada como `20261029040607`. pg_cron está instalado y `cron.timezone = GMT`. El trabajo permanente `student-birthdays-lima` (jobid 2) está activo con `0 5 * * *`.
+
+La limitación de daemon local se comprobó en la activación mediante un trabajo temporal que ejecutó exactamente `SELECT public.ensure_student_birthday_day();`: ejecución nativa **succeeded**, 29/10/2026 04:07:00 UTC (28/10 23:07 Lima), resultado del día local 28/10 completado, cero cumpleaños elegibles. Se retiró inmediatamente el trabajo temporal; solo queda el horario diario aprobado. No se modificaron nacimientos ni se insertaron cierres para probar. Esto confirma ejecución real del programador, sin afirmar que ya se observó una medianoche futura. Lectores STABLE y RLS comprobados en la base real.

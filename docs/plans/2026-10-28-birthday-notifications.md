@@ -43,7 +43,7 @@ Implementar y probar con base local desechable. No aplicar SQL a producción ni 
 ## Tarea 2. Resultado diario, cierre y operaciones SQL
 
 **Crear:**
-- `supabase/migrations/20261028120000_student_birthday_notifications.sql`.
+- `supabase/migrations/20261029040555_student_birthday_notifications.sql`.
 - `tests/database/birthdayNotifications.test.ts`.
 - `tests/database/fixtures/birthdayNotifications.bootstrap.sql`.
 

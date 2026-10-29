@@ -1,7 +1,7 @@
 # Spec: cumpleaños del alumno
 
 Fecha: 28 de octubre de 2026 · America/Lima.
-Estado: arquitectura final e implementación preparada en desarrollo. Verificaciones y limitaciones en `docs/qa/2026-10-28-birthday-notifications.md`. Sin migraciones en producción ni despliegue.
+Estado: arquitectura final e implementación preparada en desarrollo. Verificaciones y limitaciones en `docs/qa/2026-10-28-birthday-notifications.md`. Migración y programación activadas tras autorización; publicación en curso.
 
 ## 1. Objetivo y límites
 
@@ -30,7 +30,7 @@ Inspección local del checkout `3212799`, el 28/10/2026; no se inspeccionó ni c
 | Existe WhatsApp para renovación, condicionado a ese aviso y a ciertos estados; no es una acción genérica de cumpleaños. Usa el teléfono registrado del alumno. | `components/admin/MembershipRenewalAlertAction.tsx` |
 | Hay normalización de teléfonos peruanos/internacionales y URL con texto codificado. La lista no carga teléfonos de tutores. | `lib/utils/membershipRenewalWhatsApp.ts`, `lib/queries/studentQueries.ts` |
 
-Las tablas y operaciones nuevas descritas aquí están implementadas en la migración local `20261028120000_student_birthday_notifications.sql`; no están activadas en producción. Los hechos de la tabla anterior corresponden al código previo a la implementación.
+Las tablas y operaciones nuevas descritas aquí están implementadas en la migración local `20261029040555_student_birthday_notifications.sql`; activadas posteriormente con autorización; ver registro QA. Los hechos de la tabla anterior corresponden al código previo a la implementación.
 
 ## 3. Calendario y elegibilidad
 
@@ -193,7 +193,7 @@ Completado cuando los dos comportamientos y los criterios anteriores estén veri
 
 ## 12. Archivos de activación preparados
 
-- Migración funcional: `supabase/migrations/20261028120000_student_birthday_notifications.sql`.
+- Migración funcional: `supabase/migrations/20261029040555_student_birthday_notifications.sql`.
 - Activación diaria: `supabase/operations/student_birthday_cron.sql`; solo reemplaza el trabajo `student-birthdays-lima`. Requiere `pg_cron` instalado y zona UTC/GMT; se detiene si no se cumple. Horario `0 5 * * *` (00:00 Lima).
 - Desactivación: `supabase/operations/student_birthday_cron_disable.sql`; no toca los cierres ni otros trabajos. Volver al cliente anterior para retirar ambos comportamientos.
-- Referencia del programador: [Supabase Cron](https://supabase.com/docs/guides/cron). La ejecución del daemon nativo no pudo verificarse en el PostgreSQL local sin esa extensión; no confundir esto con el generador y la concurrencia sí probados.
+- Referencia del programador: [Supabase Cron](https://supabase.com/docs/guides/cron). El daemon no estaba disponible localmente; tras autorización se verificó una ejecución nativa real en producción y se retiró el trabajo temporal de comprobación. El horario permanente permanece a medianoche de Lima. Ver registro QA.

@@ -22,7 +22,7 @@ try {
   await a.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT USAGE ON SCHEMA public TO PUBLIC; DROP SCHEMA IF EXISTS auth CASCADE;')
   await a.query(load('tests/database/fixtures/birthdayNotifications.bootstrap.sql'))
   await a.query(load('supabase/migrations/20261021024214_academy_notifications.sql'))
-  await a.query(load('supabase/migrations/20261028120000_student_birthday_notifications.sql'))
+  await a.query(load('supabase/migrations/20261029040555_student_birthday_notifications.sql'))
   await a.query("INSERT INTO profiles VALUES($1,'student',true),($2,'admin',true)", [id(1), id(2)])
   await a.query("INSERT INTO students VALUES($1,'Local fixture',((now() AT TIME ZONE 'America/Lima')::date-interval '15 years')::date,'active',$2,false)", [id(10), id(1)])
   const settings = await a.query("SELECT (now() AT TIME ZONE 'America/Lima')::date::text today, extract(year FROM now() AT TIME ZONE 'America/Lima')::integer celebration_year")

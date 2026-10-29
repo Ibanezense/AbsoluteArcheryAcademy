@@ -8,7 +8,7 @@ it('generates a stored day once, adjusts only edited students and isolates annua
   try {
     await db.exec(readFileSync('tests/database/fixtures/birthdayNotifications.bootstrap.sql', 'utf8'))
     await db.exec(readFileSync('supabase/migrations/20261021024214_academy_notifications.sql','utf8'))
-    await db.exec(readFileSync('supabase/migrations/20261028120000_student_birthday_notifications.sql','utf8'))
+    await db.exec(readFileSync('supabase/migrations/20261029040555_student_birthday_notifications.sql','utf8'))
     await db.query("INSERT INTO profiles VALUES($1,'admin',true),($2,'student',true),($3,'student',true),($4,'guardian',true),($5,'admin',false)", [id(1),id(2),id(3),id(4),id(5)])
     await db.query("INSERT INTO students VALUES($1,'Birthday student',((now() AT TIME ZONE 'America/Lima')::date-interval '15 years')::date,'active',$2,false),($3,'Other student',null,'paused',$4,false)", [id(10),id(2),id(11),id(3)])
     await db.query('INSERT INTO student_guardians VALUES($1,$2)',[id(10),id(4)])
@@ -98,7 +98,7 @@ it('generates a stored day once, adjusts only edited students and isolates annua
     await db.exec("SET TIME ZONE 'Pacific/Kiritimati'")
     expect((await db.query('SELECT birthday_server_calendar() value')).rows[0]).toEqual(beforeZone)
     await db.exec('COMMIT')
-    await db.exec(readFileSync('supabase/migrations/20261028120000_student_birthday_notifications.sql','utf8'))
+    await db.exec(readFileSync('supabase/migrations/20261029040555_student_birthday_notifications.sql','utf8'))
     const cases=[['2000-02-29','2027-02-28','2027-02-28'],['2000-02-29','2028-02-29','2028-02-29'],['2000-02-29','2100-02-28','2100-02-28'],['1980-02-29','2000-02-29','2000-02-29'],[null,'2026-10-28',null],['2027-10-28','2026-10-28',null],['infinity','2026-10-28',null]]
     for(const [born,reference,expected] of cases) expect((await db.query<{value:string|null}>('SELECT birthday_anniversary($1::date,$2::date)::text value',[born,reference])).rows[0].value).toBe(expected)
     expect((await db.query("SELECT provolatile FROM pg_proc WHERE oid='get_student_notification_feed(uuid)'::regprocedure")).rows[0]).toEqual({provolatile:'s'})
