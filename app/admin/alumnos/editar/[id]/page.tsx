@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import { invalidateStudentBirthdayQueries } from '@/lib/utils/invalidateStudentBirthdays'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
 import GuardianDniInput from '@/components/admin/GuardianDniInput'
 import { guardianAccessPayload, normalizeGuardianContact, resolveGuardianContact } from '@/lib/utils/studentGuardianContact'
@@ -290,6 +291,7 @@ export default function AdminAlumnoEditorPage() {
 
       if (isNew && result.student_id) {
         await queryClient.invalidateQueries({ queryKey: studentKeys.all })
+        await invalidateStudentBirthdayQueries(queryClient, result.student_id)
         router.replace(`/admin/alumnos/${result.student_id}`)
         return
       }
@@ -297,6 +299,7 @@ export default function AdminAlumnoEditorPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
         queryClient.invalidateQueries({ queryKey: studentKeys.detail(id) }),
+        invalidateStudentBirthdayQueries(queryClient, id),
         detailQuery.refetch(),
       ])
     } catch (error: any) {

@@ -4,9 +4,9 @@ import { useEffect, useId, useRef } from 'react'
 import { BellRing, CalendarClock, ChevronRight, X } from 'lucide-react'
 import { useDialogFocus } from '@/lib/hooks/useDialogFocus'
 
-type Props = { title: string; body: string; expired?: boolean; preview?: boolean; onClose: () => void; onRenew?: () => void }
+type Props = { title: string; body: string; expired?: boolean; preview?: boolean; actionLabel?: string; onClose: () => void; onRenew?: () => void }
 
-export default function AcademyNoticeDialog({ title, body, expired = false, preview = false, onClose, onRenew }: Props) {
+export default function AcademyNoticeDialog({ title, body, expired = false, preview = false, actionLabel = 'Entendido', onClose, onRenew }: Props) {
   const titleId = useId(), descriptionId = useId()
   const dialog = useRef<HTMLDivElement>(null)
   useDialogFocus(true, dialog)
@@ -31,7 +31,7 @@ export default function AcademyNoticeDialog({ title, body, expired = false, prev
           {expired && <p className="mt-4 rounded-xl bg-orange-50 p-3 text-xs leading-5 text-orange-900">Este recordatorio dejará de aparecer cuando tengas una membresía activa.</p>}
         </div>
         <div className="shrink-0 px-7 pb-7">
-          <button type="button" onClick={expired && onRenew ? onRenew : onClose} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">{expired ? 'Renovar membresía' : 'Entendido'}<ChevronRight size={17} /></button>
+          <button type="button" onClick={expired && onRenew ? onRenew : onClose} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500">{expired ? 'Renovar membresía' : actionLabel}<ChevronRight size={17} /></button>
           {expired && <button type="button" onClick={onClose} className="mt-2 min-h-11 w-full rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50">Ahora no</button>}
         </div>
       </div>

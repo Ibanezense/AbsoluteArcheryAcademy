@@ -16,6 +16,10 @@ import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisu
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
 import StudentLocationBadge from '@/components/admin/StudentLocationBadge'
+import StudentBirthdayBadge from '@/components/admin/StudentBirthdayBadge'
+import StudentBirthdayAction from '@/components/admin/StudentBirthdayAction'
+import { useAdminStudentBirthdays } from '@/lib/hooks/useAdminStudentBirthdays'
+import { useAuth } from '@/lib/hooks/useAuth'
 import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import type { MembershipRenewalAlertMap } from '@/lib/services/membershipRenewalAlertService'
@@ -112,12 +116,18 @@ function MembershipCell({ student }: { student: StudentListRow }) {
   )
 }
 
+function hasBirthday(student: StudentListRow, flags: Readonly<Record<string, boolean>>) {
+  return flags[student.id] === true && ['active', 'expired', 'paused'].includes(student.operational_status || '')
+}
+
 function DesktopStudentTable({
   students,
   alerts,
+  birthdays = {},
 }: {
   students: StudentListRow[]
   alerts: MembershipRenewalAlertMap
+  birthdays?: Readonly<Record<string, boolean>>
 }) {
   return (
     <div className="hidden md:block">
@@ -140,7 +150,7 @@ function DesktopStudentTable({
             const membershipEnd = formatDate(student.membership_end)
 
             return (
-              <tr key={student.id} className="group bg-white transition-colors hover:bg-orange-50/35">
+              <tr key={student.id} className={`group transition-colors ${hasBirthday(student, birthdays) ? 'bg-amber-50/70 hover:bg-amber-100/70' : 'bg-white hover:bg-orange-50/35'}`}>
                 <td className="px-5 py-3 align-middle">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar name={student.full_name} url={student.avatar_url} size="md" />
@@ -153,6 +163,7 @@ function DesktopStudentTable({
                       </Link>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         <StudentStatusBadge student={student} />
+                        {hasBirthday(student, birthdays) && <StudentBirthdayBadge />}
                         <StudentLocationBadge name={student.home_location_name} code={student.home_location_code} />
                       </div>
                     </div>
@@ -166,6 +177,7 @@ function DesktopStudentTable({
                   ) : (
                     <span className="text-slate-400">Sin teléfono</span>
                   )}
+                  {hasBirthday(student, birthdays) && <StudentBirthdayAction studentId={student.id} studentName={student.full_name} phone={student.phone} />}
                 </td>
                 <td className="px-4 py-3 align-middle text-sm">
                   <MembershipCell student={student} />
@@ -217,9 +229,11 @@ function DesktopStudentTable({
 function MobileStudentList({
   students,
   alerts,
+  birthdays = {},
 }: {
   students: StudentListRow[]
   alerts: MembershipRenewalAlertMap
+  birthdays?: Readonly<Record<string, boolean>>
 }) {
   return (
     <div className="divide-y divide-slate-100 md:hidden">
@@ -228,7 +242,7 @@ function MobileStudentList({
         const membershipEnd = formatDate(student.membership_end)
 
         return (
-          <article key={student.id} className="bg-white p-4">
+          <article key={student.id} className={`p-4 ${hasBirthday(student, birthdays) ? 'border-l-4 border-amber-400 bg-amber-50/70' : 'bg-white'}`}>
             <div className="flex items-start gap-3">
               <Avatar name={student.full_name} url={student.avatar_url} size="md" />
               <div className="min-w-0 flex-1">
@@ -237,6 +251,7 @@ function MobileStudentList({
                 </Link>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <StudentStatusBadge student={student} />
+                  {hasBirthday(student, birthdays) && <StudentBirthdayBadge />}
                   <StudentLocationBadge name={student.home_location_name} code={student.home_location_code} />
                 </div>
               </div>
@@ -252,6 +267,8 @@ function MobileStudentList({
               <p className="pb-2">Última asistencia: {lastAttendance || 'Sin asistencias'}</p>
               {student.open_membership_count > 1 && <p>{student.total_open_classes} clases sin consumir en {student.open_membership_count} membresías</p>}
             </details>
+
+            {hasBirthday(student, birthdays) && <StudentBirthdayAction studentId={student.id} studentName={student.full_name} phone={student.phone} />}
 
             <MembershipRenewalAlertAction
               studentName={student.full_name}
@@ -307,6 +324,7 @@ function StudentListSkeleton() {
 }
 
 export default function AdminAlumnosPage() {
+  const { profile } = useAuth()
   const [query, setQuery] = useState('')
   const [locationFilter, setLocationFilter] = useState('')
   const [sort, setSort] = useState<AdminStudentSort>('status')
@@ -323,6 +341,15 @@ export default function AdminAlumnosPage() {
     () => filterAdminStudents(students, query, statusFilter, new Date(), { locationId: locationFilter, sort }),
     [query, statusFilter, students, locationFilter, sort],
   )
+
+  const renderedStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents])
+  const birthdays = useAdminStudentBirthdays(profile?.role === 'admin' ? profile.id : null, renderedStudentIds)
+  useEffect(() => {
+    const visible = () => { if (document.visibilityState === 'visible') void refetch() }
+    window.addEventListener('focus', visible)
+    document.addEventListener('visibilitychange', visible)
+    return () => { window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible) }
+  }, [refetch])
 
   const locations = useMemo(() => Array.from(new Map(students.filter((student) => student.home_location_id).map((student) => [student.home_location_id!, student.home_location_name || 'Sede sin nombre'])).entries()).sort((a, b) => a[1].localeCompare(b[1], 'es')), [students])
   const activeFilters = Number(statusFilter !== 'all') + Number(Boolean(locationFilter)) + Number(sort !== 'status')
@@ -391,6 +418,10 @@ export default function AdminAlumnosPage() {
           </AdminFilterBar>
         </div>
 
+        {(birthdays.unavailable || birthdays.partial) && <div role="status" className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+          <span>{birthdays.partial ? 'La consulta de cumpleaños está incompleta.' : 'No se pudieron consultar los cumpleaños. La lista de alumnos sigue disponible.'}</span>
+          <button type="button" onClick={() => void birthdays.refetch()} className="min-h-11 rounded-lg px-3 font-bold underline">Reintentar cumpleaños</button>
+        </div>}
         {isLoading ? (
           <StudentListSkeleton />
         ) : isError ? (
@@ -418,8 +449,8 @@ export default function AdminAlumnosPage() {
           </div>
         ) : (
           <>
-            <DesktopStudentTable students={filteredStudents} alerts={renewalAlerts} />
-            <MobileStudentList students={filteredStudents} alerts={renewalAlerts} />
+            <DesktopStudentTable students={filteredStudents} alerts={renewalAlerts} birthdays={birthdays.flags} />
+            <MobileStudentList students={filteredStudents} alerts={renewalAlerts} birthdays={birthdays.flags} />
           </>
         )}
       </AdminContentPanel>

@@ -4,12 +4,22 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import StudentNotificationCenter from './StudentNotificationCenter'
+import type { StudentNotificationFeed } from '@/lib/utils/academyNotifications'
 
 const state = vi.hoisted(() => ({
-  feed: { notices: [] as { id: string; title: string; body: string }[], membership: { expired: true, state_key: 'm1' } },
+  feed: { notices: [], membership: { expired: true, state_key: 'm1' } } as StudentNotificationFeed,
+  birthdayClosures: 0,
+  activeStudentId: 'student1',
   failDismissal: false,
 }))
 vi.mock('@/lib/supabaseClient', () => ({ supabase: { rpc: vi.fn(async (name: string, args: Record<string, unknown>) => {
+  if (name === 'prepare_student_birthday_day') return {data:{ready:true,today_lima:'2026-10-28'},error:null}
+  if (name === 'dismiss_student_birthday') {
+    state.birthdayClosures++
+    if (state.failDismissal) return {data:null,error:{message:'Offline'}}
+    state.feed.birthday=null
+    return {data:{success:true,already_closed:false,celebration_year:args.p_celebration_year},error:null}
+  }
   if (name === 'get_student_notification_feed') return { data: structuredClone(state.feed), error: null }
   if (name === 'dismiss_academy_notification') {
     if (state.failDismissal) return { data: null, error: { message: 'Offline' } }
@@ -18,7 +28,7 @@ vi.mock('@/lib/supabaseClient', () => ({ supabase: { rpc: vi.fn(async (name: str
   }
   throw new Error(`Unexpected RPC ${name}`)
 }) } }))
-vi.mock('@/lib/hooks/useStudentContext', () => ({ useStudentContext: () => ({ account: { id: 'account1', role: 'student' }, activeStudentId: 'student1', loading: false }) }))
+vi.mock('@/lib/hooks/useStudentContext', () => ({ useStudentContext: () => ({ account: { id: 'account1', role: 'student' }, activeStudentId: state.activeStudentId, loading: false }) }))
 vi.mock('@/lib/hooks/useMembershipRenewalAlerts', () => ({ useMembershipRenewalAlerts: () => ({ data: {}, isLoading: false, isFetching: false, error: null }) }))
 vi.mock('@/lib/hooks/useMembershipRenewal', () => ({
   useMembershipRenewalOptions: () => ({ data: [], isLoading: false, error: null }),
@@ -45,6 +55,8 @@ async function resume() {
 beforeEach(() => {
   state.feed = { notices: [], membership: { expired: true, state_key: 'm1' } }
   state.failDismissal = false
+  state.birthdayClosures=0
+  state.activeStudentId='student1'
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
@@ -119,4 +131,73 @@ describe('mounted student notification lifecycle', () => {
     await resume()
     await screen.findByRole('heading', { name: 'Nuevo aviso' })
   })
+})
+
+function birthday(validFor=100000) {
+ state.feed.birthday_version=1
+ state.feed.birthday_ready=true
+ state.feed.calendar={today_lima:'2026-10-28',valid_for_ms:validFor}
+ state.feed.birthday={id:'birthday:student1:2026',source:'birthday',celebration_year:2026,celebration_on:'2026-10-28',title:'¡Feliz cumpleaños!',body:'Muchas flechas al centro'}
+}
+describe('birthday notification lifecycle',()=>{
+ it('keeps expiration first, then birthday with Gracias, then manual notices',async()=>{
+  birthday();state.feed.notices=[{id:'manual',title:'Aviso manual',body:'Texto'}]
+  mount();await screen.findByRole('heading',{name:'Tu membresía está vencida'})
+  fireEvent.click(screen.getByRole('button',{name:'Cerrar notificación'}))
+  await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+  expect(screen.getAllByRole('dialog')).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button',{name:'Gracias'}))
+  await screen.findByRole('heading',{name:'Aviso manual'})
+  expect(state.birthdayClosures).toBe(1)
+ })
+ it('keeps a locally closed birthday suppressed across stale responses and background reopen',async()=>{
+  state.feed.membership.expired=false;birthday();state.failDismissal=true
+  const app=mount();await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+  fireEvent.click(screen.getByRole('button',{name:'Cerrar notificación'}))
+  await act(async()=>{await app.client.invalidateQueries({queryKey:['student-notifications']})})
+  expect(screen.queryByRole('dialog')).toBeNull()
+  await resume();await act(async()=>{await new Promise(r=>setTimeout(r,30))})
+  expect(screen.queryByRole('dialog')).toBeNull()
+ })
+ it('removes an open birthday at its server deadline and continues the manual queue',async()=>{
+  state.feed.membership.expired=false;birthday(1500)
+  state.feed.notices=[{id:'manual',title:'Después del cumpleaños',body:'Texto'}]
+  const app=mount();await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+  // The server now represents the next day, without a birthday result for this student.
+  state.feed.calendar={today_lima:'2026-10-29',valid_for_ms:100000};state.feed.birthday=null
+  await screen.findByRole('heading',{name:'Después del cumpleaños'},{timeout:3000})
+  expect(state.birthdayClosures).toBe(0)
+  expect(screen.getAllByRole('dialog')).toHaveLength(1)
+  app.client.clear()
+ })
+ it('cannot show the previous students pending birthday after changing context',async()=>{
+  state.feed.membership.expired=false;birthday()
+  const app=mount();await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+  state.activeStudentId='student2';app.navigate()
+  await waitFor(()=>expect(screen.queryByRole('heading',{name:'¡Feliz cumpleaños!'})).toBeNull())
+  expect(state.birthdayClosures).toBe(0)
+ })
+})
+
+it('does not let an unconfirmed local close suppress a corrected celebration date later that year',async()=>{
+ state.feed.membership.expired=false;birthday();state.failDismissal=true
+ const app=mount();await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+ fireEvent.click(screen.getByRole('button',{name:'Gracias'}))
+ state.feed.calendar={today_lima:'2026-11-05',valid_for_ms:100000}
+ state.feed.birthday={id:'birthday:student1:2026',source:'birthday',celebration_year:2026,celebration_on:'2026-11-05',title:'Fecha corregida',body:'Saludo'}
+ await act(async()=>{await app.client.invalidateQueries({queryKey:['student-notifications']})})
+ await screen.findByRole('heading',{name:'Fecha corregida'})
+})
+it('does not interrupt a manual popup or reinsert a closed announcement at birthday expiry',async()=>{
+ state.feed.membership.expired=false;birthday(1500)
+ state.feed.notices=[{id:'m1',title:'Primero manual',body:'Texto'},{id:'m2',title:'Segundo manual',body:'Texto'}]
+ mount();await screen.findByRole('heading',{name:'¡Feliz cumpleaños!'})
+ fireEvent.click(screen.getByRole('button',{name:'Gracias'}))
+ await screen.findByRole('heading',{name:'Primero manual'})
+ fireEvent.click(screen.getByRole('button',{name:'Entendido'}))
+ await screen.findByRole('heading',{name:'Segundo manual'})
+ state.feed.calendar={today_lima:'2026-10-29',valid_for_ms:100000};state.feed.birthday=null
+ await act(async()=>{await new Promise(r=>setTimeout(r,1550))})
+ expect(screen.getByRole('heading',{name:'Segundo manual'})).toBeTruthy()
+ expect(screen.queryByRole('heading',{name:'Primero manual'})).toBeNull()
 })

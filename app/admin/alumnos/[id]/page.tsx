@@ -52,6 +52,7 @@ import {
   useMembershipRenewalAlerts,
 } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { studentKeys } from '@/lib/queries/studentQueries'
+import { invalidateStudentBirthdayQueries } from '@/lib/utils/invalidateStudentBirthdays'
 import {
   createStudentMembershipCycles,
   type MembershipPaymentType,
@@ -521,6 +522,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   async function refreshStudentData() {
     await queryClient.invalidateQueries({ queryKey: studentKeys.all })
     await queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all })
+    await invalidateStudentBirthdayQueries(queryClient, params.id)
   }
 
   async function uploadAvatar(file?: File) {

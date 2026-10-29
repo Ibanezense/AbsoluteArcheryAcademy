@@ -1,7 +1,13 @@
+import type { BirthdayCalendar, BirthdaySnapshot, StudentBirthdayNotice } from '@/lib/contracts/studentBirthday'
 export type AcademyNotice = { id: string; title: string; body: string }
 export type StudentNotificationFeed = {
   notices: AcademyNotice[]
   membership: { expired: boolean; state_key: string }
+  birthday_version?: 1
+  birthday_ready?: boolean
+  calendar?: BirthdayCalendar
+  birthday?: StudentBirthdayNotice | null
+  birthday_snapshot?: BirthdaySnapshot
 }
 export type NotificationInput = {
   title: string; body: string; audience: 'all' | 'selected'; studentIds: string[]; endDate: string
@@ -26,11 +32,14 @@ export function validateNotification(input: NotificationInput) {
   return { title, body, audience: input.audience, studentIds: input.audience === 'all' ? [] : studentIds, expiresAt }
 }
 
-export function nextStudentNotice(feed: StudentNotificationFeed | undefined, dismissedExpirations: readonly string[], dismissedNotices: readonly string[], opening: string) {
+export function nextStudentNotice(feed: StudentNotificationFeed | undefined, dismissedExpirations: readonly string[], dismissedNotices: readonly string[], opening: string, dismissedBirthdays: readonly string[] = []) {
   if (!feed) return null
   const key = `${opening}:${feed.membership.state_key}`
   if (feed.membership.expired && !dismissedExpirations.includes(key)) {
     return { kind: 'expired' as const, key, title: 'Tu membresía está vencida', body: 'Renueva tu membresía para continuar entrenando y reservar tus próximas clases.' }
+  }
+  if (feed.birthday_version === 1 && feed.birthday_ready && feed.birthday && !dismissedBirthdays.includes(`${feed.birthday.id}:${feed.birthday.celebration_on}`)) {
+    return { ...feed.birthday, kind: 'birthday' as const, key: `${feed.birthday.id}:${feed.birthday.celebration_on}` }
   }
   const notice = feed.notices.find(item => !dismissedNotices.includes(item.id))
   return notice ? { ...notice, kind: 'announcement' as const, key: notice.id } : null
