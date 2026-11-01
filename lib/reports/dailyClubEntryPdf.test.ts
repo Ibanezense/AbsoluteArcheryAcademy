@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDailyClubEntryPdf } from './dailyClubEntryPdf'
+import { appendTemporaryClubGuests } from './dailyClubEntryReport'
 
 describe('daily entry PDF by site', () => {
   const location = { id: 'site', name: 'Umacollo', code: 'umacollo' }
@@ -14,4 +15,12 @@ describe('daily entry PDF by site', () => {
     expect(doc.output().match(/Sede: Umacollo/g)).toHaveLength(doc.getNumberOfPages())
     expect(doc.output()).not.toContain('Sede: Tiabaya')
   })
+  it('includes each guest label and preserves DNI leading zeroes on multipage exports', () => {
+    const guests=Array.from({length:75},(_,i)=>({name:`Invitado ${i} Apellido Largo`,dni:String(i).padStart(8,'0')}))
+    const {doc}=createDailyClubEntryPdf(appendTemporaryClubGuests([],guests),'2026-11-01',location)
+    expect(doc.getNumberOfPages()).toBeGreaterThan(1)
+    expect(doc.output().match(/Invitado\\\)/g)).toHaveLength(guests.length)
+    expect(doc.output()).toContain('00000001')
+  })
+
 })

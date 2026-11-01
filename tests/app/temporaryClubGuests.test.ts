@@ -1,0 +1,25 @@
+// @vitest-environment jsdom
+import { createElement } from 'react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import ReportesPage from '@/app/admin/ajustes/reportes/page'
+
+const state = vi.hoisted(() => ({ rows: [{ name: 'Alumno Real', dni: '12345678', type: 'student' }], save: vi.fn(), pdf: vi.fn(), rpc: vi.fn(), fail: false }))
+vi.mock('@/lib/infrastructureQueries', () => ({ useAcademyLocations: () => ({ data: [{id:'a',name:'Tiabaya',code:'tiabaya'},{id:'b',name:'Umacollo',code:'umacollo'}] }) }))
+vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({data:state.rows,isLoading:false,isFetching:false,error:null}) }))
+vi.mock('@/lib/supabaseClient', () => ({supabase:{rpc:state.rpc}}))
+vi.mock('@/lib/reports/dailyClubEntryPdf', () => ({createDailyClubEntryPdf: (...args:unknown[]) => {state.pdf(...args); if(state.fail)throw new Error('No se pudo generar');return{doc:{save:state.save},filename:'test.pdf'}}}))
+vi.mock('react-hot-toast', () => ({toast:{error:vi.fn(),success:vi.fn()}}))
+afterEach(cleanup)
+beforeEach(()=>{state.pdf.mockClear();state.save.mockClear();state.rpc.mockClear();state.fail=false})
+function start(){const view=render(createElement(ReportesPage));fireEvent.change(screen.getByLabelText('Sede'),{target:{value:'a'}});return view}
+function add(name='Invitada Temporal',dni='00123456'){fireEvent.change(screen.getByLabelText('Nombre completo del invitado'),{target:{value:name}});fireEvent.change(screen.getByLabelText('DNI del invitado'),{target:{value:dni}});fireEvent.click(screen.getByRole('button',{name:'Agregar invitado'}))}
+it('includes temporary guests in this PDF, preserves original rows and clears only after successful generation',async()=>{start();add();expect(screen.getByText('Invitada Temporal (Invitado)')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Descargar PDF'}));await waitFor(()=>expect(state.save).toHaveBeenCalledTimes(1));expect(state.pdf.mock.calls[0][0]).toEqual([state.rows[0],{name:'Invitada Temporal (Invitado)',dni:'00123456',type:'guest'}]);expect(screen.queryByText('Invitada Temporal (Invitado)')).toBeNull();expect(state.rpc).not.toHaveBeenCalled()})
+it('validates and edits guests without adding a duplicate DNI',()=>{start();add('Invitada','12345678');expect(screen.getByRole('alert').textContent).toMatch(/DNI.*lista/);add();fireEvent.click(screen.getByRole('button',{name:'Editar invitado Invitada Temporal'}));fireEvent.change(screen.getByLabelText('Nombre completo del invitado'),{target:{value:'Nombre Corregido'}});fireEvent.click(screen.getByRole('button',{name:'Guardar invitado'}));expect(screen.getByText('Nombre Corregido (Invitado)')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Quitar invitado Nombre Corregido'}));expect(screen.queryByText('Nombre Corregido (Invitado)')).toBeNull()})
+it('does not reuse guests after changing date or site, including returning to the original selection',()=>{start();add();fireEvent.change(screen.getByLabelText('Selecciona el día'),{target:{value:'2026-11-02'}});expect(screen.queryByText('Invitada Temporal (Invitado)')).toBeNull();add();fireEvent.change(screen.getByLabelText('Sede'),{target:{value:'b'}});fireEvent.change(screen.getByLabelText('Sede'),{target:{value:'a'}});expect(screen.queryByText('Invitada Temporal (Invitado)')).toBeNull()})
+it('keeps the draft after an export failure',async()=>{start();add();state.fail=true;fireEvent.click(screen.getByRole('button',{name:'Descargar PDF'}));await waitFor(()=>expect(state.pdf).toHaveBeenCalled());expect(screen.getByText('Invitada Temporal (Invitado)')).toBeTruthy();expect(state.save).not.toHaveBeenCalled()})
+
+it('blocks export if a newly refreshed booking has the same DNI as a temporary guest',()=>{const view=start();add();state.rows.push({name:'Reserva nueva',dni:'00123456',type:'student'});view.rerender(createElement(ReportesPage));expect(screen.getByRole('alert').textContent).toMatch(/DNI.*lista/);expect((screen.getByRole('button',{name:'Descargar PDF'}) as HTMLButtonElement).disabled).toBe(true);expect(state.pdf).not.toHaveBeenCalled();state.rows.pop()})
+it('rejects incomplete names and nonnumeric or short DNIs',()=>{start();add('A','1234');expect(screen.getByRole('alert').textContent).toMatch(/nombre/);add('Invitado válido','1234');expect(screen.getByRole('alert').textContent).toMatch(/8 dígitos/);expect(screen.queryByText('Invitado válido (Invitado)')).toBeNull()})
+
+it('resets an open editor after export so a new guest can be added normally',async()=>{start();add();fireEvent.click(screen.getByRole('button',{name:'Editar invitado Invitada Temporal'}));fireEvent.click(screen.getByRole('button',{name:'Descargar PDF'}));await waitFor(()=>expect(state.save).toHaveBeenCalledTimes(1));expect((screen.getByLabelText('Nombre completo del invitado') as HTMLInputElement).value).toBe('');add('Segunda Invitada','11223344');expect(screen.getByText('Segunda Invitada (Invitado)')).toBeTruthy()})

@@ -1,4 +1,24 @@
-export type DailyClubEntryType = 'student' | 'intro' | 'admin'
+export type DailyClubEntryType = 'student' | 'intro' | 'admin' | 'guest'
+
+export type TemporaryClubGuest = { name: string; dni: string }
+
+export function validateTemporaryClubGuest(input: TemporaryClubGuest, existing: readonly DailyClubEntryRow[]): TemporaryClubGuest {
+  const name = input.name.trim().replace(/\s+/g, ' ')
+  const dni = input.dni.trim()
+  if (name.length < 2 || name.length > 120) throw new Error('Escribe un nombre completo de 2 a 120 caracteres.')
+  if (!/^\d{8}$/.test(dni)) throw new Error('El DNI debe tener exactamente 8 dígitos.')
+  if (existing.some(row => row.dni?.trim() === dni)) throw new Error('Este DNI ya está en la lista de ingreso.')
+  return { name, dni }
+}
+
+export function appendTemporaryClubGuests(rows: readonly DailyClubEntryRow[], guests: readonly TemporaryClubGuest[]): DailyClubEntryRow[] {
+  const result = [...rows]
+  for (const input of guests) {
+    const guest = validateTemporaryClubGuest(input, result)
+    result.push({ ...guest, name: `${guest.name} (Invitado)`, type: 'guest' })
+  }
+  return result
+}
 
 export type DailyClubEntryRow = {
   name: string
