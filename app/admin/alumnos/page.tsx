@@ -23,6 +23,7 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import type { MembershipRenewalAlertMap } from '@/lib/services/membershipRenewalAlertService'
+import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'
 import {
   filterAdminStudents,
   getAdminStudentStatus,
@@ -79,6 +80,18 @@ function formatDate(value: string | null) {
   if (!value) return null
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00-05:00` : value)
   return Number.isNaN(date.getTime()) ? null : dateFormatter.format(date)
+}
+
+function MembershipEndDate({ value }: { value: string | null }) {
+  const formattedDate = formatDate(value)
+  const isExpiring = getStudentRenewalDateState(value).tone === 'orange'
+
+  return (
+    <span className={isExpiring ? 'font-semibold text-red-700' : 'font-semibold text-slate-700'}>
+      {formattedDate || 'Sin vencimiento'}
+      {isExpiring && <span className="sr-only">, vence dentro de los próximos siete días</span>}
+    </span>
+  )
 }
 
 function StudentStatusBadge({ student }: { student: StudentListRow }) {
@@ -147,7 +160,6 @@ function DesktopStudentTable({
         <tbody className="divide-y divide-slate-100">
           {students.map((student) => {
             const lastAttendance = formatDate(student.last_attendance_at)
-            const membershipEnd = formatDate(student.membership_end)
 
             return (
               <tr key={student.id} className={`group transition-colors ${hasBirthday(student, birthdays) ? 'bg-amber-50/70 hover:bg-amber-100/70' : 'bg-white hover:bg-orange-50/35'}`}>
@@ -195,7 +207,7 @@ function DesktopStudentTable({
                   </span>
                 </td>
                 <td className="px-4 py-3 align-middle text-sm">
-                  <span className="font-semibold text-slate-700">{membershipEnd || 'Sin vencimiento'}</span>
+                  <MembershipEndDate value={student.membership_end} />
                 </td>
                 <td className="px-4 py-3 align-middle">
                   <div className="flex items-center justify-end gap-1">
@@ -239,7 +251,6 @@ function MobileStudentList({
     <div className="divide-y divide-slate-100 md:hidden">
       {students.map((student) => {
         const lastAttendance = formatDate(student.last_attendance_at)
-        const membershipEnd = formatDate(student.membership_end)
 
         return (
           <article key={student.id} className={`p-4 ${hasBirthday(student, birthdays) ? 'border-l-4 border-amber-400 bg-amber-50/70' : 'bg-white'}`}>
@@ -259,7 +270,7 @@ function MobileStudentList({
 
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <MobileDetail label="Clases disponibles" value={`${student.classes_remaining} clases`} />
-              <MobileDetail label="Vencimiento de membresía" value={membershipEnd || 'Sin vencimiento'} />
+              <MobileDetail label="Vencimiento de membresía" value={<MembershipEndDate value={student.membership_end} />} />
             </dl>
             <details className="mt-2 text-xs text-slate-600">
               <summary className="min-h-11 cursor-pointer py-3 font-medium">Contacto y asistencia</summary>
@@ -295,7 +306,7 @@ function MobileStudentList({
   )
 }
 
-function MobileDetail({ label, value }: { label: string; value: string }) {
+function MobileDetail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-400">{label}</dt>
