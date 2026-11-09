@@ -4,6 +4,7 @@ import { studentKeys } from '@/lib/queries/studentQueries'
 import type { StudentGuardianContact } from '@/lib/utils/studentGuardianContact'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
 import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { applyExpirationCorrections } from '@/lib/utils/studentAttendanceHistory'
 
 export type StudentAccountSummary = {
   id: string
@@ -26,6 +27,7 @@ export type StudentMembershipSummary = {
   custom_name: string
   classes_total: number
   classes_used: number
+  corrected_expired_normal?: number
   classes_remaining: number
   start_date: string
   end_date: string | null
@@ -210,7 +212,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
         }
         return { data: rows, error: null }
       }
-      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }, { data: classExpirations, error: classExpirationsError }] =
+      const [{ data: studentRow, error: studentError }, { data: payments, error: paymentsError }, { data: ledger, error: ledgerError }, { data: bookings, error: bookingsError }, { data: upcomingBookings, error: upcomingBookingsError }, { data: commitments, error: commitmentsError }, { data: weeklyAttendance, error: weeklyAttendanceError }, { data: attendanceReversals, error: attendanceReversalsError }, { data: classExpirations, error: classExpirationsError }, { data: expirationCorrections, error: expirationCorrectionsError }] =
         await Promise.all([
           supabase
             .from('students')
@@ -320,6 +322,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
           loadHistory('student_weekly_attendance', 'id,student_membership_id,week_start,week_end,status,classes_consumed,marked_at,occurrence_index,note', 'week_end'),
           loadHistory('attendance_reversals', 'id,booking_id,weekly_attendance_id', 'reversed_at'),
           loadHistory('membership_class_expirations', 'id,student_id,student_membership_id,normal_classes,recovery_classes,expired_at', 'expired_at'),
+          loadHistory('attendance_expiration_corrections', 'id,student_id,student_membership_id,expiration_event_id,credit_kind,created_at', 'created_at'),
         ])
 
       if (studentError) throw studentError
@@ -331,10 +334,14 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
       if (weeklyAttendanceError) throw weeklyAttendanceError
       if (attendanceReversalsError) throw attendanceReversalsError
       if (classExpirationsError) throw classExpirationsError
+      if (expirationCorrectionsError) throw expirationCorrectionsError
       if (!studentRow) throw new Error('Alumno no encontrado')
 
       const typedStudent = studentRow as any
-      const memberships = sortMemberships((typedStudent.memberships || []) as StudentMembershipSummary[])
+      const memberships = sortMemberships(((typedStudent.memberships || []) as StudentMembershipSummary[]).map((membership) => ({
+        ...membership,
+        corrected_expired_normal: (expirationCorrections || []).filter((entry: any) => entry.student_membership_id === membership.id && entry.credit_kind === 'normal').length,
+      })))
       const reservedByMembershipId = normalizeMembershipCommitments(commitments)
       const membershipSummary = summarizeMemberships(
         memberships.map((membership) => ({
@@ -452,7 +459,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
         })),
         weekly_attendance: (weeklyAttendance || []) as StudentWeeklyAttendanceSummary[],
         attendance_reversals: (attendanceReversals || []) as StudentAttendanceReversalSummary[],
-        class_expirations: (classExpirations || []) as StudentClassExpirationSummary[],
+        class_expirations: applyExpirationCorrections((classExpirations || []) as StudentClassExpirationSummary[], expirationCorrections || []),
       }
     },
   })

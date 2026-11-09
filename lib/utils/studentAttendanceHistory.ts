@@ -24,6 +24,20 @@ const SPANISH_MONTHS = [
 
 type MembershipIdentity = { id: string; membership_code?: string | null; start_date: string; end_date: string | null }
 
+export function applyExpirationCorrections(
+  events: StudentClassExpirationSummary[],
+  corrections: { expiration_event_id: string; credit_kind: 'normal' | 'recovery' }[],
+): StudentClassExpirationSummary[] {
+  return events.map((event) => {
+    const related = corrections.filter((entry) => entry.expiration_event_id === event.id)
+    return {
+      ...event,
+      normal_classes: Math.max(0, event.normal_classes - related.filter((entry) => entry.credit_kind === 'normal').length),
+      recovery_classes: Math.max(0, event.recovery_classes - related.filter((entry) => entry.credit_kind === 'recovery').length),
+    }
+  })
+}
+
 function formatCycleDate(value: string | null) {
   if (!value) return 'Sin fecha final'
   const [year, month, day] = value.split('-')

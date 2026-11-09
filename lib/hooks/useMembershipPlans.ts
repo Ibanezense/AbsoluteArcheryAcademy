@@ -23,6 +23,7 @@ export type AdminStudentMembership = {
   status: 'draft' | 'active' | 'expired' | 'cancelled' | 'consumed' | 'historical'
   classes_total: number
   classes_used: number
+  corrected_expired_normal?: number
   classes_remaining: number
   start_date: string
   end_date: string | null
@@ -53,6 +54,7 @@ const studentMembershipSelect = `
   status,
   classes_total,
   classes_used,
+  attendance_expiration_corrections(credit_kind),
   classes_remaining,
   start_date,
   end_date,
@@ -77,6 +79,7 @@ function mapAdminStudentMembership(row: any): AdminStudentMembership {
     status: row.status,
     classes_total: row.classes_total,
     classes_used: row.classes_used,
+    corrected_expired_normal: (row.attendance_expiration_corrections || []).filter((entry: { credit_kind: string }) => entry.credit_kind === 'normal').length,
     classes_remaining: row.classes_remaining,
     start_date: row.start_date,
     end_date: row.end_date,

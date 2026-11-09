@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyExpirationCorrections,
   buildStudentAttendanceHistory,
   formatAttendanceMembershipMonth,
 } from './studentAttendanceHistory'
 
 describe('buildStudentAttendanceHistory', () => {
+  it('subtracts corrections by expiration and credit type without modifying the original event', () => {
+    const event = { id: 'e1', student_id: 's', student_membership_id: 'm', normal_classes: 2, recovery_classes: 1, expired_at: '2026-11-01T05:00:00Z' }
+    const adjusted = applyExpirationCorrections([event], [
+      { expiration_event_id: 'e1', credit_kind: 'normal' },
+      { expiration_event_id: 'e1', credit_kind: 'recovery' },
+      { expiration_event_id: 'another', credit_kind: 'normal' },
+    ])
+    expect(adjusted[0]).toMatchObject({ normal_classes: 1, recovery_classes: 0 })
+    expect(event.normal_classes).toBe(2)
+  })
   it('shows every expired credit with its original membership and no fictitious session', () => {
     const rows = buildStudentAttendanceHistory([], [], [], [{
       id: 'expiry-1', student_id: 'student-1', student_membership_id: 'cycle-1',

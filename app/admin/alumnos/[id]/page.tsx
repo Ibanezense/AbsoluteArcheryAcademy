@@ -59,6 +59,8 @@ import {
 } from '@/lib/services/adminMembershipService'
 import { setStudentManualInactive } from '@/lib/services/adminStudentOperationalStatusService'
 import { reverseStudentNoShow } from '@/lib/services/adminAttendanceReversalService'
+import { correctCancelledAttendance } from '@/lib/services/adminCorrectCancelledAttendance'
+import { canCorrectCancelledAttendance } from '@/lib/utils/correctCancelledAttendance'
 import { supabase } from '@/lib/supabaseClient'
 import { calculateAge } from '@/lib/utils/dateUtils'
 import {
@@ -1874,6 +1876,7 @@ function AttendanceTab({
 }) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const confirm = useConfirm()
   const [filter, setFilter] = useState<AttendanceFilter>('all')
   const [membershipFilter, setMembershipFilter] = useState('all')
   const [from, setFrom] = useState('')
@@ -1881,6 +1884,7 @@ function AttendanceTab({
   const [reversalTarget, setReversalTarget] = useState<StudentDetailData['bookings'][number] | null>(null)
   const [reason, setReason] = useState('')
   const [isReversing, setIsReversing] = useState(false)
+  const [correctingBookingId, setCorrectingBookingId] = useState<string | null>(null)
   const membershipRows = attendanceForMembership(bookings, membershipFilter)
   const summary = summarizeAttendance(membershipRows)
   const attendanceRows = filterAttendance(membershipRows, filter, from, to)
@@ -1927,6 +1931,32 @@ function AttendanceTab({
     }
   }
 
+  const handleCorrectCancelledAttendance = async (booking: StudentDetailData['bookings'][number]) => {
+    if (correctingBookingId) return
+    const approved = await confirm(
+      `La clase del ${formatDate(booking.start_at)} pasará de cancelada a asistida. Se aplicará una clase a la membresía correspondiente.`,
+      { title: 'Registrar asistencia', confirmLabel: 'Marcar como asistida', tone: 'warning' },
+    )
+    if (!approved) return
+    setCorrectingBookingId(booking.id)
+    try {
+      await correctCancelledAttendance(supabase, booking.source_event_id || booking.id)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+      ])
+      await refreshStudentData()
+      toast.push({ message: 'La asistencia fue registrada correctamente.', type: 'success' })
+    } catch (error: any) {
+      toast.push({ message: error.message || 'No se pudo registrar la asistencia.', type: 'error' })
+    } finally {
+      setCorrectingBookingId(null)
+    }
+  }
+
   return (
     <>
       <SectionShell title="Asistencias" description="Historial operativo de asistencias, inasistencias y cancelaciones.">
@@ -1934,7 +1964,7 @@ function AttendanceTab({
           <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-950">{selectedMembership.membership_code} · {selectedMembership.custom_name}</p>
             <p className="mt-1">{getAttendanceMembershipIdentity(selectedMembership.id, memberships).period}</p>
-            <p className="mt-2">Clases normales: {selectedMembership.classes_total} otorgadas · {selectedMembership.classes_used} consumidas · {selectedMembership.classes_remaining} restantes.</p>
+            <p className="mt-2">Clases normales: {selectedMembership.classes_total} otorgadas · {selectedMembership.classes_used + (selectedMembership.corrected_expired_normal || 0)} consumidas · {selectedMembership.classes_remaining} restantes.</p>
             <p className="mt-1">Historial: {normalSummary.attended} asistidas · {normalSummary.noShow} inasistencias. Las cancelaciones no consumen clases.</p>
             {expiredClassCount > 0 && <p className="mt-1 font-bold text-rose-700">{expiredClassCount} clases no asistidas y no recuperables por vencimiento.</p>}
             {(recoverySummary.attended + recoverySummary.noShow > 0) && <p className="mt-1">Recuperaciones: {recoverySummary.attended} asistidas · {recoverySummary.noShow} inasistencias.</p>}
@@ -1989,6 +2019,15 @@ function AttendanceTab({
                           }}
                         >
                           Revertir inasistencia
+                        </button>
+                      ) : canCorrectCancelledAttendance(booking) ? (
+                        <button
+                          type="button"
+                          className="min-h-11 whitespace-nowrap rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+                          disabled={correctingBookingId !== null}
+                          onClick={() => void handleCorrectCancelledAttendance(booking)}
+                        >
+                          {correctingBookingId === booking.id ? 'Registrando...' : 'Marcar como asistida'}
                         </button>
                       ) : '-'}
                     </td>

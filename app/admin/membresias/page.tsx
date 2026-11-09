@@ -298,7 +298,7 @@ function statusBadgeClass(status: string) {
 
 function classUsagePercent(membership: AdminStudentMembership) {
   if (!membership.classes_total) return 0
-  return Math.min(100, Math.max(0, (membership.classes_used / membership.classes_total) * 100))
+  return Math.min(100, Math.max(0, ((membership.classes_used + (membership.corrected_expired_normal || 0)) / membership.classes_total) * 100))
 }
 
 function isSameMonth(date: string) {
@@ -1091,7 +1091,7 @@ function MembershipsActiveTab({
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-black text-slate-950">{membership.classes_remaining}</p><p className="mt-1 text-slate-500">Restantes</p></div>
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-black text-slate-950">{membership.classes_used}</p><p className="mt-1 text-slate-500">Usadas</p></div>
+                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-black text-slate-950">{membership.classes_used + (membership.corrected_expired_normal || 0)}</p><p className="mt-1 text-slate-500">Usadas</p></div>
                   <div className="rounded-2xl bg-slate-50 p-3"><p className="font-black text-slate-950">{formatDate(membership.end_date)}</p><p className="mt-1 text-slate-500">Vence</p></div>
                 </div>
                 <div className={`mt-4 grid gap-2 ${canDeleteMembership ? 'grid-cols-3' : 'grid-cols-2'}`}>

@@ -71,7 +71,7 @@ export default function StudentBookingHistory({ studentId, scope = 'history' }: 
 function HistoryCard({ row, onCancel, busy }: { row: StudentHistoryRow; onCancel: (id: string) => void; busy: boolean }) {
   const synthetic = row.event_source !== 'booking'
   const equipment = row.bow_usage_type === 'own' ? 'Arco propio' : row.bow_usage_type === 'assigned' ? 'Arco asignado' : 'Arco de academia'
-  const cancellation = row.cancellation_resolution === 'no_show' ? 'Inasistencia' : row.cancellation_source === 'academy' ? 'Cancelación de academia' : row.cancellation_source === 'membership_freeze' ? 'Cancelación por congelamiento' : row.cancellation_source === 'student' ? 'Cancelación del alumno' : null
+  const cancellation = row.status === 'attended' ? null : row.cancellation_resolution === 'no_show' ? 'Inasistencia' : row.cancellation_source === 'academy' ? 'Cancelación de academia' : row.cancellation_source === 'membership_freeze' ? 'Cancelación por congelamiento' : row.cancellation_source === 'student' ? 'Cancelación del alumno' : null
   return <StudentCard className="p-4"><div className="flex items-start gap-3">
     <CalendarClock className="mt-1 h-5 w-5 shrink-0 text-accent" />
     <div className="min-w-0 flex-1"><p className="font-bold">{synthetic ? formatStudentHistoryDate(row.start_at) : dayjs(row.start_at).tz('America/Lima').format('ddd, D MMM YYYY')}</p>
