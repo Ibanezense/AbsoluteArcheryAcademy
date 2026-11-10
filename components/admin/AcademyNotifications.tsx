@@ -20,6 +20,7 @@ export default function AcademyNotifications() {
   const { profile } = useAuth()
   const confirm = useConfirm()
   const [input, setInput] = useState<NotificationInput>(empty)
+  const [recipientMode, setRecipientMode] = useState<'all' | 'personal' | 'selected'>('all')
   const [search, setSearch] = useState('')
   const [preview, setPreview] = useState<{ title: string; body: string; expired?: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -47,18 +48,26 @@ export default function AcademyNotifications() {
   const activeCount = notices.filter(n => n.status === 'published' && (!n.expires_at || new Date(n.expires_at).getTime() > Date.now())).length
   const selectedNames = students.data?.filter(s => input.studentIds.includes(s.id)).map(s => s.full_name) || []
   function change<K extends keyof NotificationInput>(key: K, value: NotificationInput[K]) { setInput(previous => ({ ...previous, [key]: value })); setSuccess('') }
+  function changeRecipientMode(mode: 'all' | 'personal' | 'selected') {
+    setRecipientMode(mode)
+    setInput(previous => ({ ...previous, audience: mode === 'all' ? 'all' : 'selected', studentIds: [] }))
+    setSearch('')
+    setSuccess('')
+  }
   function showPreview() {
-    try { const valid = validateNotification(input); setError(''); setPreview(valid) }
-    catch (failure) { setError(failure instanceof Error ? failure.message : 'Revisa el aviso.') }
+    setError('')
+    setPreview({ title: input.title.trim() || 'Título de tu aviso', body: input.body.trim() || 'Aquí aparecerá tu mensaje.' })
   }
   async function create(publish: boolean) {
     setError(''); setSuccess('')
     try {
       validateNotification(input)
-      if (publish && !await confirm(`«${input.title.trim()}» aparecerá al abrir la app de ${input.audience === 'all' ? 'todos los alumnos' : `${input.studentIds.length} alumnos seleccionados`}.`, { title: 'Publicar notificación', confirmLabel: 'Publicar aviso', description: 'Cada alumno lo verá una sola vez. Podrás desactivarlo cuando lo necesites.' })) return
+      if (input.audience === 'selected' && (students.isLoading || students.error || selectedNames.length !== input.studentIds.length)) throw new Error('No se pudieron verificar los alumnos seleccionados. Vuelve a intentarlo.')
+      const recipientLabel = input.audience === 'all' ? 'todos los alumnos' : selectedNames.join(', ')
+      if (publish && !await confirm(`«${input.title.trim()}» aparecerá al abrir la app de ${recipientLabel}.`, { title: 'Publicar notificación', confirmLabel: 'Publicar aviso', description: 'Cada alumno lo verá una sola vez. Podrás desactivarlo cuando lo necesites.' })) return
       setBusy(true)
       await createAcademyNotification(supabase, input, publish)
-      setInput(empty); setSearch('')
+      setInput(empty); setRecipientMode('all'); setSearch('')
       setSuccess(publish ? 'Aviso publicado. Se mostrará cuando los alumnos abran su app.' : 'Borrador guardado. Todavía no es visible para los alumnos.')
       await query.refetch()
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'No se pudo guardar el aviso.') }
@@ -87,10 +96,10 @@ export default function AcademyNotifications() {
         <form onSubmit={event => { event.preventDefault(); void create(true) }} className="space-y-5">
           <label className="block space-y-2 text-sm font-semibold text-slate-700"><span>Título</span><input className={field} value={input.title} maxLength={100} onChange={e => change('title', e.target.value)} placeholder="Por ejemplo: Entrenamiento especial este sábado" required /></label>
           <label className="block space-y-2 text-sm font-semibold text-slate-700"><span>Mensaje</span><textarea className={`${field} min-h-36 resize-y font-normal leading-6`} value={input.body} maxLength={2000} onChange={e => change('body', e.target.value)} placeholder="Escribe lo que tus alumnos necesitan saber…" required /><span className="block text-right text-xs font-normal text-slate-400">{input.body.length} / 2000</span></label>
-          <fieldset><legend className="mb-2 text-sm font-semibold text-slate-700">Destinatarios</legend><div className="grid gap-2 sm:grid-cols-2">{(['all', 'selected'] as const).map(audience => <label key={audience} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ${input.audience === audience ? 'border-orange-300 bg-orange-50 text-orange-900' : 'border-slate-200 text-slate-600'}`}><input type="radio" name="audience" value={audience} checked={input.audience === audience} onChange={() => change('audience', audience)} className="accent-orange-600" />{audience === 'all' ? 'Todos los alumnos' : 'Alumnos seleccionados'}</label>)}</div></fieldset>
+          <fieldset><legend className="mb-2 text-sm font-semibold text-slate-700">Destinatarios</legend><div className="grid gap-2 sm:grid-cols-3">{([['all', 'Todos los alumnos'], ['personal', 'Un alumno'], ['selected', 'Varios alumnos']] as const).map(([mode, label]) => <label key={mode} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ${recipientMode === mode ? 'border-orange-300 bg-orange-50 text-orange-900' : 'border-slate-200 text-slate-600'}`}><input type="radio" name="audience" value={mode} checked={recipientMode === mode} onChange={() => changeRecipientMode(mode)} className="accent-orange-600" />{label}</label>)}</div></fieldset>
           {input.audience === 'selected' && <div className="space-y-2 rounded-xl border border-slate-200 p-3">
             <label className="block text-xs font-semibold text-slate-600" htmlFor="notice-student-search">Buscar por nombre o apellido</label><input id="notice-student-search" className={field} value={search} onChange={e => setSearch(e.target.value)} />
-            {students.isLoading ? <p className="text-sm text-slate-500">Cargando alumnos…</p> : students.error ? <p role="alert" className="text-sm text-red-700">No se pudieron cargar los alumnos. <button type="button" onClick={() => void students.refetch()} className="underline">Reintentar</button></p> : <div className="max-h-52 overflow-y-auto">{students.data?.filter(s => s.full_name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())).map(student => <label key={student.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg p-2 text-sm text-slate-700 hover:bg-slate-50"><input type="checkbox" className="accent-orange-600" checked={input.studentIds.includes(student.id)} onChange={event => change('studentIds', event.target.checked ? [...input.studentIds, student.id] : input.studentIds.filter(id => id !== student.id))} />{student.full_name}</label>)}</div>}
+            {students.isLoading ? <p className="text-sm text-slate-500">Cargando alumnos…</p> : students.error ? <p role="alert" className="text-sm text-red-700">No se pudieron cargar los alumnos. <button type="button" onClick={() => void students.refetch()} className="underline">Reintentar</button></p> : <div className="max-h-52 overflow-y-auto">{students.data?.filter(s => s.full_name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(search.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())).map(student => <label key={student.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg p-2 text-sm text-slate-700 hover:bg-slate-50"><input type={recipientMode === 'personal' ? 'radio' : 'checkbox'} name={recipientMode === 'personal' ? 'personal-recipient' : undefined} className="accent-orange-600" checked={input.studentIds.includes(student.id)} onChange={event => change('studentIds', recipientMode === 'personal' ? [student.id] : event.target.checked ? [...input.studentIds, student.id] : input.studentIds.filter(id => id !== student.id))} />{student.full_name}</label>)}</div>}
             <p className="text-xs leading-5 text-slate-500">{selectedNames.length ? `Seleccionados: ${selectedNames.join(', ')}` : 'Selecciona al menos un alumno.'}</p>
           </div>}
           <label className="block space-y-2 text-sm font-semibold text-slate-700"><span>Mostrar hasta <span className="font-normal text-slate-400">· Opcional</span></span><input type="date" className={field} value={input.endDate} onChange={e => change('endDate', e.target.value)} /><span className="block text-xs font-normal leading-5 text-slate-500">Incluye todo ese día, según la hora de Perú. Sin fecha, seguirá vigente hasta que lo desactives.</span></label>

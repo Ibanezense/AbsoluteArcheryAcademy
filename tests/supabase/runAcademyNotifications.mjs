@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-const { PGlite } = await import(new URL('../../output/postgres-test/node_modules/@electric-sql/pglite/dist/index.js', import.meta.url).href)
+const { PGlite } = await import('@electric-sql/pglite')
 const db = await PGlite.create()
 const admin = '10000000-0000-0000-0000-000000000001'
 const alice = '10000000-0000-0000-0000-000000000002'
