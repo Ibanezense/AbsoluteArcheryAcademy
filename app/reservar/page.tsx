@@ -82,6 +82,8 @@ export default function ReservarPage() {
 
   if (contextLoading || loading) return <StudentPageSkeleton variant="booking" />
 
+  const agendaError = error && typeof error === 'object' && 'message' in error ? String(error.message) : ''
+
   return (
     <div className="min-h-screen bg-bg text-textpri">
       <MobileStudentHeader title="Reservar clase" subtitle="Elige tu próximo entrenamiento" showBack />
@@ -98,7 +100,7 @@ export default function ReservarPage() {
             <button type="button" className="btn-outline btn-sm" onClick={() => setWeekStart((date) => date.add(7, 'day'))} aria-label="Semana siguiente"><ArrowRight className="h-4 w-4" /></button>
           </div>
         </StudentCard>
-        {error ? <StudentCard className="space-y-3 p-5"><p role="alert" className="text-sm text-rose-700">No pudimos consultar los horarios y las condiciones de tu membresía.</p><button type="button" className="btn-outline btn-sm" onClick={() => void refetch()}>Reintentar</button></StudentCard> : !activeStudentId ? <StudentNotice>Selecciona un alumno para consultar sus horarios.</StudentNotice> : days.length === 0 ? <StudentCard className="p-6 text-center text-sm text-textsec">No hay turnos programados disponibles esta semana.</StudentCard> : (
+        {error ? <StudentCard className="space-y-3 p-5"><p role="alert" className="text-sm text-rose-700">{agendaError.includes('Tu sede no está asignada') ? agendaError : 'No pudimos consultar los horarios y las condiciones de tu membresía.'}</p><button type="button" className="btn-outline btn-sm" onClick={() => void refetch()}>Reintentar</button></StudentCard> : !activeStudentId ? <StudentNotice>Selecciona un alumno para consultar sus horarios.</StudentNotice> : days.length === 0 ? <StudentCard className="p-6 text-center text-sm text-textsec">No hay turnos programados disponibles esta semana.</StudentCard> : (
           <div className="grid items-start gap-5 lg:grid-cols-2">
             {days.map(({ date, sessions: daySessions }) => (
               <section key={date.format('YYYY-MM-DD')} className="space-y-3" aria-label={date.format('dddd D [de] MMMM')}>
