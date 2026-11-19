@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { AcademyControl } from '@/lib/contracts/studentProgress'
 import { progressDate } from './ProgressSummary'
 
-export function TrainingHistory({ controls }: { controls: AcademyControl[] }) {
+export function TrainingHistory({ controls, concise = false }: { controls: AcademyControl[]; concise?: boolean }) {
   const [page, setPage] = useState(1)
   const maxPage = Math.max(1, Math.ceil(controls.length / 10))
   const current = Math.min(page, maxPage)
@@ -12,7 +12,7 @@ export function TrainingHistory({ controls }: { controls: AcademyControl[] }) {
   return (
     <section
       id="progress-history"
-      className="space-y-4"
+      className="scroll-mt-4 space-y-4"
       aria-label="Historial de controles filtrado"
     >
       <h2 className="text-lg font-bold">Historial de controles</h2>
@@ -26,7 +26,7 @@ export function TrainingHistory({ controls }: { controls: AcademyControl[] }) {
               <div>
                 <h3 className="text-sm font-bold">{progressDate(row.performed_date)}</h3>
                 <p className="mt-1 text-xs text-textsec">
-                  {row.performed_time || 'Hora desconocida'} · {row.distance} m · {row.arrows}{' '}
+                  {(row.performed_time || !concise) && `${row.performed_time || 'Hora desconocida'} · `}{row.distance} m · {row.arrows}{' '}
                   flechas
                 </p>
               </div>
@@ -68,10 +68,10 @@ export function TrainingHistory({ controls }: { controls: AcademyControl[] }) {
           </button>
         </div>
       )}
-      <p className="text-xs leading-relaxed text-textsec">
+      {!concise && <p className="text-xs leading-relaxed text-textsec">
         Las horas desconocidas no determinan el orden deportivo de los intentos de un mismo día. Las
         correcciones y anulaciones se reflejan desde el registro de la academia.
-      </p>
+      </p>}
     </section>
   )
 }

@@ -26,8 +26,61 @@ export async function fetchStudentBookingAgenda(studentId: string, fromDate: str
   return data || []
 }
 
+type StudentBookingResult = { sessionId: string } & (
+  | { status: 'confirmed' | 'uncertain' | 'skipped' }
+  | { status: 'rejected'; message: string }
+)
+
+export async function bookStudentSessions(studentId: string, sessionIds: string[]): Promise<StudentBookingResult[]> {
+  const results: StudentBookingResult[] = []
+  let interrupted = false
+  for (const sessionId of new Set(sessionIds)) {
+    if (interrupted) {
+      results.push({ sessionId, status: 'skipped' })
+      continue
+    }
+    try {
+      const { error, status } = await supabase.rpc('book_session_multisite', {
+        p_session: sessionId,
+        p_student_id: studentId,
+      })
+      if (!error) {
+        results.push({ sessionId, status: 'confirmed' })
+      } else if (status !== 0 && status < 500) {
+        results.push({ sessionId, status: 'rejected', message: error.message })
+      } else {
+        interrupted = true
+        results.push({ sessionId, status: 'uncertain' })
+      }
+    } catch {
+      interrupted = true
+      results.push({ sessionId, status: 'uncertain' })
+    }
+  }
+  return results
+}
+
 export async function fetchStudentBookingDetail(bookingId: string, studentId: string): Promise<StudentBookingDetail | null> {
   const { data, error } = await supabase.rpc('get_student_booking_detail', { p_booking_id: bookingId, p_student_id: studentId })
   if (error) throw error
   return data?.[0] || null
+}
+
+export type StudentBookingChangeWindow = {
+  booking_id: string; student_id: string; status: string; start_at: string; booking_day_cutoff_at: string | null
+}
+
+export async function fetchStudentBookingChangeWindow(bookingId: string, studentId: string) {
+  const { data, error } = await supabase.rpc('get_booking_detail', { p_booking_id: bookingId })
+  if (error) throw error
+  const row = data?.[0] as StudentBookingChangeWindow | undefined
+  return row?.student_id === studentId ? row : null
+}
+
+export async function fetchStudentDayCutoffs(days: string[]): Promise<Record<string, string | null>> {
+  return Object.fromEntries(await Promise.all(days.map(async day => {
+    const { data, error } = await supabase.rpc('get_booking_day_cutoff', { p_session_date: day })
+    if (error) throw error
+    return [day, data as string | null] as const
+  })))
 }

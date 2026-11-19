@@ -21,6 +21,10 @@ describe('getStudentRenewalDateState', () => {
     expect(getStudentRenewalDateState('2026-09-26', todayInLima)).toMatchObject({ tone: 'red' })
   })
 
+  it('shows the year when the final membership ends in a different year', () => {
+    expect(getStudentRenewalDateState('2027-01-04', '2026-11-19').value).toBe('4 ene 2027')
+  })
+
   it('uses a neutral missing-date state', () => {
     expect(getStudentRenewalDateState(null, todayInLima)).toMatchObject({
       label: 'Renovación',

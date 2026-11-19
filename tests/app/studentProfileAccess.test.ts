@@ -26,15 +26,7 @@ vi.mock('@/lib/hooks/useStudentProfile', () => ({
   },
 }))
 import StudentProfilePage from '@/components/student/profile/StudentProfilePage'
-import { ProgressAvailabilityContext } from '@/components/student/progress/ProgressAvailability'
-const html = () =>
-  renderToStaticMarkup(
-    createElement(
-      ProgressAvailabilityContext.Provider,
-      { value: true },
-      createElement(StudentProfilePage),
-    ),
-  )
+const html = () => renderToStaticMarkup(createElement(StudentProfilePage))
 beforeEach(() => {
   mocks.accountId = 'a'
   mocks.context = {
@@ -73,14 +65,16 @@ it('rejects another selected student response', () => {
   mocks.query.data.student_id = 'other'
   expect(html()).not.toContain('PRIVATE NAME')
 })
-it('shows personal and sporting sections and the progress destination for the verified student', () => {
-  expect(html()).toContain('Datos personales')
-  expect(html()).toContain('Datos deportivos')
-  expect(html()).toContain('href="/mi-progreso"')
-  expect(html()).toContain('40 m')
-  expect(html()).toContain('No registrado')
-  expect(html()).toContain('Arco de la academia')
-  expect(html()).toContain('https://wa.me/51997224472')
+it('prioritizes the sporting profile and keeps corrections within personal data', () => {
+  const markup = html()
+  expect(markup.indexOf('Datos deportivos')).toBeLessThan(markup.indexOf('Datos personales'))
+  expect(markup.indexOf('Distancia asignada')).toBeLessThan(markup.indexOf('División'))
+  expect(markup.indexOf('Equipo')).toBeLessThan(markup.indexOf('División'))
+  expect(markup).not.toContain('href="/mi-progreso"')
+  expect(markup).toContain('40 m')
+  expect(markup).toContain('No registrado')
+  expect(markup).toContain('Arco de la academia')
+  expect(markup).toMatch(/id="personal-title"[\s\S]*href="https:\/\/wa\.me\/51997224472"[\s\S]*Solicitar corrección por WhatsApp[\s\S]*<\/section>/)
 })
 it('shows the configured student avatar when available', () => {
   mocks.query.data.profile.avatar_url = 'https://example.com/student.jpg'
@@ -90,10 +84,11 @@ it('hides personal data when student context validation fails', () => {
   mocks.context.error = 'Access lost'
   expect(html()).not.toContain('PRIVATE NAME')
 })
-it('allows guardians to change students without exposing the guardian contact details', () => {
+it('shows the verified profile without a student-switching shortcut for legacy guardian sessions', () => {
   mocks.context.account.role = 'guardian'
-  expect(html()).toContain('Cambiar alumno')
-  expect(html()).toContain('href="/hub"')
+  expect(html()).toContain('PRIVATE NAME')
+  expect(html()).not.toContain('Cambiar alumno')
+  expect(html()).not.toContain('href="/hub"')
 })
 it('offers student selection before rendering a profile', () => {
   mocks.context.activeStudentId = null

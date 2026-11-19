@@ -95,4 +95,24 @@ describe('student progress presentation', () => {
     expect(html).toContain('Todas las fechas')
     expect(html).not.toContain('Competencias')
   })
+
+  it('puts the last control first and shows personal bests for historical distances', () => {
+    const controls = [
+      row('current', 305, '2026-10-02'),
+      row('historic', 496, '2026-10-01', { distance: 20, arrows: 72 }),
+      row('void', 700, '2026-10-01', { distance: 20, arrows: 72, status: 'annulled' }),
+    ]
+    const data = {
+      state: 'ready', student_id: 'student', assigned_distance_m: 30, link_revision: 1,
+      assignment_checked_at: '', checked_at: null, controls,
+      summary: summarizeTrainingControls(controls as any, 30),
+    }
+    const html = renderToStaticMarkup(createElement(TrainingWorkspace, { data: data as any, studentView: true }))
+    expect(html.indexOf('Último control')).toBeLessThan(html.indexOf('Récords personales'))
+    expect(html).toContain('href="#progress-history"')
+    expect(html).toContain('Récords por distancia')
+    expect(html).toContain('496 / 720')
+    expect(html).not.toContain('700 / 720')
+    expect(html).toContain('Más filtros')
+  })
 })

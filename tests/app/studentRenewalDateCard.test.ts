@@ -9,12 +9,11 @@ const studentCardSource = readFileSync(
 )
 
 describe('student renewal date card', () => {
-  it('derives the card from the canonical membership end date', () => {
+  it('uses the overall coverage end for the dashboard date', () => {
     expect(homeSource).toContain("import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'")
-    expect(homeSource).toContain('getStudentRenewalDateState(dashboard.membership_end)')
-    expect(homeSource).toContain('label={renewalDate.label}')
-    expect(homeSource).toContain('value={renewalDate.value}')
-    expect(homeSource).toContain('detail={renewalDate.detail}')
+    expect(homeSource).toContain('useStudentMembershipCoverageEnd(activeStudentId)')
+    expect(homeSource).toContain('getStudentRenewalDateState(coverage.data)')
+    expect(homeSource).toContain('label="Vencimiento"')
     expect(homeSource).toContain('tone={renewalDate.tone}')
     expect(homeSource).not.toContain('detail="Vencimiento"')
     expect(homeSource).not.toContain('label="Vence"')
@@ -28,13 +27,10 @@ describe('student renewal date card', () => {
     expect(homeSource).toContain('emphasizeTone={true}')
   })
 
-  it('applies the renewal tone to the complete card and its label', () => {
-    expect(homeSource).toContain("red: 'danger'")
-    expect(homeSource).toContain("orange: 'warning'")
-    expect(homeSource).toContain("neutral: 'neutral'")
-    expect(homeSource).toContain("const cardVariant = emphasizeTone ? emphasisCardVariants[tone] : 'default'")
-    expect(homeSource).toContain('<StudentCard variant={cardVariant} className="min-h-[120px] p-4">')
+  it('keeps the card neutral and uses text and icon tones for renewal status', () => {
+    expect(homeSource).toContain('<StudentCard className="min-h-[120px] p-4">')
     expect(homeSource).toContain('<p className={`text-sm font-bold leading-tight ${emphasizedText}`}>{label}</p>')
+    expect(homeSource).toContain('{detail}</p>')
   })
 
   it('selects one StudentCard background variant instead of combining it with the default', () => {

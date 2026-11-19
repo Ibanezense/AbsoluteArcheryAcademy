@@ -2,6 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
+import { fetchStudentMembershipBalance, fetchStudentMembershipCoverageEnd, fetchStudentNextMembership } from '@/lib/services/studentMembershipCoverage'
+import { limaBookingDate } from '@/lib/utils/studentBooking'
 
 export type StudentDashboard = {
   student_id: string
@@ -40,4 +42,30 @@ export function useStudentDashboard(studentId: string | null) {
   const error = queryError ? (queryError as Error).message : null
 
   return { dashboard, loading, error }
+}
+
+export function useStudentMembershipCoverageEnd(studentId: string | null) {
+  return useQuery({
+    queryKey: ['student-dashboard', studentId, 'membership-coverage-end'],
+    queryFn: () => fetchStudentMembershipCoverageEnd(studentId!),
+    enabled: !!studentId,
+  })
+}
+
+export function useStudentNextMembership(studentId: string | null) {
+  const today = limaBookingDate().format('YYYY-MM-DD')
+  return useQuery({
+    queryKey: ['student-dashboard', studentId, 'next-membership', today],
+    queryFn: () => fetchStudentNextMembership(studentId!, today),
+    enabled: !!studentId,
+  })
+}
+
+export function useStudentMembershipBalance(studentId: string | null) {
+  const today = limaBookingDate().format('YYYY-MM-DD')
+  return useQuery({
+    queryKey: ['student-dashboard', studentId, 'membership-balance', today],
+    queryFn: () => fetchStudentMembershipBalance(studentId!, today),
+    enabled: !!studentId,
+  })
 }

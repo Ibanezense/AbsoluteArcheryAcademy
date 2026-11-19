@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bookingEligibilityMessage, bookingModeLabel, bookingConfirmationText, limaBookingDate, bookingCancellationLabel } from './studentBooking'
+import { bookingEligibilityMessage, bookingModeLabel, bookingConfirmationText, limaBookingDate, bookingCancellationLabel, canStudentChangeBooking } from './studentBooking'
 
 describe('student booking presentation', () => {
   it('does not offer renewal for equipment, quota or freezes', () => {
@@ -31,4 +31,11 @@ describe('student booking presentation', () => {
     expect(text).toContain('recuperación')
     expect(text).toContain('al registrar tu asistencia')
   })
+})
+it('closes changes at the server deadline even while cancellation is allowed', () => {
+  const booking = { status: 'reserved', start_at: '2026-11-19T21:00:00Z' }
+  const deadline = '2026-11-19T19:00:00Z'
+  expect(canStudentChangeBooking(booking, deadline, new Date('2026-11-19T18:59:59Z'))).toBe(true)
+  expect(canStudentChangeBooking(booking, deadline, new Date(deadline))).toBe(false)
+  expect(canStudentChangeBooking(booking, undefined, new Date('2026-11-19T18:00:00Z'))).toBe(false)
 })

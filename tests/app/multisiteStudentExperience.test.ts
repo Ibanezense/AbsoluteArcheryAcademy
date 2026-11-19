@@ -17,7 +17,7 @@ describe('multisite student experience', () => {
   })
 
   it('uses a weekly Tiabaya agenda without membership-card selection', () => {
-    const bookingPage = source('app/reservar/page.tsx')
+    const bookingPage = source('components/student/StudentBookingAgendaPage.tsx')
     expect(bookingPage).toContain('Agenda semanal')
     expect(bookingPage).toContain('session.location_name')
     expect(bookingPage).toContain('session.location_address')

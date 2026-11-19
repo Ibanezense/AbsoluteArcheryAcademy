@@ -1,200 +1,170 @@
 'use client'
 
-import { useEffect } from 'react'
-import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import dayjs from 'dayjs'
-import { CalendarClock, CheckCircle2, ChevronRight, Target, Ticket, UserX, XCircle } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronRight, Ticket } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { StudentPageSkeleton } from '@/components/ui/StudentPageSkeleton'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard } from '@/components/student/StudentCard'
-import StudentBookingHistory from '@/components/student/StudentBookingHistory'
 import StudentRenewalActions from '@/components/student/StudentRenewalActions'
 import { useStudentBookingHistory } from '@/lib/hooks/useStudentBookingHistory'
-import { useMembershipExpiry } from '@/lib/hooks/useMembershipExpiry'
-import { useNextBooking } from '@/lib/hooks/useNextBooking'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
-import { useStudentDashboard } from '@/lib/hooks/useStudentDashboard'
+import { useStudentDashboard, useStudentMembershipBalance, useStudentMembershipCoverageEnd, useStudentNextMembership } from '@/lib/hooks/useStudentDashboard'
 import { getDashboardMembershipBadge } from '@/lib/utils/dashboardMembershipStatus'
 import { formatStudentHistoryDate } from '@/lib/utils/studentHistoryDates'
 
 export default function MembresiasPage() {
   const router = useRouter()
-  const { account, activeStudentId, loading: contextLoading } = useStudentContext()
+  const { account, activeStudent, activeStudentId, loading: contextLoading } = useStudentContext()
   const { dashboard, loading: dashboardLoading } = useStudentDashboard(activeStudentId)
-  const { daysUntilExpiry } = useMembershipExpiry(dashboard)
-  const { booking: nextBooking } = useNextBooking(activeStudentId)
-  const historyQuery = useStudentBookingHistory(activeStudentId)
+  const coverage = useStudentMembershipCoverageEnd(activeStudentId)
+  const balance = useStudentMembershipBalance(activeStudentId)
+  const nextMembership = useStudentNextMembership(activeStudentId)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const history = useStudentBookingHistory(detailsOpen ? activeStudentId : null)
 
   useEffect(() => {
-    if (contextLoading) return
-
-    if (account?.role === 'guardian' && !activeStudentId) {
-      router.replace('/hub')
-    }
+    if (!contextLoading && account?.role === 'guardian' && !activeStudentId) router.replace('/hub')
   }, [account?.role, activeStudentId, contextLoading, router])
 
-  if (contextLoading || dashboardLoading) {
-    return <StudentPageSkeleton variant="membership" />
-  }
+  if (contextLoading || dashboardLoading) return <StudentPageSkeleton variant="membership" />
 
-  if (!dashboard) {
-    return (
-      <AuthGuard>
-        <div className="min-h-screen bg-[#F7F8FA]">
-          <MobileStudentHeader title="Mi Membresía" subtitle="Historial y estado de cuenta" showBack />
-          <div className="px-4 py-5">
-            <StudentCard className="p-5 text-center text-textsec">Datos de membresía no disponibles.</StudentCard>
-          </div>
-        </div>
-      </AuthGuard>
-    )
-  }
-
-  const totalClasses = dashboard.classes_total ?? 0
-  const remainingClasses = dashboard.classes_remaining ?? 0
-  const usedClasses = dashboard.classes_used ?? Math.max(totalClasses - remainingClasses, 0)
-  const percentUsed = totalClasses > 0 ? Math.min(Math.round((usedClasses / totalClasses) * 100), 100) : 0
   const membershipBadge = getDashboardMembershipBadge({
-    membershipStatus: dashboard.membership_status,
-    membershipEnd: dashboard.membership_end,
+    membershipStatus: dashboard?.membership_status,
+    membershipEnd: dashboard?.membership_end,
   })
+  const scheduled = membershipBadge.status === 'scheduled'
+  const hasPlan = membershipBadge.status !== 'no_membership'
+  const expired = membershipBadge.status === 'expired'
+  const total = dashboard?.classes_total ?? 0
+  const used = dashboard?.classes_used ?? 0
+  const usagePercent = total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : 0
+  const coverageEnd = coverage.isError ? null : coverage.data
+  const next = nextMembership.isError ? null : nextMembership.data
+  const planEnd = dashboard?.membership_end
+  const heading = scheduled ? 'Membresía programada' : expired ? 'Último plan' : hasPlan ? 'Plan actual' : 'Tu membresía'
+  const showPlanEnd = hasPlan && !scheduled && !!planEnd && (expired || coverageEnd !== planEnd)
+  const summaries = history.isError ? undefined : history.data?.summary
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[#F7F8FA] text-textpri">
-        <MobileStudentHeader title="Mi Membresía" subtitle="Historial y estado de cuenta" showBack />
-
-        <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6">
-          <StudentCard className="p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-black tracking-[-0.04em]">Estado de cuenta</h2>
-              <StatusBadge status={membershipBadge.status} label={membershipBadge.label} />
-            </div>
-            <div className="grid grid-cols-[112px_1fr] items-center gap-4">
-              <div
-                className="grid h-28 w-28 place-items-center rounded-full"
-                style={{ background: `conic-gradient(#22c55e ${Math.max(remainingClasses / Math.max(totalClasses, 1), 0) * 360}deg, #E5E7EB 0deg)` }}
-              >
-                <div className="grid h-[90px] w-[90px] place-items-center rounded-full bg-white text-center">
-                  <div>
-                    <p className="text-3xl font-black leading-none text-success">{remainingClasses}</p>
-                    <p className="text-base font-medium leading-none">/ {totalClasses}</p>
-                    <p className="mt-1 px-2 text-[0.62rem] font-semibold leading-[1.05] text-textsec">clases disponibles</p>
-                  </div>
+      <div className="min-h-screen bg-[#F5F8FC] text-textpri">
+        <MobileStudentHeader title="Membresías" subtitle="Tu plan, clases y renovación" showBack />
+        <div className="mx-auto max-w-3xl space-y-4 px-4 py-4 sm:px-6 sm:py-6">
+          {account?.role === 'guardian' && activeStudent && (
+            <StudentCard className="flex items-center justify-between gap-3 border-blue-100 px-4 py-2">
+              <p className="min-w-0 text-sm text-slate-600">Membresía de <strong className="break-words text-[#101e3e]">{activeStudent.full_name}</strong></p>
+              <Link href="/hub" className="inline-flex min-h-11 shrink-0 items-center text-sm font-bold text-[#0758aa] underline">Cambiar</Link>
+            </StudentCard>
+          )}
+          {dashboard ? (
+            <StudentCard className="overflow-hidden border-blue-100">
+              <div className="border-b border-blue-100 bg-blue-50/60 px-4 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-[#101e3e]">
+                    <Ticket aria-hidden="true" className="size-5 text-accent" /> {heading}
+                  </h2>
+                  <StatusBadge status={membershipBadge.status} label={membershipBadge.label} />
                 </div>
+                {hasPlan && <p className="mt-1 text-sm font-medium text-slate-700">{dashboard.membership_name || 'Membresía de la academia'}</p>}
               </div>
-              <div className="min-w-0 border-l border-line pl-5">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-600">
-                    <CalendarClock className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <p className="text-3xl font-black leading-none">{usedClasses} <span className="text-base font-bold">clases usadas</span></p>
-                    <p className="mt-3 text-sm font-medium text-textsec">{percentUsed}% del plan utilizado</p>
-                  </div>
-                </div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-line">
-                  <div className="h-full rounded-full bg-success" style={{ width: `${percentUsed}%` }} />
-                </div>
-              </div>
-            </div>
-          </StudentCard>
-
-          <StudentCard className="p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black tracking-[-0.04em]">Vigencia del plan</h2>
-              <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-bold text-accent">
-                {typeof daysUntilExpiry === 'number' ? `${Math.max(daysUntilExpiry, 0)} días restantes` : 'Sin fecha'}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <PlanFact icon={<CalendarClock className="h-6 w-6" />} label="Inicio" value={formatStudentHistoryDate(dashboard.membership_start) || '-'} />
-              <PlanFact icon={<CalendarClock className="h-6 w-6" />} label="Vencimiento" value={formatStudentHistoryDate(dashboard.membership_end) || '-'} />
-              <PlanFact className="col-span-2" icon={<Ticket className="h-6 w-6" />} label="Plan" value={dashboard.membership_name || '-'} />
-            </div>
-          </StudentCard>
-
-          {activeStudentId && <StudentRenewalActions studentId={activeStudentId} />}
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-black tracking-[-0.03em]">Uso del plan mostrado</h2>
-            <p className="text-sm text-textsec">Solo este plan. El historial de abajo incluye todos tus planes.</p>
-            <div className="grid grid-cols-2 gap-3 min-[390px]:grid-cols-4">
-              <UsageCard icon={<Target className="h-5 w-5" />} label="Disponibles" value={remainingClasses} tone="green" />
-              <UsageCard icon={<CheckCircle2 className="h-5 w-5" />} label="Usadas" value={usedClasses} tone="blue" />
-              <UsageCard icon={<XCircle className="h-5 w-5" />} label="Canceladas" value={historyQuery.data?.summary.currentCancelled ?? '—'} tone="orange" />
-              <UsageCard icon={<UserX className="h-5 w-5" />} label="No asistió" value={historyQuery.data?.summary.currentNoShow ?? '—'} tone="red" />
-            </div>
-            {historyQuery.isError && <p role="alert" className="text-sm text-danger">No se pudo cargar el uso completo. <button className="font-bold underline" onClick={() => historyQuery.refetch()}>Reintentar</button></p>}
-          </section>
-
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black tracking-[-0.03em]">Próximas reservas</h2>
-              <Link href="/mis-reservas" className="text-sm font-bold text-accent">Ver todas</Link>
-            </div>
-            {nextBooking ? (
-              <StudentCard className="flex items-center gap-3 p-4">
-                <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-orange-50 text-accent">
-                  <CalendarClock className="h-7 w-7" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-lg font-black">{dayjs(nextBooking.start_at).tz('America/Lima').format('ddd, D MMM YYYY')}</p>
-                  <p className="truncate text-sm font-medium text-textsec">
-                    {dayjs(nextBooking.start_at).tz('America/Lima').format('HH:mm')}
-                    {nextBooking.distance_m ? ` · ${nextBooking.distance_m}m` : ''}
-                  </p>
-                </div>
-                <StatusBadge status={nextBooking.status || 'reserved'} />
-                {nextBooking.booking_id && (
-                  <Link href={`/reserva/${nextBooking.booking_id}`} aria-label="Ver detalle">
-                    <ChevronRight className="h-6 w-6 text-textsec" />
-                  </Link>
+              <div className="space-y-4 p-4 sm:p-6">
+                {hasPlan && !expired && (
+                  <section aria-label="Saldo de clases" className="space-y-1">
+                    {balance.isError ? (
+                      <p role="alert" className="text-sm text-slate-600">No pudimos consultar el saldo de clases.{' '}
+                        <button type="button" className="min-h-11 font-bold text-[#0758aa] underline" onClick={() => void balance.refetch()}>Reintentar</button>
+                      </p>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-[#101e3e]"><strong className="mr-1 text-3xl font-black leading-none tabular-nums text-accent">{balance.data?.total ?? '—'}</strong> clases pendientes de usar</p>
+                        {balance.data && <p className="text-sm text-slate-600">
+                          {balance.data.current} disponibles ahora
+                          {(balance.data.scheduled > 0 || !!next || scheduled) && ` · ${balance.data.scheduled} de planes programados`}
+                        </p>}
+                      </>
+                    )}
+                  </section>
                 )}
-              </StudentCard>
-            ) : (
-              <StudentCard className="p-5 text-sm text-textsec">No tienes reservas próximas.</StudentCard>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <h2 className="text-lg font-black tracking-[-0.03em]">Historial de clases</h2>
-            {activeStudentId && <StudentBookingHistory key={activeStudentId} studentId={activeStudentId} />}
-          </section>
+                {hasPlan && !scheduled && !expired && total > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-slate-600">Plan actual: {used} de {total} clases usadas</p>
+                    <div role="progressbar" aria-label="Clases usadas del plan actual" aria-valuenow={Math.min(Math.max(used, 0), total)} aria-valuemin={0} aria-valuemax={total} className="h-2 overflow-hidden rounded-full bg-blue-100">
+                      <div className="h-full rounded-full bg-orange-600" style={{ width: `${usagePercent}%` }} />
+                    </div>
+                  </div>
+                )}
+                <dl className="divide-y divide-blue-100 rounded-xl bg-slate-50 px-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2.5">
+                    <dt className="text-sm font-semibold text-slate-700">Vigencia total</dt>
+                    <dd className="text-sm font-bold tabular-nums text-[#0758aa]">
+                      {coverage.isLoading ? 'Consultando…' : coverage.isError ? 'Fecha no disponible' : coverageEnd ? formatStudentHistoryDate(coverageEnd) : 'Sin fecha registrada'}
+                    </dd>
+                  </div>
+                  {showPlanEnd && (
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2.5">
+                      <dt className="text-sm text-slate-600">{expired ? 'Fin del último plan' : 'Fin del plan actual'}</dt>
+                      <dd className="text-sm font-semibold tabular-nums text-slate-800">{formatStudentHistoryDate(planEnd)}</dd>
+                    </div>
+                  )}
+                  {scheduled && <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2.5">
+                    <dt className="text-sm text-slate-600">Inicio del plan programado</dt>
+                    <dd className="text-sm font-semibold tabular-nums text-slate-800">{formatStudentHistoryDate(dashboard.membership_start)}</dd>
+                  </div>}
+                </dl>
+                {coverage.isError && <button type="button" className="min-h-11 text-sm font-bold text-[#0758aa] underline" onClick={() => void coverage.refetch()}>Reintentar vigencia</button>}
+                {next && !scheduled && (
+                  <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <CalendarDays aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-accent" />
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-bold text-[#101e3e]">Próxima membresía programada</h3>
+                      {next.custom_name && <p className="mt-0.5 text-sm text-slate-700">{next.custom_name}</p>}
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {formatStudentHistoryDate(next.start_date)}{next.end_date && ` al ${formatStudentHistoryDate(next.end_date)}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {nextMembership.isError && !scheduled && (
+                  <p className="text-sm text-slate-600">No pudimos consultar el siguiente plan.{' '}
+                    <button type="button" className="min-h-11 font-bold text-[#0758aa] underline" onClick={() => void nextMembership.refetch()}>Reintentar</button>
+                  </p>
+                )}
+                {activeStudentId && <StudentRenewalActions studentId={activeStudentId} membershipPage hasScheduledMembership={scheduled || !!next} />}
+              </div>
+            </StudentCard>
+          ) : (
+            <StudentCard className="p-5 text-sm text-slate-600">Datos de membresía no disponibles.</StudentCard>
+          )}
+          {dashboard && hasPlan && !scheduled && (
+            <details className="group rounded-2xl border border-blue-100 bg-white" onToggle={event => setDetailsOpen(event.currentTarget.open)}>
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-[#101e3e] [&::-webkit-details-marker]:hidden">
+                Detalle del plan
+                <ChevronDown aria-hidden="true" className="size-5 text-[#0758aa] transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 border-t border-blue-100 px-4 py-3">
+                <dl className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-3"><dt className="text-slate-600">Inicio del plan</dt><dd className="font-semibold">{formatStudentHistoryDate(dashboard.membership_start)}</dd></div>
+                  {summaries?.currentMembershipId && <>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-600">Clases canceladas</dt><dd className="font-semibold">{summaries.currentCancelled}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-600">Inasistencias</dt><dd className="font-semibold">{summaries.currentNoShow}</dd></div>
+                  </>}
+                </dl>
+                {detailsOpen && history.isLoading && <p role="status" className="text-sm text-slate-600">Consultando el uso del plan…</p>}
+                {detailsOpen && history.isError && <p role="alert" className="text-sm text-slate-600">No pudimos consultar el uso del plan. <button type="button" className="min-h-11 font-bold text-[#0758aa] underline" onClick={() => void history.refetch()}>Reintentar</button></p>}
+              </div>
+            </details>
+          )}
+          <Link href="/mis-reservas#historial" className="flex min-h-12 items-center gap-3 rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-bold text-[#0758aa] hover:border-blue-300">
+            <CalendarDays aria-hidden="true" className="size-5 shrink-0" />
+            Ver reservas e historial de clases
+            <ChevronRight aria-hidden="true" className="ml-auto size-5 shrink-0" />
+          </Link>
         </div>
       </div>
     </AuthGuard>
-  )
-}
-
-function PlanFact({ icon, label, value, className = '' }: { icon: ReactNode; label: string; value: string; className?: string }) {
-  return (
-    <div className={`min-w-0 ${className}`}>
-      <span className="mb-2 grid h-11 w-11 place-items-center rounded-xl bg-orange-50 text-accent">{icon}</span>
-      <p className="text-sm font-medium text-textsec">{label}</p>
-      <p className="break-words font-black">{value}</p>
-    </div>
-  )
-}
-
-function UsageCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number | string; tone: 'green' | 'blue' | 'orange' | 'red' }) {
-  const toneClass = {
-    green: 'bg-green-50 text-success',
-    blue: 'bg-blue-50 text-blue-600',
-    orange: 'bg-orange-50 text-accent',
-    red: 'bg-red-50 text-danger',
-  }[tone]
-
-  return (
-    <StudentCard className="p-3">
-      <div className={`mb-2 grid h-10 w-10 place-items-center rounded-full ${toneClass}`}>{icon}</div>
-      <p className="text-xs font-medium text-textsec">{label}</p>
-      <p className="mt-1 text-3xl font-black">{value}</p>
-      <p className="text-xs text-textsec">clases</p>
-    </StudentCard>
   )
 }

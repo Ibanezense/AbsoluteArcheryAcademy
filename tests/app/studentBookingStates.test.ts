@@ -6,7 +6,10 @@ vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: state.data, e
 vi.mock('next/navigation', () => ({ useParams: () => ({ id: '00000000-0000-0000-0000-000000000001' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('@/components/student/MobileStudentHeader', () => ({ MobileStudentHeader: ({ title }: { title: string }) => createElement('header', null, createElement('h1', null, title)) }))
 vi.mock('@/lib/hooks/useStudentContext', () => ({ useStudentContext: () => ({ activeStudentId: 'student', activeStudent: { full_name: 'Alumno de prueba' }, account: { role: 'student' }, loading: false }) }))
-vi.mock('@/lib/hooks/useStudentDashboard', () => ({ useStudentDashboard: () => ({ dashboard: null }) }))
+vi.mock('@/lib/hooks/useStudentDashboard', () => ({
+  useStudentDashboard: () => ({ dashboard: null }),
+  useStudentMembershipCoverageEnd: () => ({ data: null }),
+}))
 vi.mock('@/components/ui/ToastProvider', () => ({ useToast: () => ({ push: vi.fn() }) }))
 vi.mock('@/components/ui/ConfirmDialog', () => ({ useConfirm: () => vi.fn() }))
 vi.mock('@/lib/supabaseClient', () => ({ supabase: { rpc: state.rpc } }))

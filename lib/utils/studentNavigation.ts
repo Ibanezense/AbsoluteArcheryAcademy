@@ -1,15 +1,14 @@
 export type StudentTab =
   | 'inicio'
-  | 'reservar'
   | 'reservas'
+  | 'progreso'
   | 'membresias'
   | 'perfil'
 
 export function getStudentTab(pathname: string): StudentTab | null {
-  if (pathname.startsWith('/mi-progreso') || pathname.startsWith('/perfil'))
-    return 'perfil'
-  if (pathname.startsWith('/reservar')) return 'reservar'
-  if (pathname.startsWith('/mis-reservas') || pathname.startsWith('/reserva/'))
+  if (pathname.startsWith('/mi-progreso')) return 'progreso'
+  if (pathname.startsWith('/perfil')) return 'perfil'
+  if (pathname.startsWith('/mis-reservas') || pathname.startsWith('/reserva/') || pathname === '/reservar')
     return 'reservas'
   if (pathname.startsWith('/membresias')) return 'membresias'
   return 'inicio'

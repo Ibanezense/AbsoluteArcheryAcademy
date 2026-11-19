@@ -2,11 +2,21 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
 import 'dayjs/locale/es'
+import { canStudentCancelBooking } from './bookingCancellation'
 dayjs.extend(utc)
 dayjs.extend(timezone)
 
 export function limaBookingDate(value?: string | Date) {
   return dayjs(value).tz('America/Lima').locale('es')
+}
+
+export function canStudentChangeBooking(
+  booking: { status: string; start_at: string },
+  cutoff: string | null | undefined,
+  now: Date = new Date(),
+) {
+  return canStudentCancelBooking(booking, now) && now.getTime() < Date.parse(booking.start_at) &&
+    (cutoff === null || (typeof cutoff === 'string' && now.getTime() < Date.parse(cutoff)))
 }
 
 export function bookingEligibilityMessage(reason: string, serverMessage?: string | null): string {

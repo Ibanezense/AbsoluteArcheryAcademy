@@ -23,23 +23,27 @@ describe('student mobile redesign', () => {
     expect(header).toContain('LogOut')
     expect(header).toContain('supabase.auth.signOut()')
     expect(header).toContain('Cerrar sesión')
-    expect(nav).toContain('bg-navy')
+    expect(nav).toContain('border-blue-100 bg-white')
     expect(nav).toContain('Membresías')
+    expect(nav).toContain('Mi progreso')
+    expect(nav).not.toContain("href: '/reservar'")
   })
 
   it('renders the required student home sections', () => {
     const home = source('app/page.tsx')
 
     expect(home).toContain('MobileStudentHeader showLogo')
-    expect(home).toContain('Clases disponibles')
+    expect(home).toContain('Clases pendientes')
+    expect(home).toContain('balance.data?.total')
     expect(home).toContain('Reservar clase')
     expect(home).toContain('Puedes cancelar desde la app hasta el inicio de la clase.')
     expect(home).toContain('Próxima reserva')
-    expect(home).toContain('Actividad reciente')
+    expect(home).toContain('<StudentHomeProgress')
+    expect(home).not.toContain('Actividad reciente')
   })
 
   it('uses the multisite weekly booking agenda without manual membership selection', () => {
-    const reservar = source('app/reservar/page.tsx')
+    const reservar = source('components/student/StudentBookingAgendaPage.tsx')
 
     expect(reservar).toContain('Agenda semanal')
     expect(reservar).toContain('session.location_name')
@@ -54,19 +58,21 @@ describe('student mobile redesign', () => {
     expect(reservar).not.toContain('membershipId')
   })
 
-  it('adds reservation tabs and membership account filters', () => {
+  it('keeps booking history in reservations and links to it from memberships', () => {
     const reservations = source('app/mis-reservas/page.tsx')
     const memberships = source('app/membresias/page.tsx')
     const history = source('components/student/StudentBookingHistory.tsx')
 
-    expect(reservations).toContain('Próximas')
+    expect(reservations).toContain('Clases reservadas')
     expect(reservations).toContain('Historial')
     expect(reservations).toContain('StudentBookingHistory')
+    expect(reservations).toContain('Actividad reciente')
+    expect(reservations).toContain('href="#planificador"')
     expect(history).toContain('Cancelar reserva')
-    expect(memberships).toContain('Estado de cuenta')
-    expect(memberships).toContain('Vigencia del plan')
-    expect(memberships).toContain('Uso del plan mostrado')
-    expect(memberships).toContain('StudentBookingHistory')
+    expect(memberships).toContain('Vigencia total')
+    expect(memberships).toContain('Próxima membresía programada')
+    expect(memberships).toContain('href="/mis-reservas#historial"')
+    expect(memberships).not.toContain('<StudentBookingHistory')
     expect(history).toContain('Mes del historial')
     expect(history).toContain('Anterior')
     expect(history).toContain('Siguiente')
@@ -85,7 +91,7 @@ describe('student mobile redesign', () => {
     expect(home).toContain('Plan programado')
     expect(home).toContain('Último plan')
     expect(memberships).toContain('getDashboardMembershipBadge')
-    expect(memberships).toContain('membershipStatus: dashboard.membership_status')
+    expect(memberships).toContain('membershipStatus: dashboard?.membership_status')
     expect(memberships).toContain('label={membershipBadge.label}')
     expect(statusBadge).toContain("scheduled: 'Programada'")
     expect(statusBadge).toContain('border-blue-200 bg-blue-50 text-blue-700')

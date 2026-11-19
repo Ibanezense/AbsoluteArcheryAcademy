@@ -26,7 +26,7 @@ describe('phase 1 UX and operational safeguards', () => {
     expect(skeleton).toContain('export function StudentPageSkeleton')
     expect(skeleton).toContain('animate-pulse')
 
-    for (const path of ['app/page.tsx', 'app/membresias/page.tsx', 'app/mis-reservas/page.tsx', 'app/reservar/page.tsx']) {
+    for (const path of ['app/page.tsx', 'app/membresias/page.tsx', 'app/mis-reservas/page.tsx', 'components/student/StudentBookingAgendaPage.tsx']) {
       expect(source(path)).toContain('StudentPageSkeleton')
     }
   })

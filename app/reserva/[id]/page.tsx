@@ -106,7 +106,7 @@ export default function ReservaConfirm() {
             {data.cancellation_review_status === 'pending' && <p className="text-sm text-textsec">La academia está revisando la cancelación.</p>}
             {canCancel && <button type="button" className="btn-outline min-h-[50px] w-full justify-center" disabled={working} onClick={() => void cancelar()}>{working ? 'Revisando cancelación…' : 'Cancelar reserva'}</button>}
             <Link className="btn min-h-[50px] w-full" href="/mis-reservas">Ver Mis reservas</Link>
-            <Link className="btn-outline min-h-[50px] w-full" href="/reservar">Ver calendario</Link>
+            <Link className="btn-outline min-h-[50px] w-full" href="/mis-reservas#planificador">Ver calendario</Link>
             <Link className="block py-2 text-center text-sm font-semibold text-textsec underline underline-offset-2" href="/">Volver al inicio</Link>
           </div>
         </StudentCard>

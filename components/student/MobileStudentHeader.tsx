@@ -26,7 +26,7 @@ export function MobileStudentHeader({
   }
 
   return (
-    <header className="sport-dark relative border-b border-white/10 bg-navy px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] text-white sm:px-6 md:px-8">
+    <header className="sport-dark relative border-b-2 border-orange-400 bg-navy px-4 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] text-white sm:px-6 md:px-8">
       <div className="relative z-10 flex min-h-[52px] items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {showBack && (

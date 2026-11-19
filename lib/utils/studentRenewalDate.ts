@@ -68,7 +68,8 @@ export function getStudentRenewalDateState(
   }
 
   const daysRemaining = Math.round((endDate.getTime() - currentDate.getTime()) / 86_400_000)
-  const value = `${endDate.getUTCDate()} ${MONTHS_SHORT_ES[endDate.getUTCMonth()]}`
+  const yearSuffix = endDate.getUTCFullYear() === currentDate.getUTCFullYear() ? '' : ` ${endDate.getUTCFullYear()}`
+  const value = `${endDate.getUTCDate()} ${MONTHS_SHORT_ES[endDate.getUTCMonth()]}${yearSuffix}`
 
   if (daysRemaining < 0) {
     return { label: 'Renovación', value, detail: 'Renovación vencida', tone: 'red' }

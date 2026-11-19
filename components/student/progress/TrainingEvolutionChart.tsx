@@ -15,31 +15,43 @@ import { progressDate } from './ProgressSummary'
 export function TrainingEvolutionChart({
   controls,
   format,
+  compact = false,
+  studentDetail = false,
 }: {
   controls: AcademyControl[]
   format: 36 | 72
+  compact?: boolean
+  studentDetail?: boolean
 }) {
   const rows = controls.filter((row) => row.status === 'valid' && row.arrows === format)
+  const only = studentDetail && rows.length === 1 ? rows[0] : null
   const data = rows.map((row) => ({ ...row, day: Date.parse(`${row.performed_date}T12:00:00Z`) }))
   const days = data.map((row) => row.day)
   const min = Math.min(...days)
   const max = Math.max(...days)
+  const chartHeight = compact ? 170 : studentDetail ? 200 : 250
   return (
-    <div className="rounded-2xl border border-line bg-white p-4">
-      <h3 className="text-sm font-bold">
+    <div className={compact ? 'min-w-0' : 'rounded-2xl border border-line bg-white p-4'}>
+      {!compact && <h3 className="text-sm font-bold">
         {format} flechas <span className="font-normal text-textsec">· máximo {format * 10}</span>
-      </h3>
+      </h3>}
+      {only && (
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="text-xl font-bold tabular-nums text-[#0758aa]">{only.score} <span className="text-sm font-medium text-textsec">/ {format * 10}</span></p>
+          <p className="text-xs text-textsec">{progressDate(only.performed_date)}</p>
+        </div>
+      )}
       {data.length ? (
         <div
-          className="mt-4 h-[250px] w-full min-w-0"
+          className={compact ? 'h-[170px] w-full min-w-0' : studentDetail ? 'mt-3 h-[200px] w-full min-w-0' : 'mt-4 h-[250px] w-full min-w-0'}
           role="img"
-          aria-label={`Evolución de ${rows.length} controles válidos de ${format} flechas. Puntajes entre 0 y ${format * 10}. Consulta los valores en el historial.`}
+          aria-label={`Evolución de ${rows.length} ${rows.length === 1 ? 'control válido' : 'controles válidos'} de ${format} flechas. Puntajes entre 0 y ${format * 10}. Consulta los valores en el historial.`}
         >
           <ResponsiveContainer
             width="100%"
             height="100%"
             minWidth={0}
-            initialDimension={{ width: 300, height: 250 }}
+            initialDimension={{ width: 300, height: chartHeight }}
           >
             <ScatterChart margin={{ left: -18, right: 12, top: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -98,15 +110,15 @@ export function TrainingEvolutionChart({
         </div>
       ) : (
         <p className="py-8 text-sm text-textsec">
-          Sin controles válidos de {format} flechas con estos filtros.
+          Sin controles válidos de {format} flechas{compact ? ' a esta distancia.' : ' con estos filtros.'}
         </p>
       )}
-      <a
+      {!compact && !studentDetail && <a
         href="#progress-history"
         className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-accent"
       >
         Consultar los valores en el historial
-      </a>
+      </a>}
     </div>
   )
 }

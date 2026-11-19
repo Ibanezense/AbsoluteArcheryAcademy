@@ -48,6 +48,21 @@ function best(rows: AcademyControl[], arrows: 36 | 72) {
   )
 }
 
+export function trainingRecordsByDistance(controls: AcademyControl[]) {
+  const distances = new Map<number, AcademyControl[]>()
+  for (const control of controls) {
+    if (control.status !== 'valid') continue
+    const rows = distances.get(control.distance) ?? []
+    rows.push(control)
+    distances.set(control.distance, rows)
+  }
+  return [...distances].sort(([a], [b]) => a - b).map(([distance, rows]) => ({
+    distance,
+    best36: best(rows, 36),
+    best72: best(rows, 72),
+  }))
+}
+
 export function summarizeTrainingControls(
   controls: AcademyControl[],
   assignedDistance: number | null

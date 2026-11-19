@@ -5,31 +5,32 @@ import {
   ArrowRight,
   Crosshair,
   RefreshCw,
-  ShieldCheck,
-  Trophy,
+  MessageCircle,
   UserRound,
 } from 'lucide-react'
 import { AuthGuard } from '@/components/AuthGuard'
 import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
+import { StudentCard } from '@/components/student/StudentCard'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useProgressAccountId } from '@/lib/hooks/useStudentProgress'
 import { useStudentProfile } from '@/lib/hooks/useStudentProfile'
-import { useProgressAvailability } from '@/components/student/progress/ProgressAvailability'
 import Avatar from '@/components/ui/Avatar'
 import { STUDENT_SUPPORT_URL } from '@/lib/utils/studentSupport'
 
 function Detail({
   label,
   value,
+  featured = false,
 }: {
   label: string
   value: string | null | undefined
+  featured?: boolean
 }) {
   return (
-    <div className="min-w-0 border-b border-slate-100 py-3.5 last:border-0">
-      <dt className="text-xs font-semibold text-textsec">{label}</dt>
+    <div className={featured ? 'min-w-0 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5' : 'min-w-0 border-b border-blue-50 py-2.5 last:border-0'}>
+      <dt className="text-xs font-semibold text-slate-600">{label}</dt>
       <dd
-        className={`mt-1 break-words text-sm font-semibold ${value ? 'text-slate-900' : 'font-normal text-slate-400'}`}
+        className={`mt-0.5 break-words text-sm ${value ? featured ? 'font-bold text-accent' : 'font-semibold text-[#101e3e]' : 'text-slate-600'}`}
       >
         {value || 'No registrado'}
       </dd>
@@ -51,7 +52,6 @@ function birthday(value: string | null) {
 export default function StudentProfilePage() {
   const context = useStudentContext()
   const accountId = useProgressAccountId()
-  const progressEnabled = useProgressAvailability()
   const ready =
     !context.loading &&
     !context.error &&
@@ -74,12 +74,12 @@ export default function StudentProfilePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-bg pb-8 text-textpri">
+      <div className="min-h-screen bg-[#F5F8FC] pb-8 text-textpri">
         <MobileStudentHeader
           title="Mi perfil"
-          subtitle="Tu información y tus logros"
+          subtitle="Tus datos personales y deportivos"
         />
-        <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-7">
+        <div className="mx-auto max-w-5xl space-y-4 px-4 py-4 sm:px-6 sm:py-6">
           {!ready ? (
             <div className="rounded-3xl border border-line bg-white p-6">
               <p role="status">{context.error || 'Verificando tu acceso…'}</p>
@@ -131,155 +131,82 @@ export default function StudentProfilePage() {
             </div>
           ) : (
             <>
-              <section
-                aria-label="Perfil del alumno"
-                className="sport-dark relative isolate overflow-hidden rounded-2xl border border-slate-700 p-6 text-white shadow-soft sm:p-8"
-              >
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -right-20 top-0 -z-10 h-full w-56 -skew-x-[20deg] border-x-[20px] border-white/[0.035]"
-                />
-                <div className="flex items-start justify-between gap-4">
+              <StudentCard className="border-blue-100 bg-blue-50/60 px-4 py-3 sm:px-5">
+                <section aria-label="Perfil del alumno" className="flex items-center gap-3">
                   <Avatar
                     name={profile.full_name || 'Alumno'}
                     url={profile.avatar_url}
                     size="lg"
-                    className="shrink-0 rounded-2xl border border-white/10 text-orange-300"
+                    className="shrink-0 border-2 border-orange-300 bg-orange-100 text-accent"
                   />
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-slate-300">
-                    <ShieldCheck className="h-3.5 w-3.5 text-orange-400" />
-                    Academia
-                  </span>
-                </div>
-                <p className="mt-6 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-orange-400">
-                  Absolute Archery
-                </p>
-                <h2 className="mt-2 max-w-2xl font-heading text-4xl font-bold leading-none tracking-tight text-white sm:text-5xl">
-                  {profile.full_name || 'Alumno'}
-                </h2>
-                <p className="mt-2 text-sm text-slate-300">
-                  {profile.category || 'Perfil deportivo por completar'}
-                </p>
-                {context.account?.role === 'guardian' && (
-                  <Link
-                    href="/hub"
-                    className="mt-5 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-orange-300"
-                  >
-                    Cambiar alumno <ArrowRight className="h-4 w-4" />
-                  </Link>
-                )}
-              </section>
+                  <h2 className="min-w-0 break-words text-lg font-bold leading-tight text-[#101e3e]">
+                    {profile.full_name || 'Alumno'}
+                  </h2>
+                </section>
+              </StudentCard>
 
-              {progressEnabled && (
-                <Link
-                  href="/mi-progreso"
-                  className="group my-5 flex min-h-[108px] items-center gap-4 rounded-2xl border border-orange-200 bg-orange-50 p-5 transition-colors hover:border-orange-400 hover:bg-orange-100/60"
-                >
-                  <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-accent text-white shadow-card">
-                    <Trophy className="h-6 w-6" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-heading text-2xl font-bold tracking-tight text-textpri">
-                      Mi progreso
-                    </span>
-                    <span className="mt-1 block text-xs leading-relaxed text-[#76543D]">
-                      Tus récords, controles y resultados deportivos.
-                    </span>
-                  </span>
-                  <ArrowRight className="h-5 w-5 shrink-0 text-orange-700 transition-transform group-hover:translate-x-1" />
-                </Link>
-              )}
-
-              <div
-                className={`grid gap-5 md:grid-cols-2 ${progressEnabled ? '' : 'mt-5'}`}
+              <div className="grid items-start gap-4 md:grid-cols-2">
+                <StudentCard className="border-blue-100 p-4 sm:p-5">
+                  <section aria-labelledby="sports-title">
+                    <h2 id="sports-title" className="flex items-center gap-2 text-lg font-bold text-[#101e3e]">
+                      <Crosshair aria-hidden="true" className="size-5 text-accent" /> Datos deportivos
+                    </h2>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-3">
+                      <Detail
+                        label="Distancia asignada"
+                        value={profile.current_distance_m == null ? null : `${profile.current_distance_m} m`}
+                        featured
+                      />
+                      <Detail
+                        label="Equipo"
+                        value={
+                          profile.has_own_bow == null
+                            ? null
+                            : profile.has_own_bow ? 'Arco propio' : 'Arco de la academia'
+                        }
+                        featured
+                      />
+                      <Detail label="División" value={profile.division} />
+                      <Detail label="Categoría" value={profile.category} />
+                      <Detail label="Nivel" value={profile.level} />
+                      <Detail label="Potencia del arco" value={profile.bow_poundage == null ? null : `${profile.bow_poundage} lb`} />
+                    </dl>
+                  </section>
+                </StudentCard>
+                <StudentCard className="border-blue-100 p-4 sm:p-5">
+                  <section aria-labelledby="personal-title">
+                    <h2 id="personal-title" className="flex items-center gap-2 text-lg font-bold text-[#101e3e]">
+                      <UserRound aria-hidden="true" className="size-5 text-[#0758aa]" /> Datos personales
+                    </h2>
+                    <dl className="mt-2">
+                      <Detail label="Fecha de nacimiento" value={birthday(profile.date_of_birth)} />
+                      <Detail label="Correo electrónico" value={profile.email} />
+                      <Detail label="Teléfono" value={profile.phone} />
+                    </dl>
+                    <div className="mt-2 border-t border-blue-100 pt-3">
+                      <p className="text-xs text-slate-600">La academia actualiza los datos de tu perfil.</p>
+                      <a
+                        href={STUDENT_SUPPORT_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-[#0758aa] underline underline-offset-2"
+                      >
+                        <MessageCircle aria-hidden="true" className="size-4 shrink-0" />
+                        Solicitar corrección por WhatsApp
+                      </a>
+                    </div>
+                  </section>
+                </StudentCard>
+              </div>
+              <button
+                type="button"
+                onClick={() => void query.refetch()}
+                disabled={query.isFetching}
+                className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-semibold text-slate-600 hover:text-[#0758aa] hover:underline disabled:opacity-60"
               >
-                <section
-                  aria-labelledby="personal-title"
-                  className="surface-panel px-5 pb-2 pt-5 sm:px-6"
-                >
-                  <h2
-                    id="personal-title"
-                    className="flex items-center gap-2.5 font-heading text-2xl font-bold"
-                  >
-                    <UserRound className="h-4 w-4 text-orange-600" />
-                    Datos personales
-                  </h2>
-                  <dl className="mt-3">
-                    <Detail label="Nombre completo" value={profile.full_name} />
-                    <Detail
-                      label="Fecha de nacimiento"
-                      value={birthday(profile.date_of_birth)}
-                    />
-                    <Detail label="Correo electrónico" value={profile.email} />
-                    <Detail label="Teléfono" value={profile.phone} />
-                  </dl>
-                </section>
-                <section
-                  aria-labelledby="sports-title"
-                  className="surface-panel px-5 pb-2 pt-5 sm:px-6"
-                >
-                  <h2
-                    id="sports-title"
-                    className="flex items-center gap-2.5 font-heading text-2xl font-bold"
-                  >
-                    <Crosshair className="h-4 w-4 text-orange-600" />
-                    Datos deportivos
-                  </h2>
-                  <dl className="mt-3 grid grid-cols-2 gap-x-5">
-                    <Detail label="División" value={profile.division} />
-                    <Detail label="Nivel" value={profile.level} />
-                    <Detail
-                      label="Distancia asignada"
-                      value={
-                        profile.current_distance_m == null
-                          ? null
-                          : `${profile.current_distance_m} m`
-                      }
-                    />
-                    <Detail label="Categoría" value={profile.category} />
-                    <Detail
-                      label="Equipo"
-                      value={
-                        profile.has_own_bow == null
-                          ? null
-                          : profile.has_own_bow
-                            ? 'Arco propio'
-                            : 'Arco de la academia'
-                      }
-                    />
-                    <Detail
-                      label="Potencia del arco"
-                      value={
-                        profile.bow_poundage == null
-                          ? null
-                          : `${profile.bow_poundage} lb`
-                      }
-                    />
-                  </dl>
-                </section>
-              </div>
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-500">
-                <a
-                  href={STUDENT_SUPPORT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Solicitar actualización de datos por WhatsApp (abre una pestaña nueva)"
-                  className="inline-flex min-h-11 items-center font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-orange-700"
-                >
-                  Solicitar actualización de datos a la academia
-                </a>
-                <button
-                  type="button"
-                  onClick={() => void query.refetch()}
-                  disabled={query.isFetching}
-                  className="inline-flex min-h-11 items-center gap-1.5 font-semibold text-slate-600 hover:text-orange-700"
-                >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${query.isFetching ? 'animate-spin' : ''}`}
-                  />
-                  {query.isFetching ? 'Actualizando…' : 'Actualizar vista'}
-                </button>
-              </div>
+                <RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'motion-safe:animate-spin' : ''}`} />
+                {query.isFetching ? 'Actualizando…' : 'Actualizar vista'}
+              </button>
             </>
           )}
         </div>

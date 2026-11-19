@@ -7,7 +7,7 @@ import { MobileStudentHeader } from '@/components/student/MobileStudentHeader'
 import { StudentCard } from '@/components/student/StudentCard'
 import { useStudentContext } from '@/lib/hooks/useStudentContext'
 import { useProgressAccountId, useStudentProgress } from '@/lib/hooks/useStudentProgress'
-import { ProgressSummary } from './ProgressSummary'
+import { StudentProgressSummary } from './StudentProgressSummary'
 import { ProgressSourceState } from './ProgressSourceState'
 import { TrainingWorkspace } from './TrainingWorkspace'
 import { StudentCompetitionsPanel } from './StudentCompetitionsPanel'
@@ -28,7 +28,7 @@ export default function StudentProgressPage() {
       : null
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-bg pb-8 text-textpri">
+      <div className="min-h-screen bg-[#F5F8FC] pb-8 text-textpri">
         <MobileStudentHeader
           title="Mi progreso"
           subtitle={
@@ -36,7 +36,7 @@ export default function StudentProgressPage() {
           }
           showBack
         />
-        <div className="mx-auto max-w-6xl space-y-5 px-4 py-5 sm:px-6">
+        <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 sm:px-6">
           {!ready ? (
             <StudentCard className="p-6">
               <p role="status">{context.error || 'Verificando tu acceso…'}</p>
@@ -53,9 +53,9 @@ export default function StudentProgressPage() {
             </StudentCard>
           ) : (
             <>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-heading text-2xl font-bold tracking-tight">{context.activeStudent?.full_name}</p>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-bold text-[#101e3e]">{context.activeStudent?.full_name}</p>
                   {!showCompetitions && (
                     <p className="mt-1 text-xs text-textsec">
                       {data?.checked_at
@@ -64,24 +64,26 @@ export default function StudentProgressPage() {
                     </p>
                   )}
                 </div>
-                {!showCompetitions && (
-                  <button
-                    type="button"
-                    className="btn-outline min-h-11"
-                    onClick={() => void query.refetch()}
-                    disabled={query.isFetching}
-                  >
-                    {query.isFetching ? 'Consultando…' : 'Actualizar'}
-                  </button>
-                )}
-                {context.account?.role === 'guardian' && (
-                  <Link
-                    href="/hub"
-                    className="inline-flex min-h-11 items-center text-sm font-semibold text-accent"
-                  >
-                    Cambiar alumno
-                  </Link>
-                )}
+                <div className="flex flex-wrap items-center gap-x-3">
+                  {!showCompetitions && (
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center text-sm font-bold text-[#0758aa] hover:underline disabled:opacity-60"
+                      onClick={() => void query.refetch()}
+                      disabled={query.isFetching}
+                    >
+                      {query.isFetching ? 'Consultando…' : 'Actualizar'}
+                    </button>
+                  )}
+                  {context.account?.role === 'guardian' && (
+                    <Link
+                      href="/hub"
+                      className="inline-flex min-h-11 items-center text-sm font-semibold text-[#0758aa] hover:underline"
+                    >
+                      Cambiar alumno
+                    </Link>
+                  )}
+                </div>
               </div>
               {competitionsEnabled && (
                 <div
@@ -158,10 +160,11 @@ export default function StudentProgressPage() {
                   <TrainingWorkspace
                     key={`${accountId}:${data.student_id}:${data.link_revision}:${data.assigned_distance_m}`}
                     data={data}
+                    studentView
                   />
                 ) : (
                   <>
-                    <ProgressSummary
+                    <StudentProgressSummary
                       summary={data.summary}
                       assignedDistance={data.assigned_distance_m}
                     />
