@@ -23,9 +23,11 @@ it('limits student and guardian agendas to their site while leaving admin access
     await db.exec(readFileSync('supabase/migrations/20261019201815_student_booking_agenda_and_detail.sql', 'utf8'))
     const migration = 'supabase/migrations/20261111151558_student_booking_home_location.sql'
     if (existsSync(migration)) await db.exec(readFileSync(migration, 'utf8'))
+    const bothLocationsMigration = 'supabase/migrations/20261119143148_student_both_locations.sql'
+    if (existsSync(bothLocationsMigration)) await db.exec(readFileSync(bothLocationsMigration, 'utf8'))
     await db.exec(`
       INSERT INTO profiles VALUES ('00000000-0000-0000-0000-000000000099','admin');
-      INSERT INTO academy_locations VALUES ('00000000-0000-0000-0000-000000000003','tiabaya','Tiabaya',null,'flexible'),('00000000-0000-0000-0000-000000000004','umacollo','Umacollo',null,'fixed_operational');
+      INSERT INTO academy_locations VALUES ('00000000-0000-0000-0000-000000000003','tiabaya','Tiabaya',null,'flexible'),('00000000-0000-0000-0000-000000000004','umacollo','Umacollo',null,'fixed_operational'),('00000000-0000-0000-0000-000000000023','otra','Otra',null,'flexible');
       INSERT INTO students(id,self_profile_id,full_name,home_location_id) VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','Alumno','00000000-0000-0000-0000-000000000004');
       INSERT INTO student_guardians VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000013');
       INSERT INTO sessions(id,start_at,end_at,location_id,booking_mode) VALUES ('00000000-0000-0000-0000-000000000021',now()+interval '3 days',now()+interval '3 days 1 hour','00000000-0000-0000-0000-000000000003','flexible'),('00000000-0000-0000-0000-000000000022',now()+interval '3 days',now()+interval '3 days 1 hour','00000000-0000-0000-0000-000000000004','fixed');
@@ -40,7 +42,17 @@ it('limits student and guardian agendas to their site while leaving admin access
     const booking = await db.query<{id: string}>('SELECT id FROM bookings')
     await expect(db.query("SELECT update_booking_session($1,'00000000-0000-0000-0000-000000000021')", [booking.rows[0].id])).rejects.toThrow('Solo puedes reservar en la sede asignada')
     await expect(db.query("UPDATE bookings SET session_id='00000000-0000-0000-0000-000000000021' WHERE id=$1", [booking.rows[0].id])).rejects.toThrow('Solo puedes reservar en la sede asignada')
+    await db.exec("UPDATE students SET both_locations=true,home_location_id=NULL")
+    expect((await agenda()).rows.map(x => x.location_code).sort()).toEqual(['tiabaya', 'umacollo'])
+    await db.query("SELECT book_session_multisite('00000000-0000-0000-0000-000000000021','00000000-0000-0000-0000-000000000001')")
+    await db.exec("DELETE FROM bookings WHERE session_id='00000000-0000-0000-0000-000000000021'")
+    await db.query("SELECT update_booking_session($1,'00000000-0000-0000-0000-000000000021')", [booking.rows[0].id])
+    await db.query("SELECT update_booking_session($1,'00000000-0000-0000-0000-000000000022')", [booking.rows[0].id])
+    const otherSite = await db.query<{ allowed: boolean }>("SELECT public.student_location_allowed('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000023') allowed")
+    expect(otherSite.rows[0].allowed).toBe(false)
     await db.exec("SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000013',false)")
+    expect((await agenda()).rows.map(x => x.location_code).sort()).toEqual(['tiabaya', 'umacollo'])
+    await db.exec("UPDATE students SET both_locations=false,home_location_id='00000000-0000-0000-0000-000000000004'")
     expect((await agenda()).rows.map(x => x.location_code)).toEqual(['umacollo'])
     await expect(db.query("SELECT book_session_multisite('00000000-0000-0000-0000-000000000021','00000000-0000-0000-0000-000000000001')")).rejects.toThrow('Solo puedes reservar en la sede asignada')
     await db.exec("UPDATE students SET home_location_id='00000000-0000-0000-0000-000000000003'")

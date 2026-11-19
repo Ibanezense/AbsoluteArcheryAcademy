@@ -563,7 +563,7 @@ function getRelationList<T>(value: T | T[] | null | undefined) {
 }
 
 async function checkStudentLocation(admin: SupabaseClient, locationId: string | null | undefined) {
-  if (!locationId) return null
+  if (!locationId || locationId === 'both') return null
   const { data, error } = await admin.from('academy_locations').select('id').eq('id', locationId).maybeSingle()
   if (error) return NextResponse.json({ error: 'No se pudo verificar la sede.' }, { status: 500 })
   return data ? null : NextResponse.json({ error: 'La sede seleccionada no existe.' }, { status: 400 })

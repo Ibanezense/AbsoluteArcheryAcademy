@@ -222,6 +222,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
               avatar_url,
               date_of_birth,
               home_location_id,
+              both_locations,
               guardian_contact,
               dni,
               phone,
@@ -370,7 +371,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
 
       return {
         id: typedStudent.id,
-        home_location_id: typedStudent.home_location_id || null,
+        home_location_id: typedStudent.both_locations ? 'both' : typedStudent.home_location_id || null,
         guardian_contact: typedStudent.guardian_contact || null,
         full_name: typedStudent.full_name,
         avatar_url: typedStudent.avatar_url,

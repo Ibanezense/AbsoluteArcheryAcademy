@@ -207,9 +207,9 @@ export function mapStudentListRow(
 
   return {
     id: student.id,
-    home_location_id: student.home_location_id || null,
-    home_location_name: (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.name || null,
-    home_location_code: (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.code || null,
+    home_location_id: student.both_locations ? 'both' : student.home_location_id || null,
+    home_location_name: student.both_locations ? 'Ambas' : (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.name || null,
+    home_location_code: student.both_locations ? 'both' : (Array.isArray(student.home_location) ? student.home_location[0] : student.home_location)?.code || null,
     full_name: student.full_name,
     avatar_url: student.avatar_url,
     date_of_birth: student.date_of_birth,
@@ -266,6 +266,7 @@ export function useStudents() {
             id,
             full_name,
             home_location_id,
+            both_locations,
             home_location:academy_locations!students_home_location_id_fkey(name,code),
             avatar_url,
             date_of_birth,
