@@ -4,7 +4,7 @@ import { useDraggable } from '@dnd-kit/core'
 import type { ReactNode } from 'react'
 import { GripVertical, Pencil } from 'lucide-react'
 import IntroLocationHeader from './IntroLocationHeader'
-import { INTRO_STATES, appointmentStatus, calendarTime, type IntroAppointment } from '@/lib/utils/introCalendar'
+import { ATTENDANCE_STATES, attendanceStatus, calendarTime, canReschedule, type IntroAppointment } from '@/lib/utils/introCalendar'
 
 export type AppointmentCardActions = {
   onSelect: (row: IntroAppointment) => void
@@ -12,12 +12,12 @@ export type AppointmentCardActions = {
   disabled: boolean
 }
 
-type CardProps = AppointmentCardActions & { row: IntroAppointment; overlay?: boolean }
+type CardProps = AppointmentCardActions & { row: IntroAppointment; overlay?: boolean; draggable?: boolean }
 
 function CardContent({ row, onSelect, onEdit, disabled, overlay = false, nodeRef, dragHandle, isDragging }: CardProps & {
   nodeRef?: (node: HTMLElement | null) => void; dragHandle?: ReactNode; isDragging?: boolean;
 }) {
-  const state = INTRO_STATES.find((item) => item.value === appointmentStatus(row))!
+  const state = ATTENDANCE_STATES.find((item) => item.value === attendanceStatus(row))!
   return (
     <article ref={nodeRef} data-appointment-id={overlay ? undefined : row.booking_id} className={`group relative rounded-xl border bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md ${isDragging ? 'opacity-30' : ''} ${overlay ? 'w-56 rotate-2 border-accent shadow-xl' : 'border-slate-200'}`}>
       <IntroLocationHeader name={row.location_name} code={row.location_code} className="-mx-3 -mt-3 mb-2 rounded-t-xl" />
@@ -32,8 +32,8 @@ function CardContent({ row, onSelect, onEdit, disabled, overlay = false, nodeRef
         <span className="block text-sm font-bold leading-snug text-slate-900">{row.full_name}</span>
         <span className="mt-1 block text-[11px] text-slate-500">{row.age} años</span>
         <span className={`mt-3 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${state.color}`}>{state.label}</span>
-        {row.payment_status === 'pending' && <span className="mt-1.5 block text-[11px] font-medium text-amber-700">{row.pay_on_site ? 'Paga en sede' : appointmentStatus(row) !== 'pending' ? 'Por pagar' : 'Pago pendiente'} · S/ {Number(row.amount_paid || 0).toFixed(2)}</span>}
-        {row.payment_status === 'paid' && appointmentStatus(row) !== 'paid' && <span className="mt-1.5 block text-[11px] text-emerald-700">Pagado · S/ {Number(row.amount_paid || 0).toFixed(2)}</span>}
+        {row.payment_status === 'pending' && <span className="mt-1.5 block text-xs font-medium text-orange-800">{row.pay_on_site ? 'Paga en sede' : 'Por pagar'} · S/ {Number(row.amount_paid || 0).toFixed(2)}</span>}
+        {row.payment_status === 'paid' && <span className="mt-1.5 block text-xs text-emerald-800">Pagado · S/ {Number(row.amount_paid || 0).toFixed(2)}</span>}
       </button>
     </article>
   )
@@ -50,5 +50,5 @@ function DraggableCard(props: CardProps) {
 }
 
 export default function IntroAppointmentCard(props: CardProps) {
-  return props.overlay ? <CardContent {...props} /> : <DraggableCard {...props} />
+  return props.overlay || props.draggable === false || !canReschedule(props.row) ? <CardContent {...props} /> : <DraggableCard {...props} />
 }

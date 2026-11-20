@@ -41,6 +41,7 @@ type CreateBody = {
   accountMode: AccountMode
   student: StudentPayload
   guardian?: GuardianPayload | null
+  introBookingId?: string
 }
 
 type UpdateBody = {
@@ -179,7 +180,7 @@ async function requireAdminRequest(req: Request) {
     return { error: NextResponse.json({ error: 'No autorizado.' }, { status: 403 }) }
   }
 
-  return { admin: adminClient, actorId: actorProfile.id, hasServiceRole: !!serviceKey }
+  return { admin: adminClient, actorClient, actorId: actorProfile.id, hasServiceRole: !!serviceKey }
 }
 
 async function generateUniqueAccessCode(admin: SupabaseClient) {
@@ -369,6 +370,7 @@ async function createManagedProfile(
     dni?: string | null
     role: 'guardian' | 'student'
     is_active?: boolean
+    requireNewEmail?: boolean
   }
 ) {
   const accessCode = await generateUniqueAccessCode(admin)
@@ -383,6 +385,7 @@ async function createManagedProfile(
 
   // Si el email ya existe en auth, reusar el usuario existente (caso: alumno eliminado y re-registrado)
   if (isAlreadyRegisteredAuthError(createError)) {
+    if (input.requireNewEmail) throw new Error('Este correo ya tiene una cuenta. Revisa la ficha existente antes de inscribir al alumno.')
     const existingUser = await findAuthUserByEmail(admin, input.email)
 
     if (!existingUser) {
@@ -579,7 +582,28 @@ async function handleCreate(req: Request) {
     return NextResponse.json({ error: validationError }, { status: 400 })
   }
 
-  const { admin, actorId } = auth
+  const { admin, actorId, actorClient } = auth
+  let introClientId: string | null = null
+  if (body.introBookingId !== undefined) {
+    if (typeof body.introBookingId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.introBookingId) || body.accountMode !== 'student_only') {
+      return NextResponse.json({ error: 'La inscripción desde una prueba requiere el acceso individual del alumno.' }, { status: 400 })
+    }
+    const { data: booking, error } = await actorClient.from('bookings').select('intro_client_id')
+      .eq('id', body.introBookingId).eq('status', 'attended').maybeSingle()
+    if (error || !booking?.intro_client_id) return NextResponse.json({ error: 'Verifica que la cita esté marcada como asistida.' }, { status: 409 })
+    introClientId = booking.intro_client_id
+    const existing = await actorClient.from('intro_student_conversions').select('student_id')
+      .eq('intro_client_id', introClientId).is('revoked_at', null).maybeSingle()
+    if (existing.error) return NextResponse.json({ error: 'No se pudo verificar la inscripción de la prueba.' }, { status: 503 })
+    if (existing.data?.student_id) return NextResponse.json({ student_id: existing.data.student_id })
+    if (existing.data) return NextResponse.json({ error: 'Revisa el vínculo anterior de esta prueba.' }, { status: 409 })
+    const dni = normalizeOptionalDni(body.student.dni)
+    if (dni) {
+      const duplicate = await actorClient.from('students').select('id').eq('dni', dni).limit(1).maybeSingle()
+      if (duplicate.error) return NextResponse.json({ error: 'No se pudo verificar el DNI.' }, { status: 503 })
+      if (duplicate.data) return NextResponse.json({ error: 'Ya existe un alumno con este DNI. Revisa la coincidencia para vincular su ficha.' }, { status: 409 })
+    }
+  }
   const locationError = await checkStudentLocation(admin, body.student.home_location_id)
   if (locationError) return locationError
   const createdUserIds: string[] = []
@@ -610,6 +634,7 @@ async function handleCreate(req: Request) {
         dni: student.dni,
         role: 'student',
         is_active: student.is_active,
+        requireNewEmail: Boolean(introClientId),
       })
 
       if (!createdStudentProfile.reused) {
@@ -661,6 +686,21 @@ async function handleCreate(req: Request) {
 
       if (guardianLinkError) {
         throw new Error(guardianLinkError.message)
+      }
+    }
+
+    if (body.introBookingId && introClientId) {
+      stage = 'create:link-attended-intro'
+      const { error: linkError } = await actorClient.rpc('link_attended_intro_student', {
+        p_booking_id: body.introBookingId, p_student_id: insertedStudent.id,
+      })
+      if (linkError) {
+        const recovery = await actorClient.from('intro_student_conversions').select('student_id')
+          .eq('intro_client_id', introClientId).is('revoked_at', null).maybeSingle()
+        if (recovery.error) {
+          return NextResponse.json({ error: 'No se pudo verificar el vínculo. Revisa Pruebas y Alumnos antes de volver a intentar.' }, { status: 503 })
+        }
+        if (recovery.data?.student_id !== insertedStudent.id) throw new Error(linkError.message)
       }
     }
 

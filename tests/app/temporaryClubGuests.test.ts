@@ -2,7 +2,7 @@
 import { createElement } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import ReportesPage from '@/app/admin/ajustes/reportes/page'
+import ReportesPage from '@/app/admin/asistencia/lista-ingreso/page'
 
 const state = vi.hoisted(() => ({ rows: [{ name: 'Alumno Real', dni: '12345678', type: 'student' }], save: vi.fn(), pdf: vi.fn(), rpc: vi.fn(), fail: false }))
 vi.mock('@/lib/infrastructureQueries', () => ({ useAcademyLocations: () => ({ data: [{id:'a',name:'Tiabaya',code:'tiabaya'},{id:'b',name:'Umacollo',code:'umacollo'}] }) }))

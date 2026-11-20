@@ -1,5 +1,6 @@
 import { membershipCycleEndDate } from './monthlyMembership'
 export type MembershipOrigin = 'paid' | 'gift'
+export const MEMBERSHIP_COVERAGE_STATUSES = ['active', 'expired', 'consumed', 'historical']
 
 export type MembershipDisplayStatus =
   | 'current'

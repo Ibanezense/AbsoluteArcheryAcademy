@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { AlertCircle, Edit2, Plus, Trash2 } from 'lucide-react'
+import { AlertCircle, CalendarDays, Edit2, MapPin, Package, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/ToastProvider'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import {
@@ -14,7 +14,6 @@ import {
   useCreateWeeklySessionTemplate,
   useDeleteBowInventory,
   useDeleteWeeklySessionTemplate,
-  useGenerateWeeklySessions,
   useUpdateBowInventory,
   useUpdateWeeklySessionTemplate,
   useUpdateAcademyLocation,
@@ -34,14 +33,6 @@ const WEEKDAYS = [
 
 type ModalType = 'bow-create' | 'bow-edit' | 'template-create' | 'template-edit' | null
 
-function getMondayISO(date = new Date()) {
-  const base = new Date(date)
-  const day = base.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  base.setDate(base.getDate() + diff)
-  return base.toISOString().slice(0, 10)
-}
-
 function weekdayLabel(weekday: number) {
   return WEEKDAYS.find((item) => item.value === weekday)?.label || `Dia ${weekday}`
 }
@@ -58,13 +49,13 @@ function renderDistanceSummary(template: WeeklySessionTemplate) {
     <>
       <div className="flex flex-wrap gap-2">
         {template.distances.map((distance) => (
-          <span key={distance.distance_m} className="text-xs text-textsec bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
-            {distance.distance_m}m: {distance.targets} p ({distance.slot_capacity} c)
+          <span key={distance.distance_m} className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs text-blue-900">
+            {distance.distance_m}m: {distance.targets} p ({distance.slot_capacity} posiciones)
           </span>
         ))}
       </div>
       <p className="mt-2 text-xs font-semibold text-accent uppercase tracking-wider">
-        Total: {totalTargets} pacas · {totalSlots} cupos
+        Distribución: {totalTargets} pacas · {totalSlots} posiciones por distancia
       </p>
     </>
   )
@@ -72,8 +63,9 @@ function renderDistanceSummary(template: WeeklySessionTemplate) {
 
 function LocationEditor({ location, saving, onSave }: { location: AcademyLocation; saving: boolean; onSave: (location: AcademyLocation) => void }) {
   const [draft, setDraft] = useState(location)
+  const invalidUrl = Boolean(draft.maps_url?.trim()) && (() => { try { return !['http:', 'https:'].includes(new URL(draft.maps_url!.trim()).protocol) } catch { return true } })()
   return (
-    <article className="rounded-2xl border border-white/10 bg-bg/40 p-4">
+    <article className="rounded-2xl border border-blue-100 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div><p className="font-semibold text-textpri">{location.name}</p><p className="text-xs uppercase tracking-wider text-textsec">{location.code}</p></div>
         <label className="flex items-center gap-2 text-sm font-bold text-textsec"><input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft({ ...draft, is_active: event.target.checked })} /> Activa</label>
@@ -83,7 +75,9 @@ function LocationEditor({ location, saving, onSave }: { location: AcademyLocatio
         <label className="grid gap-1 text-sm font-bold text-textsec">Dirección<input className="input" value={draft.address || ''} onChange={(event) => setDraft({ ...draft, address: event.target.value })} /></label>
         <label className="grid gap-1 text-sm font-bold text-textsec md:col-span-2">Enlace de ubicación<input className="input" value={draft.maps_url || ''} onChange={(event) => setDraft({ ...draft, maps_url: event.target.value })} /></label>
       </div>
-      <button type="button" className="btn mt-4" disabled={saving || !draft.name.trim()} onClick={() => onSave(draft)}>{saving ? 'Guardando…' : 'Guardar sede'}</button>
+      {invalidUrl && <p role="alert" className="mt-2 text-sm text-red-700">Introduce un enlace válido que empiece por http:// o https://.</p>}
+      {!draft.address?.trim() && <p className="mt-2 text-sm text-orange-700">Dirección pendiente</p>}
+      <button type="button" className="btn mt-4" disabled={saving || !draft.name.trim() || invalidUrl} onClick={() => onSave(draft)}>{saving ? 'Guardando…' : 'Guardar sede'}</button>
     </article>
   )
 }
@@ -95,8 +89,6 @@ export default function InfraestructuraClientPage() {
   const [selectedBow, setSelectedBow] = useState<BowInventoryItem | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<WeeklySessionTemplate | null>(null)
   const [templateLocationId, setTemplateLocationId] = useState('')
-  const [weekStart, setWeekStart] = useState(getMondayISO())
-  const [weeksToGenerate, setWeeksToGenerate] = useState(4)
 
   const {
     data: bowInventory = [],
@@ -117,7 +109,6 @@ export default function InfraestructuraClientPage() {
   const createTemplateMutation = useCreateWeeklySessionTemplate()
   const updateTemplateMutation = useUpdateWeeklySessionTemplate()
   const deleteTemplateMutation = useDeleteWeeklySessionTemplate()
-  const generateSessionsMutation = useGenerateWeeklySessions()
   const updateLocationMutation = useUpdateAcademyLocation()
 
   const loading = inventoryLoading || templatesLoading || locationsLoading
@@ -128,21 +119,11 @@ export default function InfraestructuraClientPage() {
     [bowInventory]
   )
 
-  const totalConfiguredSlots = useMemo(
-    () =>
-      templates.reduce(
-        (sum, template) =>
-          sum + template.distances.reduce((distanceSum, distance) => distanceSum + (distance.slot_capacity || 0), 0),
-        0
-      ),
-    [templates]
-  )
-
   const templatesByLocation = useMemo(
     () => new Map(
       locations.map((location) => [
         location.id,
-        templates.filter((template) => template.location_id === location.id),
+        templates.filter((template) => template.location_id === location.id).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time)),
       ]),
     ),
     [locations, templates],
@@ -246,8 +227,7 @@ export default function InfraestructuraClientPage() {
           allowsIntro,
           distances,
         })
-        const created = await generateSessionsMutation.mutateAsync({ weekStart: getMondayISO(), weeks: 5 })
-        toast.push({ message: `Horario recurrente creado. Turnos nuevos: ${created}.`, type: 'success' })
+        toast.push({ message: 'Horario guardado. Genera los turnos desde la página Turnos.', type: 'success' })
       } else if (modalType === 'template-edit' && selectedTemplate) {
         await updateTemplateMutation.mutateAsync({
           id: selectedTemplate.id,
@@ -297,21 +277,6 @@ export default function InfraestructuraClientPage() {
     }
   }
 
-  const handleGenerateSessions = async () => {
-    try {
-      const created = await generateSessionsMutation.mutateAsync({
-        weekStart,
-        weeks: weeksToGenerate,
-      })
-      toast.push({
-        message: created === 0 ? 'No se crearon turnos nuevos.' : `Turnos generados: ${created}.`,
-        type: 'success',
-      })
-    } catch (mutationError: any) {
-      toast.push({ message: mutationError?.message || 'No se pudieron generar los turnos.', type: 'error' })
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -330,9 +295,14 @@ export default function InfraestructuraClientPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="card p-6">
-        <div className="mb-5"><h2 className="text-xl font-semibold text-textpri">Sedes</h2><p className="mt-1 text-sm text-textsec">Edita la dirección, el enlace y la disponibilidad operativa de Tiabaya y Umacollo.</p></div>
+    <div className="space-y-5">
+      <nav aria-label="Secciones de configuración" className="grid gap-3 sm:grid-cols-3">
+        <a href="#sedes" className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-white p-4 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50"><MapPin className="h-5 w-5 text-[#0758aa]" aria-hidden="true" /><span className="font-bold text-[#102448]">Sedes</span></a>
+        <a href="#inventario" className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-left shadow-sm hover:border-orange-400"><Package className="h-5 w-5 text-orange-600" aria-hidden="true" /><span className="font-bold text-[#102448]">Inventario de arcos</span></a>
+        <a href="#horarios" className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-white p-4 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50"><CalendarDays className="h-5 w-5 text-[#0758aa]" aria-hidden="true" /><span className="font-bold text-[#102448]">Días y horarios</span></a>
+      </nav>
+      <section id="sedes" className="scroll-mt-6 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-5"><h2 className="text-xl font-bold text-[#102448]">Sedes</h2><p className="mt-1 text-sm text-textsec">Edita la dirección, el enlace y la disponibilidad operativa de Tiabaya y Umacollo.</p></div>
         <div className="grid gap-4 lg:grid-cols-2">
           {locations.map((location) => <LocationEditor key={location.id} location={location} saving={updateLocationMutation.isPending} onSave={async (next) => {
             try {
@@ -343,55 +313,52 @@ export default function InfraestructuraClientPage() {
             }
           }} />)}
         </div>
-      </div>
+      </section>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="card p-5">
-          <p className="text-sm text-textsec">Inventario activo</p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-[#0758aa]">Inventario registrado activo</p>
           <p className="mt-2 text-3xl font-semibold text-textpri">{totalActiveBows}</p>
           <p className="mt-1 text-xs text-textsec">Arcos compartidos configurados por libraje</p>
         </div>
-        <div className="card p-5">
-          <p className="text-sm text-textsec">Plantillas activas</p>
+        <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-semibold text-orange-700">Horarios activos</p>
           <p className="mt-2 text-3xl font-semibold text-textpri">
             {templates.filter((template) => template.is_active).length}
           </p>
           <p className="mt-1 text-xs text-textsec">Turnos semanales listos para generar</p>
         </div>
-        <div className="card p-5">
-          <p className="text-sm text-textsec">Cupos semanales</p>
-          <p className="mt-2 text-3xl font-semibold text-textpri">{totalConfiguredSlots}</p>
-          <p className="mt-1 text-xs text-textsec">Suma de cupos por distancia en plantillas</p>
-        </div>
+
       </div>
 
-      <div className="card p-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
+      <section id="inventario" className="scroll-mt-6 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-textpri">Inventario de arcos</h2>
+            <h2 className="text-xl font-bold text-[#102448]">Inventario de arcos</h2>
             <p className="mt-1 text-sm text-textsec">
-              Define cuantos arcos compartidos hay disponibles por libraje.
+              Define cuántos arcos compartidos hay disponibles por libraje. Umacollo tiene 4 plazas compartidas; Tiabaya, 6 arcos de academia compartidos. Los arqueros con arco propio son adicionales en Tiabaya.
             </p>
           </div>
           <button
             onClick={() => setModalType('bow-create')}
-            className="btn flex items-center gap-2"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0758aa] px-4 py-2 text-sm font-bold text-white hover:bg-[#064786]"
           >
             <Plus className="h-4 w-4" />
             Agregar libraje
           </button>
         </div>
 
+        <p className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">El inventario registrado es general y todavía no distingue sedes. La distribución informada es de 8 arcos: 2 de 18 lb permanecen en Umacollo y 6 pertenecen a Tiabaya; 2 de 20 lb se trasladan a Umacollo durante la semana y regresan a Tiabaya el fin de semana. Las cantidades y notas guardadas requieren revisión. La disponibilidad de reservas aún no descuenta este traslado.</p>
         <div className="space-y-3">
           {bowInventory.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-textsec">
+            <div className="rounded-2xl border border-dashed border-blue-200 p-8 text-center text-textsec">
               No hay inventario configurado. Usa el botón de arriba para agregar arcos.
             </div>
           ) : (
             bowInventory.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-bg/40 p-4">
+              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-blue-100 bg-slate-50 p-4">
                 <div>
-                  <h3 className="font-medium text-textpri">{item.draw_weight_lbs} lb</h3>
+                  <h3 className="inline-flex rounded-lg bg-orange-100 px-2.5 py-1 font-bold text-orange-800">{item.draw_weight_lbs} lb</h3>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-textsec">
                     <span>{item.quantity_active}/{item.quantity_total} activos</span>
                     {item.notes && <span>{item.notes}</span>}
@@ -399,17 +366,19 @@ export default function InfraestructuraClientPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    type="button" aria-label={`Editar ${item.draw_weight_lbs} libras`}
                     onClick={() => {
                       setSelectedBow(item)
                       setModalType('bow-edit')
                     }}
-                    className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri"
+                    className="rounded-lg p-2 text-textsec transition-colors hover:bg-blue-50 hover:text-[#0758aa]"
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
                   <button
+                    type="button" aria-label={`Eliminar ${item.draw_weight_lbs} libras`}
                     onClick={() => handleDeleteBow(item.id)}
-                    className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger"
+                    className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -418,22 +387,22 @@ export default function InfraestructuraClientPage() {
             ))
           )}
         </div>
-      </div>
+      </section>
 
-      <div className="card p-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
+      <section id="horarios" className="scroll-mt-6 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold text-textpri">Plantillas semanales</h2>
+            <h2 className="text-xl font-bold text-[#102448]">Días y horarios de trabajo</h2>
             <p className="mt-1 text-sm text-textsec">
-              Configura los turnos recurrentes y sus cupos por distancia.
+              Define los días y horarios recurrentes de cada sede. Genera los turnos desde la página Turnos.
             </p>
           </div>
           <button
             onClick={openTemplateCreate}
-            className="btn flex items-center gap-2"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0758aa] px-4 py-2 text-sm font-bold text-white hover:bg-[#064786]"
           >
             <Plus className="h-4 w-4" />
-            Agregar plantilla
+            Agregar horario
           </button>
         </div>
 
@@ -441,7 +410,7 @@ export default function InfraestructuraClientPage() {
           {locations.map((location) => {
             const locationTemplates = templatesByLocation.get(location.id) || []
             return (
-              <section key={location.id} className="rounded-3xl border border-white/10 bg-bg/25 p-4">
+              <section key={location.id} className="rounded-2xl border border-blue-100 bg-slate-50 p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-textpri">{location.name}</h3>
@@ -453,11 +422,16 @@ export default function InfraestructuraClientPage() {
                 </div>
                 <div className="space-y-3">
                   {locationTemplates.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-textsec">
+                    <div className="rounded-2xl border border-dashed border-blue-200 p-6 text-center text-sm text-textsec">
                       No hay horarios recurrentes configurados en esta sede.
                     </div>
-                  ) : locationTemplates.map((template) => (
-                    <div key={template.id} className="rounded-2xl border border-white/10 bg-bg/50 p-4">
+                  ) : WEEKDAYS.map(day => {
+                    const dayTemplates = locationTemplates.filter(template => template.weekday === day.value)
+                    if (!dayTemplates.length) return null
+                    return <details key={day.value} className="rounded-xl border border-blue-100 bg-white p-3">
+                      <summary className="cursor-pointer font-semibold text-blue-950">{day.label} · {dayTemplates.length} {dayTemplates.length === 1 ? 'horario' : 'horarios'}</summary>
+                      <div className="mt-3 space-y-2">{dayTemplates.map((template) => (
+                    <div key={template.id} className="rounded-xl border border-slate-200 bg-white p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -466,13 +440,13 @@ export default function InfraestructuraClientPage() {
                               {template.location?.name || location.name}
                             </span>
                             <span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${template.allows_intro
-                              ? 'border-sky-400/30 bg-sky-400/10 text-sky-200'
-                              : 'border-white/10 bg-white/5 text-textsec'}`}>
+                              ? 'border-orange-200 bg-orange-50 text-orange-800'
+                              : 'border-blue-100 bg-blue-50 text-blue-800'}`}>
                               {template.allows_intro ? 'Clases de prueba' : 'Solo alumnos'}
                             </span>
                             <span className={`rounded-full border px-2 py-1 text-[11px] ${template.is_active
-                              ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
-                              : 'border-red-500/30 bg-red-500/15 text-red-300'}`}>
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-red-200 bg-red-50 text-red-800'}`}>
                               {template.is_active ? 'Activa' : 'Inactiva'}
                             </span>
                           </div>
@@ -482,72 +456,27 @@ export default function InfraestructuraClientPage() {
                           <div className="mt-3">{renderDistanceSummary(template)}</div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button type="button" aria-label={`Editar ${template.label}`} onClick={() => openTemplateEdit(template)} className="rounded-lg p-2 text-textsec transition-colors hover:bg-white/10 hover:text-textpri">
+                          <button type="button" aria-label={`Editar ${template.label}`} onClick={() => openTemplateEdit(template)} className="rounded-lg p-2 text-textsec transition-colors hover:bg-blue-50 hover:text-[#0758aa]">
                             <Edit2 className="h-4 w-4" />
                           </button>
-                          <button type="button" aria-label={`Eliminar ${template.label}`} onClick={() => handleDeleteTemplate(template.id)} className="rounded-lg p-2 text-textsec transition-colors hover:bg-red-500/20 hover:text-danger">
+                          <button type="button" aria-label={`Eliminar ${template.label}`} onClick={() => handleDeleteTemplate(template.id)} className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700">
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))}</div></details>
+                  })}
                 </div>
               </section>
             )
           })}
         </div>
-      </div>
-
-      <div className="card p-6">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold text-textpri">Generar turnos</h2>
-          <p className="mt-1 text-sm text-textsec">
-            Crea sesiones reales desde las plantillas activas. Si un turno ya existe, no se duplica.
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-textsec">Semana base</label>
-            <input
-              type="date"
-              value={weekStart}
-              onChange={(event) => setWeekStart(event.target.value)}
-              className="input"
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-textsec">Semanas a generar</label>
-            <input
-              type="number"
-              min="1"
-              max="24"
-              value={weeksToGenerate}
-              onChange={(event) => setWeeksToGenerate(Number(event.target.value || 1))}
-              className="input"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={handleGenerateSessions}
-              disabled={generateSessionsMutation.isPending}
-              className="btn w-full"
-            >
-              {generateSessionsMutation.isPending ? 'Generando...' : 'Generar turnos'}
-            </button>
-          </div>
-        </div>
-
-        <p className="mt-4 text-xs text-textsec">
-          Para cambiar un turno puntual despues de generarlo, editalo desde la pantalla de turnos.
-        </p>
-      </div>
+      </section>
 
       {(modalType === 'bow-create' || modalType === 'bow-edit') && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-card p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold text-textpri">
               {modalType === 'bow-create' ? 'Agregar libraje' : 'Editar libraje'}
             </h3>
@@ -615,7 +544,7 @@ export default function InfraestructuraClientPage() {
 
       {(modalType === 'template-create' || modalType === 'template-edit') && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-card p-6 shadow-xl">
+          <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold text-textpri">
               {modalType === 'template-create' ? 'Agregar plantilla semanal' : 'Editar plantilla semanal'}
             </h3>

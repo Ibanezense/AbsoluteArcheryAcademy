@@ -254,6 +254,9 @@ describe('mapStudentListRow', () => {
     })
 
     expect(result.membership_name).toBe('Plan antiguo')
+    expect(result.membership_end).toBe('2026-06-30')
+    expect(result.membership_coverage_end).toBe('2026-07-31')
+    expect(result.next_membership_start).toBe('2026-07-01')
     expect(result.classes_remaining).toBe(2)
     expect(result.total_open_classes).toBe(10)
     expect(result.open_membership_count).toBe(2)

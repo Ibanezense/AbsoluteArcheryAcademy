@@ -8,21 +8,21 @@ import { IntroClassesService, type IntroAppointmentDetails, type IntroClassType,
 import { calendarDate, calendarDayLabel, calendarTime, weekDates, type IntroAppointment, type IntroCalendarSession, type IntroState } from '@/lib/utils/introCalendar'
 import IntroDialog from './IntroDialog'
 
-export default function IntroAppointmentForm({ client, initialSession, requestedState, onClose, onSave }: {
-  client?: IntroAppointment; initialSession?: IntroCalendarSession; requestedState?: IntroState;
+export default function IntroAppointmentForm({ client, initialSession, initialDate, initialLocationId, requestedState, collectPayment = false, onClose, onSave }: {
+  client?: IntroAppointment; initialSession?: IntroCalendarSession; initialDate?: string; initialLocationId?: string; requestedState?: IntroState; collectPayment?: boolean;
   onClose: () => void; onSave: (details: IntroAppointmentDetails, sessionId: string, requestId: string) => Promise<void>;
 }) {
   const { data: locations = [] } = useAcademyLocations()
   const [requestId] = useState(() => crypto.randomUUID())
-  const [locationId, setLocationId] = useState(client?.location_id || initialSession?.location_id || '')
-  const [date, setDate] = useState(calendarDate(client?.session_start || initialSession?.start_at || new Date()))
+  const [locationId, setLocationId] = useState(client?.location_id || initialSession?.location_id || initialLocationId || '')
+  const [date, setDate] = useState(calendarDate(client?.session_start || initialSession?.start_at || initialDate || new Date()))
   const [sessionId, setSessionId] = useState(client?.session_id || initialSession?.session_id || '')
   const [details, setDetails] = useState<IntroAppointmentDetails>(() => {
-    const type = requestedState === 'reserved' ? 'free' : requestedState === 'paid' || requestedState === 'pending' ? 'paid' : client?.intro_class_type || 'paid'
-    const payment = type !== 'paid' ? 'not_applicable' : requestedState === 'paid' ? 'paid' : requestedState === 'pending' ? 'pending' : client?.payment_status || 'pending'
-    return { fullName: client?.full_name || '', age: client?.age || 0, phone: client?.phone || '',
+    const type = client?.intro_class_type || 'paid'
+    const payment = type !== 'paid' ? 'not_applicable' : collectPayment ? 'paid' : client?.payment_status || 'pending'
+    return { fullName: client?.full_name || '', age: client?.age || 0, phone: client?.phone || '', dni: client?.dni || '',
       amountPaid: type === 'paid' ? Number(client?.amount_paid) || 45 : 0,
-      paymentMethod: payment === 'paid' ? client?.payment_method !== 'not_applicable' && client?.payment_method || 'transferencia' : 'not_applicable',
+      paymentMethod: collectPayment ? '' : payment === 'paid' ? client?.payment_method !== 'not_applicable' && client?.payment_method || 'transferencia' : 'not_applicable',
       introClassType: type, paymentStatus: payment, courtesyReason: client?.courtesy_reason || '',
       payOnSite: payment === 'pending' && Boolean(client?.pay_on_site),
     }
@@ -32,7 +32,7 @@ export default function IntroAppointmentForm({ client, initialSession, requested
   const dates = weekDates(date)
   const schedule = useQuery({
     queryKey: ['intro-available-sessions', 'form', dates[0], dates[6], locationId],
-    queryFn: () => IntroClassesService.getCalendar(dates[0], dates[6], locationId), enabled: Boolean(locationId), staleTime: 0,
+    queryFn: () => IntroClassesService.getCalendar(dates[0], dates[6], locationId), enabled: Boolean(locationId) && !collectPayment, staleTime: 0,
   })
   const slots = (schedule.data || []).filter((session) => calendarDate(session.start_at) === date && (session.can_book || session.session_id === client?.session_id))
   const currentAssignment = client && client.location_id === locationId && calendarDate(client.session_start) === date
@@ -46,7 +46,7 @@ export default function IntroAppointmentForm({ client, initialSession, requested
     paymentMethod: payment === 'paid' ? 'transferencia' : 'not_applicable', payOnSite: payment === 'pending' && details.payOnSite })
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!sessionId || !options.some((slot) => slot.session_id === sessionId)) { setError('Selecciona un turno disponible.'); return }
+    if (!sessionId || (!collectPayment && !options.some((slot) => slot.session_id === sessionId))) { setError('Selecciona un turno disponible.'); return }
     if (details.introClassType === 'courtesy' && !details.courtesyReason?.trim()) { setError('Indica el motivo de cortesía.'); return }
     setBusy(true); setError('')
     try { await onSave(details, sessionId, requestId) }
@@ -56,13 +56,26 @@ export default function IntroAppointmentForm({ client, initialSession, requested
   const input = 'mt-1 block min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 focus:border-accent focus:outline-none disabled:opacity-60'
   const reactivating = Boolean(requestedState && ['reserved', 'pending', 'paid'].includes(requestedState) && client?.booking_status !== 'reserved')
   const blockedMove = Boolean(client && client.booking_status !== 'reserved' && !reactivating)
+  if (collectPayment && client) return <IntroDialog title="Registrar cobro" onClose={onClose} busy={busy}>
+    <form onSubmit={submit} className="space-y-4">
+      <p className="text-sm font-semibold text-slate-800">{client.full_name}</p>
+      {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+      <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm font-medium text-slate-700">Monto recibido (S/)<input type="number" min="0.01" step="0.01" required value={details.amountPaid} onChange={event => patch({ amountPaid: Number(event.target.value) })} className={input} /></label>
+        <label className="text-sm font-medium text-slate-700">Medio de pago<select required value={details.paymentMethod} onChange={event => patch({ paymentMethod: event.target.value })} className={input}><option value="">Selecciona un medio</option><option value="efectivo">Efectivo</option><option value="yape">Yape</option><option value="plin">Plin</option><option value="transferencia">Transferencia</option></select></label>
+      </fieldset>
+      <div className="flex justify-end"><button type="submit" className="btn min-h-11" disabled={busy}>{busy ? 'Guardando…' : 'Confirmar cobro'}</button></div>
+    </form>
+  </IntroDialog>
   return <IntroDialog title={client ? 'Editar cita de prueba' : 'Nueva cita de prueba'} onClose={onClose} busy={busy}>
     <form onSubmit={submit} className="space-y-5">
       {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       <fieldset disabled={busy} className="space-y-5">
         <section className="space-y-3"><h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Datos del cliente</h3>
           <label className="block text-sm font-medium text-slate-700">Nombre completo<input required autoComplete="name" value={details.fullName} onChange={(event) => patch({ fullName: event.target.value })} className={input} /></label>
-          <div className="grid grid-cols-2 gap-3"><label className="text-sm font-medium text-slate-700">Edad<input required type="number" min="5" max="99" value={details.age || ''} onChange={(event) => patch({ age: Number(event.target.value) })} className={input} /></label><label className="text-sm font-medium text-slate-700">Teléfono<input type="tel" value={details.phone || ''} onChange={(event) => patch({ phone: event.target.value })} className={input} /></label></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><label className="text-sm font-medium text-slate-700">Edad<input required type="number" min="5" max="99" value={details.age || ''} onChange={(event) => patch({ age: Number(event.target.value) })} className={input} /></label><label className="text-sm font-medium text-slate-700">Teléfono<input type="tel" value={details.phone || ''} onChange={(event) => patch({ phone: event.target.value })} className={input} /></label>
+            <label className="text-sm font-medium text-slate-700">DNI (opcional)<input inputMode="numeric" pattern="[0-9]{8}" maxLength={8} value={details.dni || ''} onChange={event => patch({ dni: event.target.value.replace(/\D/g, '') })} className={input} /></label>
+          </div>
         </section>
         <section className="space-y-3 border-t border-slate-100 pt-4"><h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Sede y horario</h3>
           {blockedMove && <p className="text-xs text-slate-500">Para reprogramar una cita finalizada o cancelada, reactívala desde su estado.</p>}

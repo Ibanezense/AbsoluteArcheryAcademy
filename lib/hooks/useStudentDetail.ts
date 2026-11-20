@@ -50,7 +50,7 @@ export type StudentPaymentSummary = {
   id: string
   student_membership_id: string
   due_date: string | null
-  paid_at: string
+  paid_at: string | null
   amount: number
   currency: string
   payment_method: string | null
@@ -303,7 +303,7 @@ export function useStudentDetail(studentId: string, serviceDate = getLimaDateKey
             .from('student_membership_payments')
             .select('id,student_membership_id,due_date,paid_at,amount,currency,payment_method,payment_status,reward_credits,reward_reason,notes')
             .eq('student_id', studentId)
-            .order('paid_at', { ascending: false })
+            .order('paid_at', { ascending: false, nullsFirst: false })
             .limit(250),
           supabase
             .from('student_credit_ledger')

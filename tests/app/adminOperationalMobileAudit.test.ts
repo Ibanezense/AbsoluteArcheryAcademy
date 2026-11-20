@@ -12,7 +12,8 @@ describe('operational module audit integration', () => {
   it('offers a daily mobile agenda with explicit editing and separate payment information', () => {
     const client = source('app/admin/intro/components/IntroCalendarClient.tsx')
     expect(client).toContain('IntroDayAgenda')
-    expect(client).toContain("matchMedia('(min-width: 1024px)')")
+    expect(client).toContain("view === 'day'")
+    expect(source('app/admin/intro/components/IntroCalendarToolbar.tsx')).toContain('onView')
     const agenda = source('app/admin/intro/components/IntroDayAgenda.tsx')
     expect(agenda).toContain('IntroSessionSlot')
     expect(agenda).toContain('calendarDate(session.start_at) === date')

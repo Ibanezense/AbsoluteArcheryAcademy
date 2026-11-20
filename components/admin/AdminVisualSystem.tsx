@@ -53,12 +53,25 @@ export function AdminPageHeader({
   description,
   eyebrow,
   actions,
+  variant = 'default',
 }: {
   title: string
-  description: string
+  description?: string
   eyebrow?: string
   actions?: ReactNode
+  variant?: 'default' | 'dashboard'
 }) {
+  if (variant === 'dashboard') {
+    return (
+      <section className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-sans text-3xl font-extrabold text-[#101e3e]">{title}</h1>
+          <p className="mt-1 text-sm capitalize text-slate-600">{eyebrow || adminTodayLabel()}</p>
+        </div>
+        {actions && <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">{actions}</div>}
+      </section>
+    )
+  }
   return (
     <section className="relative border-b border-slate-200 pb-6">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">

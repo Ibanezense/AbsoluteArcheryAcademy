@@ -23,7 +23,7 @@ describe('admin productivity phase 3A', () => {
     const sessionUi = `${sessions}\n${components}`
 
     expect(sessionUi).toContain('AdminSessionAccordion')
-    expect(sessionUi).toContain('occupancyStatus')
+    expect(sessionUi).toContain('capacityForAdminSession')
     expect(sessionUi).toContain('Pasar asistencia')
     expect(sessionUi).toContain('/admin/asistencia?date=')
     expect(sessionUi).toContain('Cancelar por la academia')

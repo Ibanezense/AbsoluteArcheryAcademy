@@ -44,4 +44,13 @@ describe('admin attendance cancellation surface', () => {
     expect(page).toContain('/admin/intro?editBookingId=')
     expect(page).not.toContain('Las clases de prueba no se editan desde este flujo.')
   })
+
+  it('uses a single cancellation form and a single query for the next roster date', () => {
+    const page = readFileSync(join(process.cwd(), 'app/admin/asistencia/page.tsx'), 'utf8')
+    expect(page).not.toContain('window.prompt')
+    expect(page).toContain('Motivo obligatorio')
+    expect(page).toContain('bookings!inner')
+    expect(page).not.toContain('offset <= 30')
+    expect(page).toContain('canMarkAttendance={')
+  })
 })

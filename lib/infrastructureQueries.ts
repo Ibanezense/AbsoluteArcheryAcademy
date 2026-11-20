@@ -108,6 +108,7 @@ export interface UpdateWeeklyTemplateData extends UpsertWeeklyTemplateData {
 export interface GenerateWeeklySessionsData {
   weekStart: string
   weeks: number
+  templateIds: string[]
 }
 
 export function useBowInventory() {
@@ -330,13 +331,15 @@ export function useDeleteWeeklySessionTemplate() {
 export function useGenerateWeeklySessions() {
   return useMutation({
     mutationFn: async (payload: GenerateWeeklySessionsData): Promise<number> => {
-      const { data, error } = await supabase.rpc('admin_generate_sessions_from_templates', {
+      const { data, error } = await supabase.rpc('admin_generate_selected_weekly_sessions', {
         p_week_start: payload.weekStart,
         p_weeks: payload.weeks,
+        p_template_ids: payload.templateIds,
       })
 
       if (error) {
-        throw new Error(`Error generating sessions: ${error.message}`)
+        if (error.code === 'PGRST202') throw new Error('La selección de horarios aún no está disponible en esta base de datos.')
+        throw new Error(`No se pudieron generar los turnos: ${error.message}`)
       }
 
       return Number(data || 0)

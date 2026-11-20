@@ -15,6 +15,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('selects exactly one personal recipient and confirms the name before publishing', async () => {
   state.create.mockResolvedValue('notice')
   render(createElement(AcademyNotifications))
+  fireEvent.click(screen.getByRole('button', { name: 'Crear aviso' }))
   fireEvent.click(screen.getByLabelText('Un alumno'))
   fireEvent.click(screen.getByLabelText('Ana Uno'))
   fireEvent.click(screen.getByLabelText('Bruno Dos'))
@@ -30,6 +31,7 @@ it('selects exactly one personal recipient and confirms the name before publishi
 
 it('clears recipients when changing audience so a previous group cannot leak into a personal notice', () => {
   render(createElement(AcademyNotifications))
+  fireEvent.click(screen.getByRole('button', { name: 'Crear aviso' }))
   fireEvent.click(screen.getByLabelText('Varios alumnos'))
   fireEvent.click(screen.getByLabelText('Ana Uno'))
   fireEvent.click(screen.getByLabelText('Bruno Dos'))
@@ -40,6 +42,7 @@ it('clears recipients when changing audience so a previous group cannot leak int
 
 it('previews a message without a recipient and never publishes it', () => {
   render(createElement(AcademyNotifications))
+  fireEvent.click(screen.getByRole('button', { name: 'Crear aviso' }))
   fireEvent.click(screen.getByLabelText('Un alumno'))
   fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Nuevo récord' } })
   fireEvent.change(screen.getByLabelText(/Mensaje/), { target: { value: '¡Felicitaciones!' } })
@@ -53,6 +56,7 @@ it('previews a message without a recipient and never publishes it', () => {
 
 it('shows placeholders when previewing an unfinished notice', () => {
   render(createElement(AcademyNotifications))
+  fireEvent.click(screen.getByRole('button', { name: 'Crear aviso' }))
   fireEvent.click(screen.getByRole('button', { name: 'Vista previa' }))
   expect(screen.getByRole('dialog', { name: 'Título de tu aviso' })).toBeTruthy()
   expect(screen.getByText('Aquí aparecerá tu mensaje.')).toBeTruthy()

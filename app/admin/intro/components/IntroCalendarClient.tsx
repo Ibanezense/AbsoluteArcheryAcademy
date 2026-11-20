@@ -8,7 +8,7 @@ import { useAcademyLocations } from '@/lib/infrastructureQueries'
 import { useIntroCalendar } from '@/lib/hooks/useIntroCalendar'
 import { useIntroAppointmentActions } from '@/lib/hooks/useIntroAppointmentActions'
 import { IntroClassesService, type IntroAppointmentDetails } from '@/lib/services/IntroClassesService'
-import { INTRO_STATES, appointmentStatus, calendarDate, calendarDayLabel, calendarTime, canReschedule, filterAppointments, shiftDate, weekDates, type IntroAppointment, type IntroCalendarFilters, type IntroCalendarSession, type IntroState } from '@/lib/utils/introCalendar'
+import { appointmentStatus, calendarDate, calendarDayLabel, calendarTime, canReschedule, filterAppointments, shiftDate, weekDates, type IntroAppointment, type IntroCalendarFilters, type IntroCalendarSession, type IntroState } from '@/lib/utils/introCalendar'
 import IntroCalendarToolbar from './IntroCalendarToolbar'
 import IntroWeekCalendar from './IntroWeekCalendar'
 import IntroDayAgenda from './IntroDayAgenda'
@@ -18,12 +18,12 @@ import IntroAppointmentForm from './IntroAppointmentForm'
 import IntroAppointmentDetail from './IntroAppointmentDetail'
 import RegisterIntroModal from './RegisterIntroModal'
 
-type FormSelection = { client?: IntroAppointment; initialSession?: IntroCalendarSession; requestedState?: IntroState }
+type FormSelection = { client?: IntroAppointment; initialSession?: IntroCalendarSession; requestedState?: IntroState; collectPayment?: boolean }
 const initialFilters: IntroCalendarFilters = { locationId: '', states: [], payment: 'all', search: '' }
 
 export default function IntroCalendarClient() {
   const [date, setDate] = useState(() => calendarDate(new Date()))
-  const [view, setView] = useState<'day' | 'week' | 'states'>('day')
+  const [view, setView] = useState<'day' | 'week' | 'states'>('week')
   const [filters, setFilters] = useState(initialFilters)
   const [selected, setSelected] = useState<IntroAppointment | null>(null)
   const [form, setForm] = useState<FormSelection | null>(null)
@@ -45,7 +45,10 @@ export default function IntroCalendarClient() {
   const disabled = actions.isPending || confirming || Boolean(form)
 
   useEffect(() => {
-    if (window.matchMedia('(min-width: 1024px)').matches) setView('week')
+    const requestedDate = new URLSearchParams(window.location.search).get('fecha')
+    if (requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && Number.isFinite(Date.parse(requestedDate))) {
+      setDate(requestedDate)
+    }
   }, [])
 
   useEffect(() => {
@@ -65,15 +68,10 @@ export default function IntroCalendarClient() {
   const changeState = async (row: IntroAppointment, state: IntroState) => {
     if (operationLock.current || actions.isPending || appointmentStatus(row) === state) return
     setSelected(null); setFeedback(null)
-    if (state === 'paid' || (state === 'pending' && row.intro_class_type !== 'paid') || (state === 'reserved' && row.intro_class_type === 'paid')) {
-      setForm({ client: row, requestedState: state }); return
-    }
     operationLock.current = true; setConfirming(true)
     try {
       const message = state === 'cancelled' ? `¿Cancelar la cita de ${row.full_name}? Se liberará su cupo y se conservará el pago registrado.`
-        : state === 'pending' && row.payment_status === 'paid' ? `¿Cambiar a Por pagar el pago confirmado de ${row.full_name}? Esta corrección cambiará el ingreso registrado.`
-          : row.booking_status !== 'reserved' && ['reserved', 'pending'].includes(state) ? `¿Reactivar la cita de ${row.full_name}? Se comprobará que su turno tenga cupo disponible.`
-            : `¿Cambiar la cita de ${row.full_name} a ${state === 'attended' ? 'Asistido' : state === 'no_show' ? 'No show' : 'Reservado'}?`
+        : `¿Confirmas que ${row.full_name} ${state === 'attended' ? 'asistió' : 'no asistió'}?`
       if (!await confirm(message, { title: 'Cambiar estado de la cita', confirmLabel: 'Guardar cambio' })) return
       await actions.mutateAsync({ bookingId: row.booking_id, expectedUpdatedAt: row.updated_at, action: 'state', state })
       setFeedback({ error: false, text: 'Estado actualizado.' })
@@ -101,31 +99,49 @@ export default function IntroCalendarClient() {
     const row = event.active.data.current?.row as IntroAppointment | undefined
     if (!row || !event.over) return
     if (event.over.data.current?.session) void move(row, event.over.data.current.session)
-    else if (event.over.data.current?.state) void changeState(row, event.over.data.current.state)
   }
 
   const save = async (details: IntroAppointmentDetails, sessionId: string, requestId: string) => {
     if (!form) return
     if (form.client) {
       await actions.mutateAsync({ bookingId: form.client.booking_id, expectedUpdatedAt: form.client.updated_at, action: 'edit', sessionId,
-        state: form.requestedState ? appointmentStatus({ booking_status: 'reserved', payment_status: details.paymentStatus }) : undefined, details })
+        state: form.requestedState ? appointmentStatus({ booking_status: 'reserved', payment_status: details.paymentStatus }) : undefined,
+        updateDni: (details.dni || '') !== (form.client.dni || ''), details })
     } else {
       await IntroClassesService.registerAppointment({ ...details, sessionId, requestId })
       await actions.refresh()
     }
-    setForm(null); setSelected(null); setFeedback({ error: false, text: 'Cita guardada.' })
+    setForm(null); setSelected(null); setFeedback({ error: false, text: form.collectPayment ? 'Cobro registrado.' : 'Cita guardada.' })
     if (window.location.search.includes('editBookingId')) window.history.replaceState({}, '', window.location.pathname)
   }
 
   const latestSelected = selected && (allRows.find((row) => row.booking_id === selected.booking_id) || selected)
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-orange-50 text-accent"><CalendarDays size={21} /></span><div><h1 className="font-heading text-2xl font-bold tracking-tight text-slate-900">Calendario de clases de prueba</h1><p className="mt-1 text-sm text-slate-500">Citas y disponibilidad por sede</p></div></div>
-      <div className="flex gap-2"><button type="button" disabled={disabled || calendar.isFetching} aria-label="Actualizar calendario" onClick={() => void calendar.refetch()} className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500"><RefreshCw size={17} className={calendar.isFetching ? 'animate-spin' : ''} /></button><button type="button" disabled={disabled} onClick={() => { setFeedback(null); setForm({}) }} className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-bold text-white shadow-sm"><Plus size={17} />Nueva cita</button></div>
+      <div className="flex items-center gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#b54712]"><CalendarDays size={21} aria-hidden="true" /></span>
+        <div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-[#101e3e]">Calendario de clases de prueba</h1>
+          <p className="mt-1 text-sm text-slate-600">Citas y disponibilidad por sede</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={disabled || calendar.isFetching} aria-label="Actualizar calendario" onClick={() => void calendar.refetch()} className="min-h-11 rounded-xl border border-blue-100 bg-white p-3 text-[#0758aa] hover:bg-blue-50"><RefreshCw size={17} className={calendar.isFetching ? 'animate-spin' : ''} /></button>
+        <button type="button" disabled={disabled} onClick={() => { setFeedback(null); setForm({}) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0758aa] px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#084681] disabled:opacity-50"><Plus size={17} aria-hidden="true" />Nueva cita</button>
+      </div>
     </div>
     <IntroCalendarToolbar dates={dates} date={date} onDateChange={setDate} onNavigate={(days) => setDate(days ? shiftDate(date, days) : calendarDate(new Date()))} filters={filters} onFilters={setFilters} locations={locations} view={view} onView={setView} />
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-slate-500"><span><strong className="text-slate-900">{visibleRows.length}</strong> citas visibles</span><span><strong className="text-amber-700">{visibleRows.filter((row) => row.payment_status === 'pending').length}</strong> por pagar</span><span><strong className="text-emerald-700">{visibleRows.filter((row) => row.payment_status === 'paid').length}</strong> pagadas</span><span className={`ml-auto ${view === 'day' ? 'hidden' : 'hidden lg:block'}`}>Arrastra las tarjetas para {view === 'week' ? 'cambiar de turno' : 'cambiar de estado'}</span>{(actions.isPending || confirming) && <span className="flex items-center gap-1 text-accent"><Loader2 size={13} className="animate-spin" />{actions.isPending ? 'Guardando…' : 'Confirmación pendiente'}</span>}</div>
+    <div aria-live="polite" className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-xs text-slate-600">
+      <span><strong className="text-[#101e3e]">{visibleRows.length}</strong> citas visibles</span>
+      <span><strong className="text-orange-800">{visibleRows.filter(row => row.booking_status !== 'cancelled' && row.payment_status === 'pending').length}</strong> por cobrar</span>
+      <span><strong className="text-[#084681]">{visibleRows.filter(row => row.payment_status === 'paid').length}</strong> pagadas</span>
+      {view === 'week' && <span className="ml-auto hidden md:block">Arrastra las citas para cambiar de turno</span>}
+    </div>
+    {(actions.isPending || confirming) && <p role="status" className="flex items-center gap-2 text-sm text-orange-900"><Loader2 size={15} className="animate-spin" />{actions.isPending ? 'Guardando…' : 'Confirmación pendiente'}</p>}
     {feedback && <p role={feedback.error ? 'alert' : 'status'} className={`rounded-xl border px-4 py-3 text-sm ${feedback.error ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{feedback.text}</p>}
+    {sessions.some(session => session.physical_remaining === undefined && session.academy_remaining === undefined) && (
+      <p className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs text-orange-900">Esta base todavía no muestra el desglose de plazas y arcos por sede.</p>
+    )}
     {locationsError && <p role="alert" className="text-sm text-rose-700">No se pudieron cargar las sedes.</p>}
     {calendar.isLoading ? <div aria-label="Cargando calendario" className="grid h-96 grid-cols-7 gap-2 rounded-2xl bg-white p-4">{dates.map((day) => <div key={day} className="animate-pulse rounded-xl bg-slate-100" />)}</div>
       : calendar.isError ? <div role="alert" className="rounded-2xl border border-rose-200 bg-white p-8 text-center"><p className="font-bold text-slate-800">No pudimos cargar las citas.</p><p className="mt-2 text-sm text-rose-700">{calendar.error.message}</p><button type="button" onClick={() => void calendar.refetch()} className="mt-4 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white">Reintentar</button></div>
@@ -133,7 +149,7 @@ export default function IntroCalendarClient() {
           onDragStart: ({ active: item }) => `Has recogido la cita de ${item.data.current?.row.full_name || 'prueba'}.`,
           onDragOver: ({ over }) => over?.data.current?.session
             ? `Destino: ${over.data.current.session.location_name}, ${calendarTime(over.data.current.session.start_at)}.`
-            : over?.data.current?.state ? `Destino: ${INTRO_STATES.find((state) => state.value === over.data.current?.state)?.label}.` : 'No hay un destino disponible.',
+            : 'No hay un destino disponible.',
           onDragEnd: ({ over }) => over ? 'Cita soltada. Se comprobará el cambio antes de guardarlo.' : 'Movimiento cancelado.',
           onDragCancel: () => 'Movimiento cancelado.',
         } }}>
@@ -141,8 +157,11 @@ export default function IntroCalendarClient() {
             : <IntroStatusBoard rows={rows} onSelect={setSelected} onEdit={edit} disabled={disabled} />}
           <DragOverlay>{active && <IntroAppointmentCard row={active} onSelect={() => {}} onEdit={() => {}} disabled overlay />}</DragOverlay>
         </DndContext>}
-    {latestSelected && !form && <IntroAppointmentDetail row={latestSelected} onClose={() => setSelected(null)} onEdit={() => edit(latestSelected)} onState={(state) => void changeState(latestSelected, state)} busy={disabled} />}
+    {latestSelected && !form && <IntroAppointmentDetail row={latestSelected} onClose={() => setSelected(null)} onEdit={() => edit(latestSelected)}
+      onCollect={() => { setSelected(null); setFeedback(null); setForm({ client: latestSelected, collectPayment: true }) }}
+      onReactivate={() => { setSelected(null); setFeedback(null); setForm({ client: latestSelected, requestedState: appointmentStatus({ booking_status: 'reserved', payment_status: latestSelected.payment_status }) }) }}
+      onState={(state) => void changeState(latestSelected, state)} busy={disabled} />}
     {form?.client && <IntroAppointmentForm key={form.client.booking_id} {...form} onClose={() => { setForm(null); if (window.location.search.includes('editBookingId')) window.history.replaceState({}, '', window.location.pathname) }} onSave={save} />}
-    {form && !form.client && <RegisterIntroModal key={form.initialSession?.session_id || 'new'} isOpen initialSession={form.initialSession} onClose={() => setForm(null)} onSave={save} />}
+    {form && !form.client && <RegisterIntroModal key={form.initialSession?.session_id || 'new'} isOpen initialSession={form.initialSession} initialDate={date} initialLocationId={filters.locationId} onClose={() => setForm(null)} onSave={save} />}
   </div>
 }

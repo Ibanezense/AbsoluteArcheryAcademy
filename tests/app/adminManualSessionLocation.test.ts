@@ -17,7 +17,9 @@ describe('manual session location', () => {
     expect(page).toContain('useAcademyLocations')
     expect(page).toContain('location_id')
     expect(page).toContain('Selecciona una sede')
-    expect(page).toContain('locationId: session.location_id')
+    expect(page).toContain("const locationId = session?.location_id || requestedLocation?.id || ''")
+    expect(page).toContain('if (!locationId)')
+    expect(page).toContain('locationId, allocations: configured')
   })
 
   it('passes the location through the atomic session RPC', () => {

@@ -77,7 +77,7 @@ export function PendingMembershipPayments({ studentId, onCollected }: { studentI
               <label className="grid min-w-0 gap-1 text-sm font-medium">Método de pago<select required value={method} onChange={event => setMethod(event.target.value)} className="input"><option value="">Seleccionar método</option>{collectionMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label className="grid min-w-0 gap-1 text-sm font-medium">Fecha de cobro<input required type="date" max={getLimaDateKey()} value={date} onChange={event => setDate(event.target.value)} className="input" /></label>
             </fieldset>
-            <p className="mt-3 text-sm text-slate-600">Al confirmar, este registro se marcará como pagado. El ingreso corresponde a la venta del {formatAdminDate(payment.membership?.purchase?.purchased_at || payment.created_at)}; la fecha de cobro se conserva por separado. Las clases y las fechas de la membresía se conservan.</p>
+            <p className="mt-3 text-sm text-slate-600">La venta conserva su fecha del {formatAdminDate(payment.membership?.purchase?.purchased_at || payment.created_at)}. El cobro se registra en la fecha en que recibiste el pago.</p>
             {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
             <div className="mt-3 flex flex-wrap gap-2"><button disabled={saving} type="submit" className="min-h-11 rounded-lg bg-accent px-4 text-sm font-semibold text-white">{saving ? 'Registrando…' : 'Confirmar cobro'}</button><button disabled={saving} type="button" onClick={close} className="min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-semibold">Cancelar</button></div>
           </form>}

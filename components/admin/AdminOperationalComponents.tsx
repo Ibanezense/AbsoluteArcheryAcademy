@@ -50,53 +50,29 @@ export function EmptyOperationalState({
   )
 }
 
-type SessionDistanceRow = {
-  distance_m: number
-  capacity: number
-  reserved: number
-  available: number
-  targets?: number
-}
-
+type SessionDistanceRow = { distance_m: number; capacity: number; reserved: number }
 type SessionRosterRow = {
   id: string
   distance_m: number | null
-  bow_usage_type: 'shared_inventory' | 'assigned' | 'own' | null
+  bow_usage_type: string | null
   bow_poundage: number | null
-  admin_notes: string | null
-  student: {
-    full_name: string | null
-    avatar_url: string | null
-    phone?: string | null
-    email?: string | null
-  } | null
+  status: string
+  intro_client_id: string | null
+  student: { full_name: string | null; avatar_url?: string | null } | null
+  intro: { full_name: string | null } | null
 }
 
-function bowUsageLabel(type: SessionRosterRow['bow_usage_type'], poundage: number | null) {
+function bowUsageLabel(type: string | null, poundage: number | null) {
   if (type === 'own') return 'Arco propio'
   if (type === 'assigned') return 'Arco asignado'
-  if (poundage) return `Arco academia ${poundage} lb`
-  return 'Arco academia'
+  if (type === 'shared_inventory') return poundage ? `Arco de academia · ${poundage} lb` : 'Arco de academia'
+  return 'Equipo por confirmar'
 }
 
 export function AdminSessionAccordion({
-  sessionId,
-  startAt,
-  endAt,
-  locationName,
-  sessionStatusLabel,
-  sessionStatusTone,
-  occupancyLabel,
-  occupancyTone,
-  totalReserved,
-  totalCapacity,
-  availableSlots,
-  occupancyRate,
-  distanceRows,
-  bookings,
-  attendanceHref,
-  editHref,
-  onCancelByAcademy,
+  sessionId, startAt, endAt, locationName, sessionStatusLabel, sessionStatusTone,
+  capacityLabel, capacityNote, totalReserved, distanceRows, bookings, notes,
+  attendanceHref, attendanceLabel, editHref, onCancelByAcademy, initialExpanded = false,
 }: {
   sessionId: string
   startAt: string
@@ -104,149 +80,77 @@ export function AdminSessionAccordion({
   locationName: string
   sessionStatusLabel: string
   sessionStatusTone: BadgeTone
-  occupancyLabel: string
-  occupancyTone: BadgeTone
+  capacityLabel?: string
+  capacityNote?: string | null
   totalReserved: number
-  totalCapacity: number
-  availableSlots: number
-  occupancyRate: number
   distanceRows: SessionDistanceRow[]
   bookings: SessionRosterRow[]
-  attendanceHref: string
-  editHref: string
-  onCancelByAcademy: () => void
+  notes: string | null
+  attendanceHref?: string
+  attendanceLabel: string
+  editHref?: string
+  onCancelByAcademy?: () => void
+  initialExpanded?: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const distanceLabel = distanceRows.length
-    ? distanceRows.map((row) => `${row.distance_m} m`).join(' · ')
-    : 'Sin distancias'
+  const [expanded, setExpanded] = useState(initialExpanded)
+  const detailId = `turno-${sessionId}`
 
   return (
-    <article className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white shadow-[0_16px_42px_rgba(15,23,42,0.05)]">
-      <div className="grid gap-3 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="grid min-w-0 gap-3 rounded-2xl text-left transition hover:bg-slate-50 sm:grid-cols-[7.5rem_minmax(0,1fr)]"
-        >
-          <div className="rounded-2xl bg-slate-50 px-4 py-3">
-            <p className="font-heading text-xl font-black leading-none tracking-[-0.045em] text-slate-950">
-              {calendarTime(startAt)}
-            </p>
-            <p className="mt-2 text-sm font-black leading-none text-slate-950">
-              {calendarTime(endAt)}
-            </p>
-          </div>
-
-          <div className="min-w-0 py-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <OperationalStatusBadge label={sessionStatusLabel} tone={sessionStatusTone} />
-              <OperationalStatusBadge label={occupancyLabel} tone={occupancyTone} />
-              <OperationalStatusBadge label={locationName} tone="info" />
-            </div>
-            <p className="mt-2 truncate text-sm font-bold text-slate-600">{distanceLabel}</p>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Reservas</p>
-                <p className="mt-1 font-black text-slate-950">{totalReserved} / {totalCapacity}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Cupos libres</p>
-                <p className="mt-1 font-black text-slate-950">{availableSlots}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">Ocupacion</p>
-                <p className="mt-1 font-black text-slate-950">{occupancyRate}%</p>
-              </div>
-            </div>
-          </div>
-        </button>
-
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
-          <button
-            type="button"
-            onClick={() => setExpanded((current) => !current)}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:border-accent/40 hover:text-accent"
-          >
-            {expanded ? 'Ocultar detalle' : 'Ver detalle'}
-            <ChevronDown className={`h-4 w-4 transition ${expanded ? 'rotate-180' : ''}`} />
+    <article className="overflow-hidden rounded-xl border border-blue-100 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 p-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5">
+          <p className="whitespace-nowrap rounded-lg bg-blue-50 px-2.5 py-1.5 text-sm font-bold tabular-nums text-[#101e3e]">{calendarTime(startAt)}–{calendarTime(endAt)}</p>
+          <p className="text-sm font-bold text-[#101e3e]">{locationName}</p>
+          <OperationalStatusBadge label={sessionStatusLabel} tone={sessionStatusTone} />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <p className="text-slate-700"><strong>{totalReserved}</strong> {totalReserved === 1 ? 'reserva activa' : 'reservas activas'}</p>
+          {capacityLabel && <p className="font-semibold text-[#0758aa]">{capacityLabel}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button type="button" aria-expanded={expanded} aria-controls={detailId} onClick={() => setExpanded(current => !current)} className="btn-outline btn-sm">
+            {expanded ? 'Ocultar detalle' : attendanceHref ? 'Ver detalle' : bookings.length ? 'Ver reservas' : 'Ver detalle'}
+            <ChevronDown aria-hidden="true" className={`size-4 transition ${expanded ? 'rotate-180' : ''}`} />
           </button>
-          <Link
-            href={attendanceHref}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700 transition hover:border-accent/40 hover:text-accent"
-          >
-            Pasar asistencia <ArrowRight className="h-4 w-4" />
-          </Link>
+          {attendanceHref && <Link href={attendanceHref} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-sm font-bold text-[#0758aa] hover:bg-blue-100">
+            {attendanceLabel} <ArrowRight aria-hidden="true" className="size-4" />
+          </Link>}
         </div>
       </div>
-
       {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/70 p-3 sm:p-4">
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_220px]">
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-black text-slate-950">Distribucion por distancia</h3>
-              <div className="mt-4 space-y-3">
-                {distanceRows.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay cupos configurados para este turno.</p>
-                ) : (
-                  distanceRows.map((row) => (
-                    <div key={`${sessionId}-${row.distance_m}`} className="grid grid-cols-[3.5rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-sm">
-                      <span className="font-black text-slate-950">{row.distance_m} m</span>
-                      <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-accent"
-                          style={{ width: `${row.capacity > 0 ? Math.min((row.reserved / row.capacity) * 100, 100) : 0}%` }}
-                        />
-                      </div>
-                      <span className="text-right text-xs font-black text-slate-600">{row.reserved}/{row.capacity}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              {distanceRows.length > 0 && (
-                <p className="mt-4 text-xs font-bold text-slate-500">
-                  Total: {totalReserved} reservas activas, {availableSlots} cupos libres.
-                </p>
-              )}
+        <div id={detailId} className="space-y-3 border-t border-blue-100 bg-slate-50 p-3 sm:p-4">
+          {capacityNote && <p className="text-xs text-slate-700">{capacityNote}</p>}
+          {notes && <p className="whitespace-pre-wrap break-words text-sm text-slate-700"><strong>Notas</strong> · {notes}</p>}
+          <div className="grid gap-3 lg:grid-cols-2">
+            <section className="rounded-xl border border-blue-100 bg-white p-3">
+              <h3 className="text-sm font-bold text-[#101e3e]">Distribución por distancia</h3>
+              {distanceRows.length ? <ul className="mt-2 divide-y divide-blue-50">
+                {distanceRows.map(row => <li key={row.distance_m} className="flex justify-between gap-2 py-1.5 text-sm">
+                  <strong>{row.distance_m} m</strong><span>{row.reserved} reservadas / {row.capacity} configuradas</span>
+                </li>)}
+              </ul> : <p className="mt-2 text-sm text-slate-600">Sin distancias configuradas.</p>}
             </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-black text-slate-950">Alumnos reservados ({bookings.length})</h3>
-                <Link href={attendanceHref} className="inline-flex min-h-10 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-black text-white">
-                  Pasar asistencia <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-              <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
-                {bookings.length === 0 ? (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-500">
-                    No hay reservas para este turno.
-                  </div>
-                ) : (
-                  bookings.map((booking) => (
-                    <div key={booking.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                      <Avatar name={booking.student?.full_name || 'Alumno'} url={booking.student?.avatar_url || null} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-black text-slate-950">{booking.student?.full_name || 'Alumno sin nombre'}</p>
-                        <p className="mt-0.5 truncate text-xs text-slate-500">
-                          {booking.distance_m ? `${booking.distance_m} m` : 'Sin distancia'} - {bowUsageLabel(booking.bow_usage_type, booking.bow_poundage)}
-                        </p>
-                      </div>
+            <section className="rounded-xl border border-blue-100 bg-white p-3">
+              <h3 className="text-sm font-bold text-[#101e3e]">Alumnos y pruebas ({bookings.length})</h3>
+              {bookings.length ? <ul className="mt-2 divide-y divide-blue-50">
+                {bookings.map(booking => {
+                  const name = booking.intro_client_id ? booking.intro?.full_name || 'Clase de prueba' : booking.student?.full_name || 'Alumno'
+                  return <li key={booking.id} className="flex items-center gap-2 py-2">
+                    <Avatar name={name} url={booking.student?.avatar_url} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-bold">{name}{booking.intro_client_id && <span className="ml-2 text-xs text-accent">Prueba</span>}</p>
+                      <p className="text-xs text-slate-600">{booking.distance_m ? `${booking.distance_m} m · ` : ''}{bowUsageLabel(booking.bow_usage_type, booking.bow_poundage)}</p>
                     </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4">
-              <Link href={editHref} className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700">
-                Editar turno
-              </Link>
-              <button type="button" onClick={onCancelByAcademy} className="min-h-11 rounded-2xl border border-rose-300 bg-rose-50 px-4 text-sm font-black text-rose-700">
-                Cancelar por la academia
-              </button>
+                    <OperationalStatusBadge label={booking.status === 'attended' ? 'Asistió' : booking.status === 'no_show' ? 'No asistió' : 'Reservada'} tone={booking.status === 'attended' ? 'success' : booking.status === 'no_show' ? 'warning' : 'info'} />
+                  </li>
+                })}
+              </ul> : <p className="mt-2 text-sm text-slate-600">No hay reservas para este turno.</p>}
             </section>
           </div>
+          {(editHref || onCancelByAcademy) && <div className="flex flex-wrap gap-2">
+            {editHref && <Link href={editHref} className="btn-outline btn-sm">Editar turno</Link>}
+            {onCancelByAcademy && <button type="button" onClick={onCancelByAcademy} className="btn-outline btn-sm border-rose-200 text-rose-800 hover:bg-rose-50">Cancelar por la academia</button>}
+          </div>}
         </div>
       )}
     </article>
@@ -283,13 +187,13 @@ export function AttendanceSessionTabs({
             aria-pressed={isActive}
             className={`min-h-14 min-w-[8rem] rounded-2xl border px-4 text-left transition ${
               isActive
-                ? 'border-accent bg-accent text-white shadow-[0_16px_35px_rgba(249,115,22,0.22)]'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-accent/40'
+                ? 'border-[#0758aa] bg-[#0758aa] text-white'
+                : 'border-blue-100 bg-white text-[#142c4b] hover:border-blue-300'
             }`}
           >
             <span className="block text-sm font-black">{calendarTime(session.session_start_at)}</span>
             {session.location_name && <span className="block text-xs font-semibold">{session.location_name}</span>}
-            <span className={`mt-1 block text-xs ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{total} reservas - {label}</span>
+            <span className={`mt-1 block text-xs ${isActive ? 'text-white/90' : 'text-slate-600'}`}>{total} {total === 1 ? 'reserva' : 'reservas'} · {label}</span>
           </button>
         )
       })}
@@ -307,6 +211,9 @@ export function AttendanceStudentRow({
   status,
   notes,
   isProcessing,
+  isMarking = false,
+  canMarkAttendance = true,
+  historyLink,
   canEdit = true,
   editDisabledReason,
   onAttended,
@@ -322,6 +229,9 @@ export function AttendanceStudentRow({
   status: 'reserved' | 'cancelled' | 'attended' | 'no_show'
   notes?: string | null
   isProcessing: boolean
+  isMarking?: boolean
+  canMarkAttendance?: boolean
+  historyLink?: ReactNode
   canEdit?: boolean
   editDisabledReason?: string | null
   onAttended: () => void
@@ -333,9 +243,9 @@ export function AttendanceStudentRow({
   const editDisabled = isProcessing || !isReserved || !canEdit
   const statusLabel =
     status === 'attended'
-      ? 'Asistio'
+      ? 'Asistió'
       : status === 'no_show'
-        ? 'No asistio'
+        ? 'No asistió'
         : status === 'cancelled'
           ? 'Cancelada'
           : 'Pendiente'
@@ -371,10 +281,10 @@ export function AttendanceStudentRow({
         {actions.canMark && <button
           type="button"
           onClick={onAttended}
-          disabled={isProcessing || !isReserved}
-          className="min-h-11 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-black text-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isProcessing || !canMarkAttendance}
+          className="min-h-11 rounded-2xl bg-[#0758aa] px-3 text-sm font-black text-white hover:bg-[#084681] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
         >
-          {isProcessing ? 'Registrando…' : 'Marcar asistencia'}
+          {isMarking ? 'Registrando…' : 'Marcar asistencia'}
         </button>}
         {actions.canEdit && canEdit && <button
           type="button"
@@ -393,6 +303,7 @@ export function AttendanceStudentRow({
         >
           {actions.cancellationLabel}
         </button>}
+        {historyLink}
       </div>
     </div>
   )
@@ -405,6 +316,7 @@ export function AttendanceSummaryCard({
   attended,
   noShow,
   cancelled,
+  sessionHasStarted = true,
 }: {
   startAt: string
   locationName?: string
@@ -412,9 +324,9 @@ export function AttendanceSummaryCard({
   attended: number
   noShow: number
   cancelled: number
+  sessionHasStarted?: boolean
 }) {
   const pending = Math.max(total - attended - noShow - cancelled, 0)
-  const completed = total > 0 ? Math.round(((attended + noShow + cancelled) / total) * 100) : 0
 
   return (
     <section className="rounded-[1.45rem] border border-slate-200 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.06)]">
@@ -428,23 +340,23 @@ export function AttendanceSummaryCard({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
             ['Reservas', total],
-            ['Asistio', attended],
+            ['Asistieron', attended],
             ['Pendientes', pending],
-            ['No-show', noShow],
-            ['Completado', `${completed}%`],
+            ['Canceladas', cancelled],
+            ['No asistieron', noShow],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-[11px] font-bold text-slate-500">{label}</p>
+            <div key={label} className={`rounded-2xl p-3 ${label === 'Pendientes' ? 'bg-orange-50' : 'bg-blue-50'}`}>
+              <p className={`text-[11px] font-bold ${label === 'Pendientes' ? 'text-orange-900' : 'text-[#084681]'}`}>{label}</p>
               <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
             </div>
           ))}
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-2 rounded-2xl bg-orange-50 p-3 text-sm font-bold text-accent">
+      <div className={`mt-4 flex items-center gap-2 rounded-2xl p-3 text-sm font-bold ${pending > 0 ? 'bg-orange-50 text-orange-900' : 'bg-blue-50 text-[#084681]'}`}>
         {pending > 0 ? (
           <>
             <Clock3 className="h-4 w-4" />
-            Faltan {pending} asistencias por registrar
+            {!sessionHasStarted ? `Podrás marcar la asistencia a partir de las ${calendarTime(startAt)}.` : pending === 1 ? 'Falta 1 asistencia por registrar' : `Faltan ${pending} asistencias por registrar`}
           </>
         ) : (
           <>

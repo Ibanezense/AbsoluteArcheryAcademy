@@ -14,6 +14,17 @@ function rpcClient(result: {
 }
 
 describe('createStudentMembershipCycles', () => {
+  it('uses the atomic pending-payment path with zero received', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: [{ id: 'cycle' }], error: null })
+    await createStudentMembershipCycles({ rpc }, {
+      studentId: 'student', startDate: '2026-11-19', origin: 'paid', membershipPlanId: 'plan',
+      periodCount: 2, totalAmountPerCycle: 120, batchPaymentAmount: 240, paymentPending: true,
+      idempotencyKey: 'pending-batch',
+    })
+    expect(rpc).toHaveBeenCalledWith('admin_create_pending_membership_cycles', expect.objectContaining({
+      p_total_amount: 120, p_payment_amount: 0, p_payment_type: null, p_fixed_template_ids: [],
+    }))
+  })
   it('sends the exact paid-cycle RPC contract', async () => {
     const rows = [{ id: 'membership-1' }] as CreatedMembershipCycle[]
     const client = rpcClient({ data: rows, error: null })

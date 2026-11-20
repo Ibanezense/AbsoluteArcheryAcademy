@@ -1,13 +1,18 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ImagePlus, KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
 import { useToast } from '@/components/ui/ToastProvider'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { useStudentDetail } from '@/lib/hooks/useStudentDetail'
+import { IntroClassesService } from '@/lib/services/IntroClassesService'
+import { findIntroEnrollmentMatches, getIntroEnrollment, linkAttendedIntroStudent } from '@/lib/services/introEnrollmentService'
+import { calendarDate } from '@/lib/utils/introCalendar'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { invalidateStudentBirthdayQueries } from '@/lib/utils/invalidateStudentBirthdays'
 import StudentLocationSelect from '@/components/admin/StudentLocationSelect'
@@ -100,7 +105,10 @@ export default function AdminAlumnoEditorPage() {
   const router = useRouter()
   const { id } = useParams<{ id: string }>()
   const isNew = id === 'new'
+  const search = useSearchParams()
+  const trialBookingId = isNew ? search.get('prueba') : null
   const toast = useToast()
+  const confirm = useConfirm()
   const detailQuery = useStudentDetail(isNew ? '' : id)
 
   const [studentForm, setStudentForm] = useState<StudentFormState>(emptyStudentForm)
@@ -110,6 +118,33 @@ export default function AdminAlumnoEditorPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [saving, setSaving] = useState(false)
   const [createdCodes, setCreatedCodes] = useState<CreatedCodes | null>(null)
+  const [matches, setMatches] = useState<Awaited<ReturnType<typeof findIntroEnrollmentMatches>>>([])
+  const [differentPerson, setDifferentPerson] = useState('')
+  const trial = useQuery({
+    queryKey: ['intro-enrollment-booking', trialBookingId],
+    queryFn: async () => {
+      const appointment = await IntroClassesService.getAppointment(trialBookingId!)
+      if (!appointment || appointment.booking_status !== 'attended' || Date.parse(appointment.session_start) > Date.now()) throw new Error('Se requiere una clase de prueba asistida.')
+      const linkedStudent = await getIntroEnrollment(appointment.intro_client_id)
+      return { appointment, linkedStudent }
+    },
+    enabled: Boolean(trialBookingId),
+    refetchOnWindowFocus: false,
+  })
+  const trialReturn = trial.data ? `/admin/intro?fecha=${calendarDate(trial.data.appointment.session_start)}` : '/admin/intro'
+
+  useEffect(() => {
+    if (!trial.data || trial.data.linkedStudent !== undefined) return
+    const { appointment } = trial.data
+    setAccountMode('student_only')
+    setStudentForm(current => ({ ...current, full_name: appointment.full_name, dni: appointment.dni || '', home_location_id: appointment.location_id, phone: appointment.age >= 18 ? appointment.phone || '' : '' }))
+    if (appointment.age < 18) setGuardianForm(current => ({ ...current, phone: appointment.phone || '' }))
+    let cancelled = false
+    void findIntroEnrollmentMatches(appointment.full_name, appointment.dni || '').then(found => { if (!cancelled) setMatches(found) }).catch(() => {
+      // Saving checks for matches again and displays any error.
+    })
+    return () => { cancelled = true }
+  }, [trial.data])
 
   useEffect(() => {
     if (!detailQuery.data || isNew) return
@@ -174,11 +209,30 @@ export default function AdminAlumnoEditorPage() {
   )
 
   const canSubmit = useMemo(() => {
+    if (trialBookingId && (!trial.data || trial.data.linkedStudent !== undefined || accountMode !== 'student_only')) return false
     if (!studentForm.full_name.trim()) return false
     if (showStudentAccountFields && !studentForm.email.trim()) return false
     if (showGuardianFields && (!guardianForm.full_name.trim() || !(guardianAccessEmail || guardianForm.email).trim())) return false
     return true
-  }, [guardianAccessEmail, guardianForm.email, guardianForm.full_name, showGuardianFields, showStudentAccountFields, studentForm.email, studentForm.full_name])
+  }, [accountMode, guardianAccessEmail, guardianForm.email, guardianForm.full_name, showGuardianFields, showStudentAccountFields, studentForm.email, studentForm.full_name, trial.data, trialBookingId])
+
+  async function linkExistingStudent(studentId: string, studentName: string) {
+    if (!trialBookingId || !trial.data || saving) return
+    setSaving(true)
+    try {
+      if (!await confirm(`¿Vincular la prueba de ${trial.data.appointment.full_name} con la ficha de ${studentName}?`, { title: 'Vincular alumno', confirmLabel: 'Vincular ficha' })) return
+      await linkAttendedIntroStudent(trialBookingId, studentId)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['intro-enrollment', trial.data.appointment.intro_client_id] }),
+        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
+      ])
+      router.replace(`/admin/alumnos/${studentId}`)
+    } catch (error) {
+      toast.push({ message: error instanceof Error ? error.message : 'No se pudo vincular el alumno.', type: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function uploadAvatar(file?: File) {
     if (!file) return
@@ -205,26 +259,31 @@ export default function AdminAlumnoEditorPage() {
   }
 
   async function submitForm() {
+    if (saving) return
     if (!canSubmit) {
       toast.push({ message: 'Completa los campos obligatorios.', type: 'error' })
-      return
-    }
-
-    // refreshSession() fuerza la renovación del JWT si está expirado,
-    // evitando enviar tokens caducados al API (causa del 401 "Sesion expirada")
-    const { data: refreshed } = await supabase.auth.refreshSession()
-    const accessToken = refreshed.session?.access_token
-
-    if (!accessToken) {
-      toast.push({ message: 'Sesion expirada. Vuelve a iniciar sesion.', type: 'error' })
       return
     }
 
     setSaving(true)
 
     try {
+      if (trialBookingId) {
+        const found = await findIntroEnrollmentMatches(studentForm.full_name, studentForm.dni)
+        setMatches(found)
+        if (found.some(match => match.sameDni) || (found.length && differentPerson !== studentForm.full_name)) {
+          document.getElementById('intro-enrollment-matches')?.scrollIntoView({ block: 'center' })
+          toast.push({ message: 'Revisa las coincidencias antes de guardar.', type: 'error' })
+          return
+        }
+      }
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      const accessToken = refreshed.session?.access_token
+      if (!accessToken) throw new Error('Sesión expirada. Vuelve a iniciar sesión.')
+
       const payload = {
         accountMode,
+        ...(trialBookingId ? { introBookingId: trialBookingId } : {}),
         student: {
           full_name: studentForm.full_name,
           guardian_contact: normalizeGuardianContact(guardianForm),
@@ -291,6 +350,7 @@ export default function AdminAlumnoEditorPage() {
 
       if (isNew && result.student_id) {
         await queryClient.invalidateQueries({ queryKey: studentKeys.all })
+        if (trial.data) await queryClient.invalidateQueries({ queryKey: ['intro-enrollment', trial.data.appointment.intro_client_id] })
         await invalidateStudentBirthdayQueries(queryClient, result.student_id)
         router.replace(`/admin/alumnos/${result.student_id}`)
         return
@@ -317,17 +377,17 @@ export default function AdminAlumnoEditorPage() {
               <button
                 type="button"
                 className="btn-ghost mt-1 !px-3"
-                onClick={() => router.push(isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}
+                onClick={() => router.push(trialBookingId ? trialReturn : isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div>
                 <p className="text-sm uppercase tracking-[0.2em] text-accent">{isNew ? 'Nuevo' : 'Edicion'}</p>
                 <h1 className="mt-2 text-3xl font-bold text-textpri">
-                  {isNew ? 'Alta de alumno' : 'Editar alumno'}
+                  {trialBookingId ? 'Inscribir desde una clase de prueba' : isNew ? 'Alta de alumno' : 'Editar alumno'}
                 </h1>
                 <p className="mt-2 text-sm text-textsec">
-                  Configura ficha tecnica, foto, cuenta del alumno y tutor desde una sola pantalla.
+                  {trialBookingId ? 'Revisa los datos de la prueba y completa la ficha y el acceso individual del alumno.' : 'Configura ficha tecnica, foto, cuenta del alumno y tutor desde una sola pantalla.'}
                 </p>
               </div>
             </div>
@@ -339,7 +399,26 @@ export default function AdminAlumnoEditorPage() {
           </div>
         </section>
 
-        {!isNew && detailQuery.isLoading ? (
+        {trialBookingId && <section id="intro-enrollment-matches" className="scroll-mt-20 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+          {trial.isLoading ? <p>Cargando datos de la prueba…</p>
+            : trial.isError ? <p role="alert">{trial.error.message}</p>
+            : trial.data?.linkedStudent ? <button type="button" className="min-h-11 font-semibold underline" onClick={() => router.push(`/admin/alumnos/${trial.data!.linkedStudent}`)}>Ver ficha ya vinculada</button>
+            : trial.data?.linkedStudent === null ? <p>Revisa el vínculo anterior de esta prueba.</p>
+            : <><h2 className="font-bold">Coincidencias en Alumnos</h2>
+              {matches.length ? <>
+                <ul className="mt-2 space-y-2">{matches.map(match => <li key={match.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-1">
+                  <span>{match.full_name} <span className="text-xs text-slate-600">· {match.sameDni ? 'Mismo DNI' : 'Mismo nombre'}</span></span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link href={`/admin/alumnos/${match.id}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-xs font-semibold text-blue-800 underline">Revisar ficha</Link>
+                    <button type="button" className="btn-outline min-h-11" disabled={saving} onClick={() => void linkExistingStudent(match.id, match.full_name)}>Vincular ficha</button>
+                  </div>
+                </li>)}</ul>
+                {!matches.some(match => match.sameDni) && <label className="mt-3 flex min-h-11 items-center gap-2"><input type="checkbox" checked={differentPerson === studentForm.full_name} onChange={event => setDifferentPerson(event.target.checked ? studentForm.full_name : '')} />Es otra persona con el mismo nombre</label>}
+              </> : <p className="mt-1">Al guardar, se comprueba si ya hay una ficha con el mismo nombre o DNI.</p>}
+            </>}
+        </section>}
+
+        {trialBookingId && (!trial.data || trial.data.linkedStudent !== undefined) ? null : !isNew && detailQuery.isLoading ? (
           <div className="card p-8 text-center text-textsec">Cargando datos del alumno...</div>
         ) : !isNew && detailQuery.error && !detailQuery.data ? (
           <div className="card p-8 text-center">
@@ -422,7 +501,7 @@ export default function AdminAlumnoEditorPage() {
                           onChange={(event) => setStudentForm((current) => ({ ...current, phone: event.target.value }))}
                         />
                       </div>
-                      {isNew ? <div className="grid gap-2">
+                      {trialBookingId ? <p className="text-sm text-textsec">Acceso individual del alumno</p> : isNew ? <div className="grid gap-2">
                         <label className="text-sm text-textsec">Estado</label>
                         <select
                           className="input"
@@ -699,7 +778,7 @@ export default function AdminAlumnoEditorPage() {
                 <Save className="h-4 w-4" />
                 {saving ? 'Guardando...' : 'Guardar cambios'}
               </button>
-              <button className="btn-outline" onClick={() => router.push(isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}>
+              <button className="btn-outline" onClick={() => router.push(trialBookingId ? trialReturn : isNew ? '/admin/alumnos' : `/admin/alumnos/${id}`)}>
                 Cancelar
               </button>
             </div>

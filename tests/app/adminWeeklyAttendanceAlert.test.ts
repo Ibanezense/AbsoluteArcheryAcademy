@@ -14,9 +14,9 @@ describe('attendance-only administrative controls', () => {
     expect(page).toContain('p_attended: true')
   })
   it('explains automatic cancellation and refreshes balances after attendance', () => {
-    expect(page).toContain('sin asistencia se cancelan al finalizar el día')
-    expect(page).toContain('queryKey: studentKeys.all')
-    expect(page).toContain('queryKey: membershipRenewalAlertKeys.all')
+    expect(page).toContain('Las reservas de alumnos pendientes se cierran al finalizar el día según la regla de su membresía.')
+    expect(page).toContain('studentKeys.all, membershipRenewalAlertKeys.all')
+    expect(page).toContain('queryClient.invalidateQueries({ queryKey })')
   })
   it('removes recovery carryover from membership creation', () => {
     const assignment = readFileSync(join(process.cwd(), 'app/admin/membresias/page.tsx'), 'utf8')

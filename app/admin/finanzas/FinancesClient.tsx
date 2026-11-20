@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { PendingMembershipPayments } from '@/components/admin/PendingMembershipPayments'
+import CollectionsPanel from './CollectionsPanel'
 import { AdminFilterBar } from '@/components/admin/AdminFilterBar'
 import { formatAdminMoney, paymentMethodLabel } from '@/lib/utils/adminPresentation'
 import { getLimaDateKey } from '@/lib/utils/membershipCycles'
@@ -547,6 +548,7 @@ function FinanceMobileSummary({
 }
 
 export default function FinancesClient() {
+  const [section, setSection] = useState<'collections' | 'sales' | 'pending'>('collections')
   const [filters, setFilters] = useState<FinanceFiltersState>(initialFilters)
   const [records, setRecords] = useState<FinanceRecord[]>([])
   const [actionable, setActionable] = useState<FinanceActionableDashboard | null>(null)
@@ -695,9 +697,16 @@ export default function FinancesClient() {
 
   return (
     <div className="space-y-6">
-      <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Los ingresos de membresías se atribuyen al mes de la venta, aunque el pago se regularice después. La fecha de cobro se conserva en el detalle. Las pruebas mantienen su fecha de pago.</p>
-      <PendingMembershipPayments onCollected={() => void loadFinances()} />
+      <div role="group" aria-label="Secciones financieras" className="flex flex-wrap gap-2 rounded-xl border border-blue-100 bg-white p-2">
+        {([['collections', 'Cobros'], ['pending', 'Pendientes'], ['sales', 'Ventas']] as const).map(([value, label]) => (
+          <button key={value} type="button" aria-pressed={section === value} onClick={() => setSection(value)}
+            className={`min-h-11 rounded-lg px-4 text-sm font-bold ${section === value ? 'bg-[#0758aa] text-white' : 'text-[#084681] hover:bg-blue-50'}`}>{label}</button>
+        ))}
+      </div>
+      {section === 'collections' && <CollectionsPanel />}
+      {section === 'pending' && <PendingMembershipPayments onCollected={() => void loadFinances()} />}
 
+      {section === 'sales' && <><p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Los ingresos de membresías se atribuyen al mes de la venta, aunque el pago se regularice después. La fecha de cobro se conserva en el detalle. Las pruebas mantienen su fecha de pago.</p>
       {loading ? (
         <FinanceSkeleton />
       ) : error ? (
@@ -798,7 +807,7 @@ export default function FinancesClient() {
         </>
       )}
 
-      <FinanceMovementDetail record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+      <FinanceMovementDetail record={selectedRecord} onClose={() => setSelectedRecord(null)} /></>}
     </div>
   )
 }

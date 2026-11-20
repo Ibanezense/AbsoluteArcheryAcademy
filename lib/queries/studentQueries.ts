@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { buildStudentCategory } from '@/lib/utils/studentCategory'
-import { getLimaDateKey, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
+import { getLimaDateKey, MEMBERSHIP_COVERAGE_STATUSES, normalizeMembershipCommitments, summarizeMemberships } from '@/lib/utils/membershipCycles'
 
 export type StudentListRow = {
   id: string
@@ -34,6 +34,8 @@ export type StudentListRow = {
   last_attendance_at: string | null
   membership_name: string | null
   membership_end: string | null
+  membership_coverage_end: string | null
+  next_membership_start: string | null
   membership_expired_at: string | null
   membership_status: string | null
   membership_raw_classes_remaining: number
@@ -141,6 +143,18 @@ export function mapStudentListRow(
     new Date(right.expired_at || right.end_date || right.start_date || right.created_at).getTime() -
     new Date(left.expired_at || left.end_date || left.start_date || left.created_at).getTime()
   )
+  let coverageEnd: string | null = null
+  let nextMembershipStart: string | null = null
+  for (const membership of memberships) {
+    const end = dateKey(membership.end_date)
+    if (end && MEMBERSHIP_COVERAGE_STATUSES.includes(membership.status) && (!coverageEnd || end > coverageEnd)) {
+      coverageEnd = end
+    }
+    const start = dateKey(membership.start_date)
+    if (membership.status === 'active' && start && start > today && (!nextMembershipStart || start < nextMembershipStart)) {
+      nextMembershipStart = start
+    }
+  }
   const summarizableMemberships = memberships.map((membership, index) => {
     const startDate = membership.start_date || dateKey(membership.created_at) || today
     return {
@@ -241,6 +255,8 @@ export function mapStudentListRow(
     last_attendance_at: student.last_attendance_at || null,
     membership_name: membershipForDisplay?.custom_name || null,
     membership_end: membershipForDisplay?.end_date || null,
+    membership_coverage_end: coverageEnd,
+    next_membership_start: nextMembershipStart,
     membership_expired_at: membershipForDisplay?.expired_at || null,
     membership_status: displayStatus,
     membership_raw_classes_remaining: membershipForDisplay?.classes_remaining ?? 0,

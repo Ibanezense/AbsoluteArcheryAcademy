@@ -22,7 +22,7 @@ const NavItem = memo(function NavItem({ href, Icon, label, active }: NavItemProp
   return (
     <Link
       href={href}
-      className={`group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] font-semibold transition-colors ${active ? 'bg-orange-50 text-accent' : 'text-slate-500 hover:bg-orange-50 hover:text-accent'
+      className={`group relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] font-semibold transition-colors ${active ? 'bg-[#0758aa] text-white' : 'text-[#162a48] hover:bg-blue-50 hover:text-[#0758aa]'
         }`}
       aria-current={active ? 'page' : undefined}
     >
@@ -52,7 +52,7 @@ const AdminBottomNav = memo(function AdminBottomNav({ active, onMore }: Props) {
         {items.map(({ key, href, Icon, label }) => (
           <NavItem key={key} href={href} Icon={Icon} label={label} active={active === key} />
         ))}
-        {onMore && <button type="button" onClick={onMore} className="flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold text-slate-600" aria-label="Más opciones de administración"><MoreHorizontal aria-hidden="true" size={20} /><span>Más</span></button>}
+        {onMore && <button type="button" onClick={onMore} className="flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold text-[#162a48] transition-colors hover:bg-blue-50 hover:text-[#0758aa]" aria-label="Más opciones de administración"><MoreHorizontal aria-hidden="true" size={20} /><span>Más</span></button>}
       </div>
     </nav>
   )

@@ -39,7 +39,7 @@ describe('admin visual system', () => {
     expect(alumnos).toContain('AdminContentPanel')
     expect(alumnos).toContain('DesktopStudentTable')
     expect(alumnos).toContain('MobileStudentList')
-    expect(alumnos).toContain('statusFilter')
+    expect(alumnos).toContain('aria-label="Filtrar alumnos por estado"')
     expect(alumnos).not.toContain('Alertas operativas')
     expect(alumnos).not.toContain('Acciones rapidas')
   })

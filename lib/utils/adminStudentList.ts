@@ -1,11 +1,36 @@
 import dayjs from 'dayjs'
 import type { StudentListRow } from '@/lib/queries/studentQueries'
+import { getLimaDateKey } from '@/lib/utils/membershipCycles'
 import { norm } from '@/lib/utils/searchUtils'
 import { getStudentOperationalStatus, type StudentOperationalStatus } from '@/lib/utils/studentOperationalStatus'
 
 export type AdminStudentStatus = StudentOperationalStatus
 export type AdminStudentFilter = 'all' | AdminStudentStatus
 export type AdminStudentSort = 'status' | 'expiry' | 'name'
+
+const UNCATEGORIZED = 'uncategorized'
+
+function categoryKey(category: StudentListRow['category']) {
+  return norm(category?.trim().replace(/\s+/g, ' ') || '') || UNCATEGORIZED
+}
+
+export function getAdminStudentCategories(students: StudentListRow[]) {
+  const groups = new Map<string, { id: string; label: string; count: number }>()
+  for (const student of students) {
+    const id = categoryKey(student.category)
+    const group = groups.get(id)
+    if (group) group.count++
+    else groups.set(id, { id, label: student.category?.trim() || 'Sin categoría', count: 1 })
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'es'))
+}
+
+function matchesLocation(student: StudentListRow, locationId?: string) {
+  if (!locationId) return true
+  if (locationId === 'unassigned') return !student.home_location_id
+  if (locationId === 'both') return student.home_location_id === 'both'
+  return student.home_location_id === locationId || student.home_location_id === 'both'
+}
 
 const STATUS_PRIORITY: Record<AdminStudentStatus, number> = {
   active: 0,
@@ -55,26 +80,35 @@ export function filterAdminStudents(
   query: string,
   filter: AdminStudentFilter,
   now = new Date(),
-  options: { locationId?: string; sort?: AdminStudentSort } = {},
+  options: { locationId?: string; category?: string; sort?: AdminStudentSort } = {},
 ) {
-  const needle = norm(query)
+  const needle = norm(query.trim())
+  const phoneNeedle = /^[\d+().\s-]+$/.test(needle) ? needle.replace(/\D/g, '').replace(/^51(?=\d{9}$)/, '') : ''
+  const today = options.sort === 'expiry' ? getLimaDateKey(now) : ''
 
   return students
     .filter((student) => {
       const matchesQuery = !needle || [student.full_name, student.dni || '', student.phone || '']
         .map((value) => norm(value))
         .some((value) => value.includes(needle))
+        || Boolean(phoneNeedle && student.phone?.replace(/\D/g, '').includes(phoneNeedle))
 
       return matchesQuery
-        && (!options.locationId || student.home_location_id === options.locationId)
+        && matchesLocation(student, options.locationId)
+        && (!options.category || categoryKey(student.category) === options.category)
         && (filter === 'all' || getAdminStudentStatus(student, now) === filter)
     })
     .sort((left, right) => {
       if (options.sort === 'expiry') {
-        const leftEnd = left.membership_end && dayjs(left.membership_end).isValid() ? left.membership_end : '9999-12-31'
-        const rightEnd = right.membership_end && dayjs(right.membership_end).isValid() ? right.membership_end : '9999-12-31'
-        const difference = leftEnd.localeCompare(rightEnd)
-        if (difference) return difference
+        const leftEnd = left.membership_coverage_end ?? (left.membership_coverage_end === undefined ? left.membership_end : null)
+        const rightEnd = right.membership_coverage_end ?? (right.membership_coverage_end === undefined ? right.membership_end : null)
+        if (leftEnd && !rightEnd) return -1
+        if (rightEnd && !leftEnd) return 1
+        if (leftEnd && rightEnd) {
+          const overdueDifference = Number(leftEnd < today) - Number(rightEnd < today)
+          const difference = overdueDifference || (leftEnd < today ? rightEnd.localeCompare(leftEnd) : leftEnd.localeCompare(rightEnd))
+          if (difference) return difference
+        }
       }
       if (options.sort === 'name' || options.sort === 'expiry') return left.full_name.localeCompare(right.full_name, 'es', { sensitivity: 'base' })
       const statusDifference =

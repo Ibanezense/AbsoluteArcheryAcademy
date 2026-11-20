@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { filterAdminStudents, getAdminStudentStatus } from '@/lib/utils/adminStudentList'
+import { filterAdminStudents, getAdminStudentStatus, getAdminStudentCategories } from '@/lib/utils/adminStudentList'
 
 const baseStudent = {
   id: 'student-1',
@@ -86,6 +86,36 @@ describe('getAdminStudentStatus', () => {
 })
 
 describe('filterAdminStudents', () => {
+  it('includes dual-site students at either site and can isolate unassigned students', () => {
+    const students = [
+      { ...baseStudent, id: 'both', home_location_id: 'both' },
+      { ...baseStudent, id: 'none', home_location_id: null },
+    ]
+    expect(filterAdminStudents(students, '', 'all', now, { locationId: 'tiabaya' }).map(row => row.id)).toEqual(['both'])
+    expect(filterAdminStudents(students, '', 'all', now, { locationId: 'umacollo' }).map(row => row.id)).toEqual(['both'])
+    expect(filterAdminStudents(students, '', 'all', now, { locationId: 'unassigned' }).map(row => row.id)).toEqual(['none'])
+  })
+
+  it('counts and filters matching categories consistently, including uncategorized students', () => {
+    const students = [
+      { ...baseStudent, id: 'one', category: 'Recurvo U18 damas' },
+      { ...baseStudent, id: 'two', category: ' recurvo U18 damas ' },
+      { ...baseStudent, id: 'three', category: null },
+    ]
+    expect(getAdminStudentCategories(students).map(option => option.count)).toEqual([2, 1])
+    expect(filterAdminStudents(students, '', 'all', now, { category: 'recurvo u18 damas' })).toHaveLength(2)
+    expect(filterAdminStudents(students, '', 'all', now, { category: 'uncategorized' }).map(row => row.id)).toEqual(['three'])
+  })
+
+  it('orders by full coverage end with upcoming dates ahead of overdue dates', () => {
+    const students = [
+      { ...baseStudent, id: 'overdue', membership_end: '2026-07-14' },
+      { ...baseStudent, id: 'extended', membership_end: '2026-07-16', membership_coverage_end: '2026-08-15' },
+      { ...baseStudent, id: 'upcoming', membership_end: '2026-07-20' },
+    ]
+    expect(filterAdminStudents(students, '', 'all', now, { sort: 'expiry' }).map(row => row.id)).toEqual(['upcoming', 'extended', 'overdue'])
+  })
+
   it('combines search, status and site without requiring phone or avatar', () => {
     const students = [
       { ...baseStudent, id: 'one', full_name: 'Ana Uno', phone: null, home_location_id: 'tiabaya' },

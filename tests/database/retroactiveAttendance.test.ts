@@ -14,8 +14,11 @@ it('lets only administrators regularize a past class once without losing it at d
       CREATE FUNCTION public.is_admin_user() RETURNS boolean LANGUAGE sql AS $$ SELECT EXISTS(SELECT FROM profiles WHERE id=auth.uid() AND role='admin' AND is_active) $$;
       CREATE TYPE booking_status AS ENUM('reserved','cancelled','attended','no_show');
       CREATE TABLE sessions(id uuid PRIMARY KEY,start_at timestamptz,end_at timestamptz);
+      CREATE TABLE students(id uuid PRIMARY KEY,full_name text,avatar_url text);
+      CREATE TABLE intro_clients(id uuid PRIMARY KEY,full_name text);
       CREATE TABLE student_memberships(id uuid PRIMARY KEY,attendance_policy_started_on date,end_date date,unused_classes_finalized_at timestamptz,classes_used integer DEFAULT 0,classes_remaining integer,updated_at timestamptz);
       CREATE TABLE bookings(id uuid PRIMARY KEY,student_id uuid,session_id uuid,status booking_status,active_membership_id uuid,credit_kind text,recovery_credit_id uuid,booked_by_profile_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz,attendance_marked_by uuid,attendance_marked_at timestamptz,admin_notes text);
+      ALTER TABLE bookings ADD COLUMN intro_client_id uuid, ADD COLUMN distance_m integer, ADD COLUMN bow_usage_type text, ADD COLUMN bow_poundage integer;
       CREATE TABLE membership_recovery_credits(id uuid PRIMARY KEY,classes_remaining integer,updated_at timestamptz);
       CREATE TABLE student_credit_ledger(student_id uuid,student_membership_id uuid,booking_id uuid,movement_type text,delta integer,balance_after integer,reason text,performed_by_profile_id uuid);
       CREATE FUNCTION public.sync_student_membership_operational_status(uuid) RETURNS integer LANGUAGE sql AS $$SELECT 0$$;
@@ -33,6 +36,12 @@ it('lets only administrators regularize a past class once without losing it at d
     await db.query("INSERT INTO bookings(id,student_id,session_id,status,active_membership_id,booked_by_profile_id) VALUES($1,$2,$3,'reserved',$4,$5)", [id(9), id(2), id(3), id(4), id(1)])
     const migration = 'supabase/migrations/20261022150600_admin_retroactive_attendance.sql'
     await db.exec(readFileSync(migration, 'utf8'))
+    await db.exec(readFileSync('supabase/migrations/20261120031800_admin_attendance_turn_guard.sql', 'utf8'))
+    await db.query("INSERT INTO sessions VALUES($1,now()+interval '1 hour',now()+interval '2 hours')", [id(30)])
+    await db.query("INSERT INTO bookings(id,student_id,session_id,status,active_membership_id) VALUES($1,$2,$3,'reserved',$4)", [id(31), id(2), id(30), id(4)])
+    await expect(db.query('SELECT admin_mark_attendance($1,true)', [id(31)])).rejects.toThrow('cuando empiece el turno')
+    expect((await db.query('SELECT status FROM bookings WHERE id=$1', [id(31)])).rows[0]).toEqual({ status: 'reserved' })
+    expect((await db.query('SELECT classes_remaining FROM student_memberships')).rows[0]).toEqual({ classes_remaining: 4 })
     expect((await db.query('SELECT admin_retroactive_attendance FROM bookings WHERE id=$1', [id(9)])).rows[0]).toEqual({ admin_retroactive_attendance: true })
     async function book(n: number, actor = 1, created = 'now()') {
       await db.query(`INSERT INTO bookings(id,student_id,session_id,status,active_membership_id,booked_by_profile_id,created_at) VALUES($1,$2,$3,'reserved',$4,$5,${created})`, [id(n), id(2), id(3), id(4), id(actor)])
@@ -49,6 +58,8 @@ it('lets only administrators regularize a past class once without losing it at d
     await book(11, 1, "now()-interval '2 days'")
     await db.query('SELECT close_unattended_daily_bookings()')
     expect((await db.query('SELECT status FROM bookings WHERE id=$1', [id(11)])).rows[0]).toEqual({ status: 'cancelled' })
+    expect((await db.query("SELECT booking_status FROM get_daily_roster((now() AT TIME ZONE 'America/Lima')::date-1) WHERE booking_id=$1", [id(11)])).rows)
+      .toEqual([{ booking_status: 'cancelled' }])
     await expect(db.query('SELECT admin_mark_attendance($1,true)', [id(11)])).rejects.toThrow('cancelada')
     await book(12)
     await db.exec(`SELECT set_config('test.actor','${id(2)}',false)`)

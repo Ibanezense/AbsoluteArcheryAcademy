@@ -21,4 +21,9 @@ describe('intro calendar persistence contract', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('admin_register_intro_appointment', expect.objectContaining({ p_pay_on_site: true, p_payment_status: 'pending', p_request_id: 'request' }))
     expect(supabase.from).not.toHaveBeenCalled()
   })
+  it('uses the version-checked write when an optional DNI changes', async () => {
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: { success: true }, error: null } as never)
+    await IntroClassesService.changeAppointment({ bookingId: 'b', expectedUpdatedAt: 'version', action: 'edit', updateDni: true, details: { dni: '01234567' } })
+    expect(supabase.rpc).toHaveBeenCalledWith('admin_change_intro_appointment_with_dni', expect.objectContaining({ p_expected_updated_at: 'version', p_details: { dni: '01234567' } }))
+  })
 })

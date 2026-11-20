@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   CreditCard,
-  Gauge,
   Loader2,
   MessageCircle,
   Plus,
@@ -19,7 +18,6 @@ import {
   Search,
   Settings,
   Target,
-  TrendingUp,
   UserPlus,
   Users,
   Wallet,
@@ -27,16 +25,21 @@ import {
 import AdminMembershipRenewalRequests from '@/components/AdminMembershipRenewalRequests'
 import AdminQuickBooking from '@/components/AdminQuickBooking'
 import { AdminDonutChart, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
-import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'
 import MembershipGrowthChart from '@/components/admin/MembershipGrowthChart'
 import TrialConversionPanel from '@/components/admin/TrialConversionPanel'
-import { useAdminWeeklySummary } from '@/lib/hooks/useAdminWeeklySummary'
-import { formatWeeklyRange } from '@/lib/utils/adminWeeklySummary'
+import { DashboardTodayOverview } from '@/components/admin/DashboardTodayOverview'
+import DashboardSiteCapacity from '@/components/admin/DashboardSiteCapacity'
+import DashboardBirthdays from '@/components/admin/DashboardBirthdays'
+import DashboardMembershipFollowups from '@/components/admin/DashboardMembershipFollowups'
+import { useDashboardSite } from '@/lib/hooks/useDashboardSite'
+import { dashboardSiteLabels, type DashboardSite } from '@/lib/utils/adminDashboardSite'
+import { formatWeeklyRange, type AdminWeeklySummary } from '@/lib/utils/adminWeeklySummary'
 import { attendanceHref, administrativeBookingHref } from '@/lib/utils/adminNavigation'
 import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
   useAdminDashboardData,
   useAdminStudentSearch,
+  useAdminWeekendIntroCapacity,
 } from '@/lib/hooks/useAdminDashboardData'
 import {
   type AdminDashboardAgendaItem,
@@ -83,10 +86,6 @@ function formatCurrency(value: number) {
     currency: 'PEN',
     maximumFractionDigits: 0,
   }).format(value || 0)
-}
-
-function formatPercent(value: number | null) {
-  return value === null ? 'Sin datos' : `${value}%`
 }
 
 function statusLabel(status: AdminDashboardAgendaItem['status']) {
@@ -264,25 +263,19 @@ function WeeklyCard({
   icon: ReactNode
   tone?: 'neutral' | 'warning' | 'critical'
 }) {
-  const toneClass =
-    tone === 'critical'
-      ? 'border-rose-200 bg-rose-50/80'
-      : tone === 'warning'
-        ? 'border-amber-200 bg-amber-50/80'
-        : 'border-slate-200 bg-white'
-  const iconTone = tone === 'critical' ? 'red' : tone === 'warning' ? 'amber' : 'orange'
+  const needsAttention = tone !== 'neutral'
 
   return (
-    <article className={`group relative overflow-hidden rounded-2xl border p-4 shadow-[0_2px_6px_rgba(16,30,42,0.025)] transition-colors hover:border-orange-300 sm:p-5 ${toneClass}`}>
-      <Link href={href} aria-label={action} className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
+    <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_3px_16px_rgba(15,35,70,0.04)] transition-colors hover:border-blue-300 sm:p-5">
+      <Link href={href} aria-label={action} className="absolute inset-0 z-10 rounded-2xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700" />
       <div className="relative flex items-start justify-between gap-3">
-        <IconBadge icon={icon} tone={iconTone} />
-        <ArrowRight className="mt-3 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-accent" />
+        <IconBadge icon={icon} tone={needsAttention ? 'orange' : 'blue'} />
+        <ArrowRight className="mt-3 h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-blue-700" />
       </div>
       <div className="relative mt-4">
         <p className="text-xs font-semibold leading-5 text-slate-600 sm:text-sm">{title}</p>
         <div className="mt-2 flex items-end justify-between gap-3">
-          <p className="font-heading text-4xl font-bold tabular-nums leading-none tracking-tight text-slate-950 sm:text-5xl">{value}</p>
+          <p className="font-heading text-3xl font-bold tabular-nums leading-none tracking-tight text-slate-950 sm:text-4xl">{value}</p>
           <span className="hidden border-l border-slate-200 pl-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 sm:inline-flex">
             Semana
           </span>
@@ -294,24 +287,18 @@ function WeeklyCard({
 }
 
 
-function WeeklySummary() {
-  const query = useAdminWeeklySummary()
-  const summary = query.data
+function WeeklySummary({ summary }: { summary: AdminWeeklySummary }) {
   return <section aria-labelledby="weekly-summary-title" className="space-y-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <div><h2 id="weekly-summary-title" className="font-heading text-2xl font-bold tracking-tight text-slate-950">Esta semana</h2><p className="mt-1 text-sm text-slate-500">Lunes a domingo · {formatWeeklyRange(query.week.startDate, query.week.endDate)}</p></div>
+      <div><h2 id="weekly-summary-title" className="font-heading text-2xl font-bold tracking-tight text-slate-950">Esta semana</h2><p className="mt-1 text-sm text-slate-500">Lunes a domingo · {formatWeeklyRange(summary.startDate, summary.endDate)}</p></div>
       <p className="text-xs text-slate-500">Se actualiza cada lunes · hora de Lima</p>
     </div>
-    {query.isPending ? <p role="status" className="py-6 text-sm text-slate-500">Cargando resumen semanal…</p> : query.isError || !summary ? <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p>No pudimos cargar los indicadores de esta semana.</p><button type="button" onClick={() => void query.refetch()} className="mt-2 min-h-11 font-medium underline">Reintentar resumen semanal</button></div> : <>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <WeeklyCard title="Reservas de la semana" value={summary.reservations} helper="Alumnos y pruebas, sin canceladas" action="Ver agenda" href="/admin/asistencia" icon={<CalendarDays className="h-5 w-5" />} />
         <WeeklyCard title="Clases programadas" value={summary.scheduledSessions} helper="Turnos de lunes a domingo" action="Ver turnos" href="/admin/sesiones" icon={<CalendarClock className="h-5 w-5" />} />
-        <WeeklyCard title="Cupos libres esta semana" value={summary.availableSlots ?? 'N/D'} helper="En turnos que aún no comenzaron" action="Nueva reserva" href="/admin/sesiones" icon={<Gauge className="h-5 w-5" />} />
         <WeeklyCard title="Pendientes de confirmar" value={summary.pendingConfirmations} helper="Pruebas reservadas de esta semana" action="Confirmar" href="/admin/intro" icon={<AlertTriangle className="h-5 w-5" />} tone={summary.pendingConfirmations > 0 ? 'warning' : 'neutral'} />
         <WeeklyCard title="Asistencias por marcar" value={summary.attendancePending} helper="Reservas de la semana sin asistencia" action="Marcar asistencia" href="/admin/asistencia" icon={<ClipboardCheck className="h-5 w-5" />} tone={summary.attendancePending > 0 ? 'critical' : 'neutral'} />
       </div>
-      <p className="text-xs leading-5 text-slate-500">Las reservas y los pendientes incluyen la semana completa. Los cupos libres excluyen horarios pasados; N/D indica que falta capacidad configurada.</p>
-    </>}
   </section>
 }
 
@@ -331,19 +318,14 @@ function AlertTask({
   const numericCount = count ?? 0
   const isCritical = getAlertSeverity(numericCount) === 'critical'
   const isWarning = getAlertSeverity(numericCount) === 'warning'
-  const toneClass = isCritical
-    ? 'border-rose-200 bg-rose-50/70'
-    : isWarning
-      ? 'border-amber-200 bg-amber-50/70'
-      : 'border-slate-200 bg-white'
   const badgeClass = isCritical
-    ? 'bg-rose-500 text-white'
+    ? 'bg-orange-700 text-white'
     : isWarning
-      ? 'bg-amber-400 text-slate-950'
-      : 'bg-slate-100 text-slate-700'
+      ? 'bg-orange-50 text-orange-800'
+      : 'bg-blue-50 text-blue-800'
 
   return (
-    <article className={`rounded-2xl border p-4 ${toneClass}`}>
+    <article className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="max-w-[11rem] text-sm font-bold leading-5 text-slate-950">{title}</p>
@@ -353,7 +335,7 @@ function AlertTask({
           {count === null ? 'N/D' : count}
         </span>
       </div>
-      <Link href={href} className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-accent">
+      <Link href={href} className="mt-3 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-blue-700">
         {action}
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -549,73 +531,78 @@ function WeeklyAgenda({
   )
 }
 
-function WeeklyOccupancy({
+function WeeklyReservations({
   rows,
 }: {
-  rows: Array<{ day: string; usedSlots: number; totalSlots: number | null; occupancyRate: number | null }>
+  rows: Array<{ day: string; usedSlots: number }>
 }) {
+  const maxReservations = Math.max(1, ...rows.map(row => row.usedSlots))
   return (
     <AdminSurface className="p-5">
-      <SectionHeader
-        title="Ocupacion semanal"
-        helper="Cupos usados contra capacidad configurada por dia."
-      />
-
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-slate-950">Reservas por día</h2>
+        <Link href="/admin/asistencia" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700">
+          <CalendarDays size={17} /> Ver calendario
+        </Link>
+      </div>
       {rows.length === 0 ? (
-        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          Todavia no hay suficientes datos para calcular la ocupacion semanal.
-        </div>
+        <p className="py-8 text-sm text-slate-600">Aún no hay reservas para mostrar.</p>
       ) : (
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-3">
-            {rows.map((row) => {
-              const rate = row.occupancyRate ?? 0
-              const bar =
-                row.occupancyRate === null
-                  ? 'bg-slate-300'
-                  : rate >= 80
-                    ? 'bg-danger'
-                    : rate >= 55
-                      ? 'bg-warning'
-                      : 'bg-success'
-
-              return (
-                <div key={row.day} className="grid grid-cols-[3rem_1fr_4rem] items-center gap-3">
-                  <span className="text-sm font-semibold text-textpri">{row.day}</span>
-                  <div className="h-3 overflow-hidden rounded-full bg-line">
-                    <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(rate, 100)}%` }} />
-                  </div>
-                  <span className="text-right text-sm font-semibold text-textpri">
-                    {row.occupancyRate === null ? 'N/D' : `${row.occupancyRate}%`}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="space-y-2">
-              {rows.map((row) => (
-                <div key={row.day} className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-textpri">{row.day}</span>
-                  <span className="text-textsec">
-                    {row.totalSlots === null ? `${row.usedSlots} reservas` : `${row.usedSlots}/${row.totalSlots} cupos`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ul aria-label="Reservas por día" className="mt-3 grid grid-flow-col auto-cols-fr gap-1 border-b border-slate-200 sm:gap-2">
+          {rows.map(row => (
+            <li key={row.day} className="flex min-w-0 flex-col items-center gap-2 pb-2" title={`${row.day} · ${row.usedSlots} reservas`}>
+              <div className="flex h-36 w-full flex-col justify-end rounded-md bg-slate-50 px-1 sm:px-2">
+                <span className="mb-1 text-center text-[11px] font-bold text-slate-700 sm:text-xs">
+                  {row.usedSlots}
+                </span>
+                <span aria-hidden="true" className={`block rounded-t-md ${row.usedSlots === maxReservations ? 'bg-gradient-to-t from-orange-200 to-orange-500' : 'bg-gradient-to-t from-blue-200 to-blue-500'}`}
+                  style={{ height: `${(row.usedSlots / maxReservations) * 80}%` }} />
+              </div>
+              <span className="text-xs font-semibold text-slate-700">{row.day.slice(0, 3)}</span>
+            </li>
+          ))}
+        </ul>
       )}
+    </AdminSurface>
+  )
+}
+
+const trialDateTime = new Intl.DateTimeFormat('es-PE', {
+  timeZone: 'America/Lima', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+})
+
+function UpcomingTrialSessions({ site }: { site: DashboardSite }) {
+  const { sessions, isLoading, error } = useAdminWeekendIntroCapacity()
+  const upcoming = sessions.filter(session => (site === 'all' || session.locationCode === site) && Date.parse(session.startAt) >= Date.now())
+    .sort((a, b) => a.startAt.localeCompare(b.startAt)).slice(0, 3)
+  return (
+    <AdminSurface className="p-5">
+      <h2 className="text-xl font-bold text-slate-950">Próximas clases de prueba</h2>
+      {isLoading ? <p role="status" className="mt-3 text-sm text-slate-600">Cargando horarios…</p>
+        : error ? <p className="mt-3 text-sm text-slate-600">Consulta los horarios en el calendario.</p>
+        : !upcoming.length ? <p className="mt-3 text-sm text-slate-600">No quedan horarios de prueba esta semana.</p>
+        : <ul className="mt-3 divide-y divide-slate-100">
+          {upcoming.map(session => <li key={session.sessionId} className="flex flex-wrap justify-between gap-2 py-2.5 text-sm">
+            <span className="font-semibold">{session.locationName}</span>
+            <span className="text-slate-600">{trialDateTime.format(new Date(session.startAt))}</span>
+          </li>)}
+        </ul>}
+      <Link href="/admin/intro" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-blue-700">
+        <CalendarDays size={17} /> Abrir calendario de pruebas
+      </Link>
     </AdminSurface>
   )
 }
 
 export default function AdminDashboard() {
   const [isQuickBookingOpen, setIsQuickBookingOpen] = useState(false)
-  const today = useMemo(() => todayInLima(), [])
+  const [site, setSite] = useState<DashboardSite>('all')
+  const today = todayInLima()
   const currentDate = useMemo(() => todayLongLabel(), [])
   const { dashboard, isLoading, isFetching, error, refetch } = useAdminDashboardData()
+  const siteQuery = useDashboardSite(site)
+  const scoped = siteQuery.isError ? undefined : siteQuery.data
+  const selectedSiteLabel = dashboardSiteLabels[site]
 
   if (isLoading) {
     return (
@@ -637,52 +624,59 @@ export default function AdminDashboard() {
   )
 
   return (
-    <div className="space-y-8">
-        <AdminPageHeader
-          eyebrow={currentDate}
-          title="Inicio"
-          description="Agenda, alumnos y seguimiento de tu academia."
-          actions={
-            <>
+    <div className="space-y-5">
+        <AdminPageHeader variant="dashboard" title="Panel de administración" eyebrow={currentDate} actions={
+          <>
+              <label className="flex min-h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700">
+                Sede
+                <select aria-label="Sede" value={site} onChange={event => setSite(event.target.value as DashboardSite)} className="h-11 bg-white pl-1 text-[#084681]">
+                  {Object.entries(dashboardSiteLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
               <StudentSearchBox />
               <button
-                className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-bold text-white transition-colors hover:bg-orange-800"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#0758aa] px-4 text-sm font-bold text-white transition-colors hover:bg-[#084681]"
                 onClick={() => setIsQuickBookingOpen(true)}
               >
                 <Plus className="h-5 w-5" />
-                Reserva rapida
+                Reserva rápida
               </button>
-            </>
-          }
-        />
+          </>
+        } />
 
+        {siteQuery.isPending && <p role="status" className="rounded-xl bg-white p-4">Cargando datos · {selectedSiteLabel}</p>}
+        {siteQuery.isError && <div role="alert" className="rounded-xl bg-white p-4">
+          No se pudo cargar el resumen · {selectedSiteLabel}. <button type="button" onClick={() => void siteQuery.refetch()} className="text-blue-700 underline">Reintentar</button>
+        </div>}
+        {scoped && <>
+        <DashboardTodayOverview today={scoped.today} pendingPayments={dashboard.alerts.pendingPayments} locationLabel={selectedSiteLabel} />
 
+        <div className="grid items-start gap-4 xl:grid-cols-[1.12fr_1fr]">
+          <WeeklyReservations rows={scoped.chart} />
+          <DashboardSiteCapacity key={site} site={site} />
+        </div>
+        <div className="grid items-start gap-4 xl:grid-cols-2">
+          <DashboardMembershipFollowups studentIds={scoped.studentIds} />
+          <DashboardBirthdays studentIds={scoped.studentIds} />
+        </div>
+        <div className="grid items-start gap-4 xl:grid-cols-2">
+          <WeeklyAgenda agenda={site === 'all' ? dashboard.weeklyAgenda : dashboard.weeklyAgenda.filter(row => row.sessionId && scoped.sessionIds.has(row.sessionId))} today={today} />
+          <UpcomingTrialSessions site={site} />
+        </div>
+        <WeeklySummary summary={scoped.weekly} />
+        </>}
 
-        <WeeklySummary />
-
+        <section aria-label="Indicadores de toda la academia" className="space-y-5">
+        <SectionHeader title="Toda la academia" />
         <section className="space-y-3">
-          <SectionHeader title="Pendientes importantes" helper="Tareas que requieren seguimiento operativo." />
+          <SectionHeader title="Pendientes importantes" />
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-            <AlertTask
-              title="Membresias por vencer"
-              count={dashboard.alerts.expiringMemberships}
-              description="Proximos 7 dias."
-              action="Ver alumnos por vencer"
-              href="/admin/alumnos?status=expiring"
-            />
             <AlertTask
               title="Alumnos sin clases"
               count={dashboard.alerts.studentsWithoutClasses}
               description="Activos sin saldo disponible."
               action="Ver alumnos"
               href="/admin/alumnos"
-            />
-            <AlertTask
-              title="Pagos pendientes"
-              count={dashboard.alerts.pendingPayments}
-              description="Pagos pendientes o atrasados."
-              action="Ver finanzas"
-              href="/admin/finanzas"
             />
             <AlertTask
               title="Pruebas pasadas"
@@ -705,10 +699,6 @@ export default function AdminDashboard() {
         <TrialConversionPanel />
 
         <AdminMembershipRenewalRequests />
-
-        <WeeklyAgenda agenda={dashboard.weeklyAgenda} today={today} />
-
-        <WeekendIntroCapacity />
 
         <details className="admin-monthly-summary surface-panel p-5">
           <summary className="min-h-11 cursor-pointer py-2 font-heading text-xl font-semibold text-slate-800">Resultados y análisis del mes</summary>
@@ -740,28 +730,22 @@ export default function AdminDashboard() {
               helper="Ventas de membresías pagadas"
               icon={<Wallet className="h-5 w-5" />}
             />
-            <MonthlyMetric
-              title="Ocupacion semanal"
-              value={formatPercent(dashboard.monthly.weeklyOccupancyRate)}
-              helper="Promedio de la semana"
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
           </div>
         </section>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <WeeklyOccupancy rows={dashboard.weeklyOccupancy} />
               <StudentsLevelDistribution levels={dashboard.studentsByLevel} />
             </div>
           </div>
         </details>
 
+        </section>
         <AdminSurface className="p-5">
           <SectionHeader title="Acciones rapidas" helper="Accesos operativos frecuentes." />
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
             <button
               onClick={() => setIsQuickBookingOpen(true)}
-              className="flex min-h-12 items-center gap-2 rounded-xl border border-accent bg-accent px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-800"
+              className="flex min-h-12 items-center gap-2 rounded-xl border border-[#0758aa] bg-[#0758aa] px-3 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#084681]"
             >
               <Plus className="h-4 w-4" />
               Nueva reserva
@@ -770,7 +754,7 @@ export default function AdminDashboard() {
               <Link
                 key={action.label}
                 href={action.href}
-                className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-accent/30 hover:bg-orange-50 hover:text-accent"
+                className="flex min-h-12 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm font-semibold text-[#084681] transition-colors hover:border-blue-300 hover:bg-blue-100"
               >
                 {action.icon}
                 {action.label}

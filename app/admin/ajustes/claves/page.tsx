@@ -1,10 +1,3 @@
-import type { Metadata } from 'next'
-import ClavesClientPage from './ClavesClientPage'
+import { redirect } from 'next/navigation'
 
-export const metadata: Metadata = {
-    title: 'Claves de Acceso - Ajustes | Absolute Archery Academy',
-}
-
-export default function ClavesPage() {
-    return <ClavesClientPage />
-}
+export default function ClavesPage() { redirect('/admin/alumnos/claves') }

@@ -1,6 +1,7 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
@@ -12,14 +13,14 @@ import {
   EmptyOperationalState,
 } from '@/components/admin/AdminOperationalComponents'
 import { AdminPageHeader } from '@/components/admin/AdminVisualSystem'
-import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/ToastProvider'
 import { supabase } from '@/lib/supabaseClient'
 import { studentKeys } from '@/lib/queries/studentQueries'
 import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { operationalDate } from '@/lib/utils/adminCalendar'
-import { calendarDayLabel, shiftDate } from '@/lib/utils/introCalendar'
+import { calendarDate, calendarDayLabel, calendarTime, shiftDate } from '@/lib/utils/introCalendar'
 
 interface DailyRosterBooking {
   booking_id: string
@@ -62,7 +63,6 @@ function formatDateLabel(date: string) {
 function AsistenciaContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const confirm = useConfirm()
   const toast = useToast()
   const queryClient = useQueryClient()
 
@@ -75,7 +75,13 @@ function AsistenciaContent() {
   const [error, setError] = useState<string | null>(null)
   const [bookings, setBookings] = useState<DailyRosterBooking[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const actionLock = useRef(false)
+  const [now, setNow] = useState(() => Date.now())
+  const [cancellation, setCancellation] = useState<DailyRosterBooking | null>(null)
+  const [reason, setReason] = useState('')
+  const [cancelError, setCancelError] = useState<string | null>(null)
   const rosterRequest = useRef(0)
+  const currentDate = useRef(selectedDate)
   const [sessionLocations, setSessionLocations] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -132,6 +138,7 @@ function AsistenciaContent() {
   }
 
   useEffect(() => {
+    currentDate.current = selectedDate
     void loadRoster(selectedDate)
   }, [selectedDate])
 
@@ -173,6 +180,20 @@ function AsistenciaContent() {
   const activeSession = useMemo(() => {
     return groupedSessions.find((session) => session.session_id === activeSessionId) || groupedSessions[0] || null
   }, [activeSessionId, groupedSessions])
+  const activeStart = activeSession ? Date.parse(activeSession.session_start_at) : 0
+  const sessionHasStarted = Boolean(activeSession && activeStart <= now)
+
+  useEffect(() => {
+    if (!activeStart) return
+    let timer: number | undefined
+    const updateClock = () => {
+      const current = Date.now()
+      setNow(current)
+      if (current < activeStart) timer = window.setTimeout(updateClock, Math.min(activeStart - current, 60_000))
+    }
+    updateClock()
+    return () => window.clearTimeout(timer)
+  }, [activeStart])
 
   const activeStats = useMemo(() => {
     const rows = activeSession?.bookings || []
@@ -186,37 +207,43 @@ function AsistenciaContent() {
 
   const findNextRosterDate = async () => {
     setIsSearchingNext(true)
-    setError(null)
-
     try {
-      for (let offset = 1; offset <= 30; offset += 1) {
-        const candidate = shiftDate(selectedDate, offset)
-        const { data, error: rpcError } = await supabase.rpc('get_daily_roster', {
-          p_date: candidate,
-        })
-
-        if (rpcError) throw rpcError
-        if (((data || []) as DailyRosterBooking[]).length > 0) {
-          selectDate(candidate)
-          return
-        }
-      }
-
-      toast.push({ message: 'No se encontraron reservas en los proximos 30 dias.', type: 'info' })
+      const { data, error: queryError } = await supabase.from('sessions').select('start_at,bookings!inner(id)')
+        .gte('start_at', `${shiftDate(selectedDate, 1)}T00:00:00-05:00`)
+        .lt('start_at', `${shiftDate(selectedDate, 31)}T00:00:00-05:00`)
+        .in('bookings.status', ['reserved', 'attended', 'no_show'])
+        .order('start_at').limit(1).limit(1, { referencedTable: 'bookings' }).maybeSingle()
+      if (queryError) throw queryError
+      if (currentDate.current !== selectedDate) return
+      if (data?.start_at) selectDate(calendarDate(data.start_at))
+      else toast.push({ message: 'No se encontraron reservas en los próximos 30 días.', type: 'info' })
     } catch (err: any) {
-      setError(err.message || 'No se pudieron buscar los proximos turnos.')
+      toast.push({ message: err.message || 'No se pudieron buscar los próximos turnos.', type: 'error' })
     } finally {
       setIsSearchingNext(false)
     }
   }
 
-  const handleMarkAttendance = async (bookingId: string) => {
-    if (actionLoading) return
-    setActionLoading(bookingId)
+  const refreshAfterChange = () => Promise.all([
+    loadRoster(currentDate.current),
+    ...[
+      studentKeys.all, membershipRenewalAlertKeys.all, ['admin-dashboard-operational'], ['admin-weekend-intro-capacity'],
+      ['admin-bookings'], ['admin-students'], ['sessions'], ['upcoming_bookings'], ['intro-calendar'],
+    ].map(queryKey => queryClient.invalidateQueries({ queryKey })),
+  ])
+
+  const handleMarkAttendance = async (booking: DailyRosterBooking) => {
+    if (actionLock.current || booking.booking_status !== 'reserved') return
+    if (!(Date.parse(booking.session_start_at) <= Date.now())) {
+      toast.push({ message: 'Podrás marcar la asistencia cuando empiece el turno.', type: 'info' })
+      return
+    }
+    actionLock.current = true
+    setActionLoading(booking.booking_id)
 
     try {
       const { data, error: rpcError } = await supabase.rpc('admin_mark_attendance', {
-        p_booking_id: bookingId,
+        p_booking_id: booking.booking_id,
         p_attended: true,
       })
 
@@ -225,48 +252,29 @@ function AsistenciaContent() {
         throw new Error(data?.error || 'Error al marcar asistencia')
       }
 
-      toast.push({ message: 'Asistencia registrada.', type: 'success' })
-      await Promise.all([
-        loadRoster(selectedDate),
-        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
-        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-weekend-intro-capacity'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
-        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
-        queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] }),
-        queryClient.invalidateQueries({ queryKey: ['intro-calendar'] }),
-      ])
+      if (data.new_status === 'no_show') toast.push({ message: 'La reserva ya figura como no asistida. Revisa el historial para corregirla.', type: 'info' })
+      else toast.push({ message: 'Asistencia registrada.', type: 'success' })
+      await refreshAfterChange()
     } catch (err: any) {
       console.error('Error marking attendance:', err)
       toast.push({ message: err.message || 'Error al marcar asistencia', type: 'error' })
     } finally {
+      actionLock.current = false
       setActionLoading(null)
     }
   }
 
-  const handleCancelBooking = async (bookingId: string) => {
-    if (actionLoading) return
-    const reason = window.prompt('Motivo obligatorio de la cancelación por la academia:')?.trim()
-    if (!reason) return
-    const ok = await confirm(
-      'La reserva se cancelará por la academia. Se liberarán sus recursos y no generará inasistencia. Si ya consumió crédito, se restaurará una sola vez. ¿Continuar?',
-      {
-        title: 'Cancelar reserva',
-        description: 'La cancelación quedará registrada con el motivo indicado.',
-        confirmLabel: 'Cancelar reserva',
-        tone: 'danger',
-      },
-    )
-    if (!ok) return
-
-    setActionLoading(bookingId)
+  const handleCancelBooking = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!cancellation || !reason.trim() || actionLock.current) return
+    actionLock.current = true
+    setActionLoading(cancellation.booking_id)
+    setCancelError(null)
 
     try {
       const { data, error: rpcError } = await supabase.rpc('admin_cancel_booking', {
-        p_booking_id: bookingId,
-        p_reason: reason,
+        p_booking_id: cancellation.booking_id,
+        p_reason: reason.trim(),
       })
 
       if (rpcError) throw rpcError
@@ -275,22 +283,13 @@ function AsistenciaContent() {
       }
 
       toast.push({ message: 'Reserva cancelada.', type: 'success' })
-      await Promise.all([
-        loadRoster(selectedDate),
-        queryClient.invalidateQueries({ queryKey: studentKeys.all }),
-        queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all }),
-        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-weekend-intro-capacity'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
-        queryClient.invalidateQueries({ queryKey: ['sessions'] }),
-        queryClient.invalidateQueries({ queryKey: ['upcoming_bookings'] }),
-        queryClient.invalidateQueries({ queryKey: ['intro-calendar'] }),
-      ])
+      setCancellation(null)
+      await refreshAfterChange()
     } catch (err: any) {
       console.error('Error canceling booking:', err)
-      toast.push({ message: err.message || 'Error al cancelar reserva', type: 'error' })
+      setCancelError(err.message || 'No se pudo cancelar la reserva.')
     } finally {
+      actionLock.current = false
       setActionLoading(null)
     }
   }
@@ -299,9 +298,10 @@ function AsistenciaContent() {
     <div className="space-y-6">
       <AdminPageHeader
         title="Asistencia"
-        description="Registra la asistencia. Las reservas sin asistencia se cancelan al finalizar el día sin descontar créditos."
+        description="Registra la asistencia desde el inicio del turno. Las reservas de alumnos pendientes se cierran al finalizar el día según la regla de su membresía."
         actions={
           <>
+            <Link href="/admin/asistencia/lista-ingreso" className="btn-outline btn-sm">Lista de ingreso</Link>
             <AttendanceBackToSessionsLink href={`/admin/sesiones?date=${selectedDate}`} />
           </>
         }
@@ -316,15 +316,15 @@ function AsistenciaContent() {
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" className="rounded-2xl bg-orange-50 px-4 py-3 text-sm font-black text-accent" onClick={() => selectDate(operationalDate())}>
+              <button type="button" className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-black text-[#084681]" onClick={() => selectDate(operationalDate())}>
                 Hoy
               </button>
-              <button type="button" className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-black text-slate-700" onClick={() => selectDate(shiftDate(operationalDate(), 1))}>
+              <button type="button" className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-black text-[#084681]" onClick={() => selectDate(shiftDate(operationalDate(), 1))}>
                 Mañana
               </button>
               <button
                 type="button"
-                className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+                className="rounded-2xl bg-[#0758aa] px-4 py-3 text-sm font-black text-white hover:bg-[#084681] disabled:opacity-50"
                 disabled={isSearchingNext}
                 onClick={findNextRosterDate}
               >
@@ -357,12 +357,12 @@ function AsistenciaContent() {
 
       {!isLoading && !error && bookings.length === 0 && (
         <EmptyOperationalState
-          title="No hay reservas para este dia."
-          description="Puedes revisar manana o saltar al proximo dia con turnos reservados."
+          title="No hay reservas para este día."
+          description="Puedes revisar mañana o saltar al próximo día con reservas."
           action={
             <button
               type="button"
-              className="rounded-2xl bg-accent px-5 py-3 text-sm font-black text-white disabled:opacity-50"
+              className="rounded-2xl bg-[#0758aa] px-5 py-3 text-sm font-black text-white hover:bg-[#084681] disabled:opacity-50"
               disabled={isSearchingNext}
               onClick={findNextRosterDate}
             >
@@ -387,13 +387,11 @@ function AsistenciaContent() {
             attended={activeStats.attended}
             noShow={activeStats.noShow}
             cancelled={activeStats.cancelled}
+            sessionHasStarted={sessionHasStarted}
           />
 
           <section className="space-y-3">
-            {activeSession.bookings.map((booking) => {
-              const isProcessing = actionLoading === booking.booking_id
-
-              return (
+            {activeSession.bookings.map((booking) => (
                 <AttendanceStudentRow
                   key={booking.booking_id}
                   entryType={booking.entry_type}
@@ -404,9 +402,14 @@ function AsistenciaContent() {
                   participantLabel={booking.entry_type === 'intro' ? 'Clase de prueba' : null}
                   status={booking.booking_status}
                   notes={booking.admin_notes}
-                  isProcessing={isProcessing || actionLoading !== null}
+                  isProcessing={actionLoading !== null}
+                  isMarking={actionLoading === booking.booking_id && !cancellation}
+                  canMarkAttendance={sessionHasStarted}
+                  historyLink={booking.student_id && booking.booking_status !== 'reserved'
+                    ? <Link href={`/admin/alumnos/${booking.student_id}?tab=attendance`} className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-[#084681] underline">Ver historial</Link>
+                    : undefined}
                   canEdit
-                  onAttended={() => handleMarkAttendance(booking.booking_id)}
+                  onAttended={() => handleMarkAttendance(booking)}
                   onEdit={() => {
                     if (booking.entry_type === 'intro') {
                       router.push(`/admin/intro?editBookingId=${booking.booking_id}`)
@@ -414,14 +417,37 @@ function AsistenciaContent() {
                     }
                     router.push(`/reserva/${booking.booking_id}/editar`)
                   }}
-                  onCancel={() => handleCancelBooking(booking.booking_id)}
+                  onCancel={() => { setReason(''); setCancelError(null); setCancellation(booking) }}
                 />
-              )
-            })}
+            ))}
           </section>
         </div>
       )}
 
+      {cancellation && <Modal isOpen title={cancellation.booking_status === 'reserved' ? 'Cancelar reserva por la academia' : 'Corregir registro y cancelar reserva'}
+        onClose={() => { if (!actionLock.current) setCancellation(null) }}>
+        <form onSubmit={handleCancelBooking} className="space-y-4">
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-slate-800">
+            <p className="font-bold">{cancellation.student_name}</p>
+            <p className="mt-1 capitalize">{formatDateLabel(calendarDate(cancellation.session_start_at))} · {calendarTime(cancellation.session_start_at)} · {sessionLocations[cancellation.session_id]}</p>
+            <p className="mt-2">{cancellation.entry_type === 'intro'
+              ? 'La cita se cancelará y se liberará su cupo.'
+              : cancellation.booking_status === 'reserved'
+                ? 'Se liberará el cupo. La cancelación no generará una inasistencia ni consumirá una clase.'
+                : 'La reserva quedará cancelada. Si consumió un crédito por esta asistencia, se devolverá una sola vez.'}</p>
+          </div>
+          <label className="block text-sm font-semibold">Motivo obligatorio
+            <textarea className="input mt-1 min-h-24 w-full" required value={reason} disabled={actionLoading !== null} onChange={event => setReason(event.target.value)} />
+          </label>
+          {cancelError && <p role="alert" className="text-sm font-semibold text-rose-700">{cancelError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="btn-outline min-h-11" disabled={actionLoading !== null} onClick={() => setCancellation(null)}>Volver</button>
+            <button type="submit" className="min-h-11 rounded-xl bg-rose-700 px-4 text-sm font-bold text-white hover:bg-rose-800 disabled:opacity-50" disabled={actionLoading !== null || !reason.trim()}>
+              {actionLoading ? 'Cancelando…' : 'Confirmar cancelación'}
+            </button>
+          </div>
+        </form>
+      </Modal>}
     </div>
   )
 }

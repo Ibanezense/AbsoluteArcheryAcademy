@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calendarDate, weekDates, appointmentStatus, filterAppointments, canReschedule, type IntroAppointment } from './introCalendar'
+import { calendarDate, weekDates, appointmentStatus, filterAppointments, canReschedule, attendanceStatus, type IntroAppointment } from './introCalendar'
 
 const appointment = {
   booking_id: 'booking', intro_client_id: 'client', full_name: 'Laura Torres', age: 28,
@@ -36,6 +36,16 @@ describe('intro weekly calendar', () => {
     const row = { ...appointment, booking_status: 'attended' }
     expect(filterAppointments([row], { states: ['attended'], payment: 'pending', search: 'torres', locationId: 'umacollo' })).toEqual([row])
     expect(filterAppointments([row], { states: [], payment: 'paid', search: '', locationId: '' })).toEqual([])
+  })
+  it('keeps reserved appointments in the same attendance group regardless of payment', () => {
+    expect(attendanceStatus(appointment)).toBe('reserved')
+    expect(attendanceStatus({ booking_status: 'attended' })).toBe('attended')
+  })
+  it('finds people by unaccented name or unformatted phone', () => {
+    const rows = [{ ...appointment, full_name: 'Ángela Torres', phone: '+51 999-888-777' }]
+    for (const search of ['angela', '999888777']) {
+      expect(filterAppointments(rows, { states: [], payment: 'all', search, locationId: '' })).toEqual(rows)
+    }
   })
   it('only permits active appointments to be rescheduled', () => {
     expect(canReschedule(appointment)).toBe(true)

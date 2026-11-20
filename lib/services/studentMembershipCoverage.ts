@@ -1,10 +1,11 @@
 import { supabase } from '@/lib/supabaseClient'
+import { MEMBERSHIP_COVERAGE_STATUSES } from '@/lib/utils/membershipCycles'
 
 export async function fetchStudentMembershipCoverageEnd(studentId: string): Promise<string | null> {
   const { data, error } = await supabase.from('student_memberships')
     .select('end_date')
     .eq('student_id', studentId)
-    .in('status', ['active', 'expired', 'consumed', 'historical'])
+    .in('status', MEMBERSHIP_COVERAGE_STATUSES)
     .order('end_date', { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle()

@@ -10,7 +10,7 @@ describe('admin multiple membership cycles', () => {
   it('offers paid and gift cycle inputs with an operational preview', () => {
     const page = source('app/admin/membresias/page.tsx')
 
-    expect(page).toContain('Membresia pagada')
+    expect(page).toContain('Venta o renovación')
     expect(page).toContain('Obsequio')
     expect(page).toContain('Cantidad de periodos')
     expect(page).toContain('Vista previa')
@@ -58,7 +58,7 @@ describe('admin multiple membership cycles', () => {
     expect(page).toContain('La cantidad de periodos debe ser un entero entre 1 y 12.')
     expect(page).toContain('El descuento debe ser un numero mayor o igual a cero.')
     expect(page).toContain('El descuento porcentual no puede superar 100%.')
-    expect(page).toContain('El pago total debe ser un numero mayor o igual a cero.')
+    expect(page).toContain('Indica si recibiste el pago completo o si queda pendiente.')
     expect(page).toContain('Las clases de obsequio deben ser un entero positivo.')
     expect(page).toContain('La fecha final del obsequio no puede ser anterior al inicio.')
     expect(page.indexOf('validateAssignmentForm(')).toBeLessThan(
@@ -79,8 +79,9 @@ describe('admin multiple membership cycles', () => {
     const page = source('app/admin/membresias/page.tsx')
 
     expect(page).toContain("origin: 'paid'")
-    expect(page).toContain("patchAssignmentForm({ origin: 'paid', student_id: student.id })")
-    expect(page).toContain("patchAssignmentForm({ origin: 'paid', membership_plan_id: plan.id })")
+    expect(page).toContain('openSale({ student_id: student.id })')
+    expect(page).toContain('openSale({ membership_plan_id: plan.id })')
+    expect(page).toContain('setAssignmentForm({ ...emptyAssignmentForm(), ...preset })')
     expect(page).toContain('No se puede renovar una membresia sin alumno asociado.')
     expect(page).toContain('if (!student)')
     expect(page).not.toContain("membership.student?.id || current.student_id")

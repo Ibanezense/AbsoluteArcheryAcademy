@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   BadgeDollarSign,
   CalendarClock,
@@ -1049,6 +1050,10 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
 
   return (
     <div className="space-y-4 pb-8">
+      <Link href="/admin/alumnos" className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Volver a Alumnos
+      </Link>
       <AdminPageHeader
         title={data.full_name}
         description={`Alumno desde el ${formatDate(data.created_at)}`}

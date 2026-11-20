@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, Key, RefreshCw, Search, Pencil, Check, X } from 'lucide-react'
+import { Copy, Key, RefreshCw, Search, Pencil, Check, X, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 import { useToast } from '@/components/ui/ToastProvider'
 import { Spinner } from '@/components/ui/Spinner'
@@ -34,6 +34,7 @@ export default function ClavesClientPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [search, setSearch] = useState('')
+    const [visibleCodeId, setVisibleCodeId] = useState<string | null>(null)
     const [roleFilter, setRoleFilter] = useState<string>('all')
 
     // Estado para edición inline
@@ -103,7 +104,7 @@ export default function ClavesClientPage() {
             setKeys((current) =>
                 current.map((k) => (k.profile_id === profileId ? { ...k, access_code: data as string } : k))
             )
-            toast.push({ message: `Clave generada: ${data}`, type: 'success' })
+            toast.push({ message: 'Clave generada.', type: 'success' })
         } catch (err: any) {
             toast.push({ message: err?.message || 'Error al generar clave.', type: 'error' })
         } finally {
@@ -295,9 +296,10 @@ export default function ClavesClientPage() {
                                                 </button>
                                             </div>
                                         ) : row.access_code ? (
-                                            <code className="rounded bg-bg/40 px-2 py-1 font-mono text-sm text-textpri">
-                                                {row.access_code}
-                                            </code>
+                                            <span className="inline-flex items-center gap-2">
+                                              <code className="rounded bg-bg/40 px-2 py-1 font-mono text-sm text-textpri">{visibleCodeId === row.profile_id ? row.access_code : '••••••'}</code>
+                                              <button type="button" aria-label={visibleCodeId === row.profile_id ? `Ocultar clave de ${row.full_name || 'perfil'}` : `Mostrar clave de ${row.full_name || 'perfil'}`} onClick={() => setVisibleCodeId(visibleCodeId === row.profile_id ? null : row.profile_id)} className="rounded-lg p-1.5 text-textsec hover:bg-white/10">{visibleCodeId === row.profile_id ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+                                            </span>
                                         ) : (
                                             <span className="text-xs text-danger">Sin clave</span>
                                         )}

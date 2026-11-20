@@ -131,6 +131,37 @@ button:disabled { cursor: not-allowed; }
 
 /* Administrative workspace: scoped so the student and guardian portals keep their theme. */
 .admin-workspace { --admin-ink: #101e2a; font-size: 0.9375rem; }
+.academy-admin-home .academy-admin-masthead {
+  min-height: 4.25rem;
+  background: linear-gradient(132deg, #0c1b35 0 31%, #f28b26 31% 32%, #132b4f 32% 100%);
+}
+.academy-admin-home main :is(h1,h2,h3) { font-family: inherit; }
+@media (min-width: 1024px) {
+  .academy-admin-home .academy-admin-masthead {
+    margin-inline-start: -16rem;
+    padding-inline: 1.75rem;
+    z-index: 55;
+  }
+  .academy-admin-home aside[aria-label="Navegación administrativa"] {
+    top: 4.25rem;
+    height: calc(100dvh - 4.25rem);
+    background: #fff;
+    border-color: #dce5f0;
+  }
+  .academy-admin-home aside[aria-label="Navegación administrativa"] > div:first-child { display: none; }
+  .academy-admin-home aside nav a,
+  .academy-admin-home aside button { color: #162a48; }
+  .academy-admin-home aside nav a:hover,
+  .academy-admin-home aside button:hover { background: #edf4fc; }
+  .academy-admin-home aside nav a[aria-current="page"] {
+    background: #0758aa !important;
+    border-color: transparent;
+    color: white;
+  }
+  .academy-admin-home aside nav a[aria-current="page"] span { color: white; }
+  .academy-admin-home aside > div:last-child a { color: #162a48; }
+  .academy-admin-home aside > div:last-child { border-color: #dce5f0; }
+}
 .admin-workspace h1, .admin-workspace h2, .admin-workspace h3 { letter-spacing: -0.025em; }
 .admin-workspace [class*="bg-[#07111d]"] h2,
 .admin-workspace [class*="bg-[#07111d]"] h3 { color: #fff; }

@@ -5,10 +5,12 @@ export type IntroAppointmentDetails = {
     fullName: string; age: number; phone?: string | null; amountPaid: number;
     paymentMethod: string; introClassType: IntroClassType; paymentStatus: IntroPaymentStatus;
     courtesyReason?: string | null; payOnSite: boolean;
+    dni?: string | null;
 };
 export type IntroAppointmentChange = {
     bookingId: string; expectedUpdatedAt: string; action: 'move' | 'state' | 'edit';
     sessionId?: string; state?: IntroState; details?: Partial<IntroAppointmentDetails>;
+    updateDni?: boolean;
 };
 
 export type IntroClassType = 'paid' | 'free' | 'courtesy';
@@ -114,12 +116,14 @@ export class IntroClassesService {
     }
 
     static async registerAppointment(payload: IntroAppointmentDetails & { sessionId: string; requestId: string }): Promise<boolean> {
-        const { data, error } = await supabase.rpc('admin_register_intro_appointment', {
+        const rpc = payload.dni ? 'admin_register_intro_appointment_with_dni' : 'admin_register_intro_appointment';
+        const { data, error } = await supabase.rpc(rpc, {
             p_full_name: payload.fullName, p_age: payload.age, p_phone: payload.phone || null,
             p_session_id: payload.sessionId, p_amount_paid: payload.amountPaid,
             p_payment_method: payload.paymentMethod, p_intro_class_type: payload.introClassType,
             p_payment_status: payload.paymentStatus, p_courtesy_reason: payload.courtesyReason || null,
             p_pay_on_site: payload.payOnSite, p_request_id: payload.requestId,
+            ...(payload.dni ? { p_dni: payload.dni } : {}),
         });
         if (error) throw new Error(error.message);
         if (!data?.success) throw new Error('No se pudo guardar la cita.');
@@ -127,7 +131,8 @@ export class IntroClassesService {
     }
 
     static async changeAppointment(payload: IntroAppointmentChange): Promise<boolean> {
-        const { data, error } = await supabase.rpc('admin_change_intro_appointment', {
+        const rpc = payload.updateDni ? 'admin_change_intro_appointment_with_dni' : 'admin_change_intro_appointment';
+        const { data, error } = await supabase.rpc(rpc, {
             p_booking_id: payload.bookingId, p_expected_updated_at: payload.expectedUpdatedAt, p_action: payload.action,
             p_session_id: payload.sessionId || null, p_state: payload.state || null, p_details: payload.details || null,
         });

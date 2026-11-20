@@ -26,6 +26,7 @@ export interface PaidMembershipCycleInput extends MembershipCycleInputBase {
   periodCount: number
   totalAmountPerCycle: number
   batchPaymentAmount: number
+  paymentPending?: boolean
   paymentType?: MembershipPaymentType
   discountType?: MembershipDiscountType
   discountValue?: number
@@ -98,7 +99,7 @@ export type RpcPayload = {
 
 type RpcClient = {
   rpc: (
-    functionName: 'admin_create_student_membership_cycles',
+    functionName: 'admin_create_student_membership_cycles' | 'admin_create_pending_membership_cycles',
     payload: RpcPayload,
   ) => PromiseLike<{
     data: CreatedMembershipCycle[] | null
@@ -112,9 +113,10 @@ export async function createStudentMembershipCycles(
 ): Promise<CreatedMembershipCycle[]> {
   const idempotencyKey = input.idempotencyKey ?? globalThis.crypto.randomUUID()
   const paid = input.origin === 'paid'
+  const paymentPending = paid && input.paymentPending === true
 
   const { data, error } = await client.rpc(
-    'admin_create_student_membership_cycles',
+    paymentPending ? 'admin_create_pending_membership_cycles' : 'admin_create_student_membership_cycles',
     {
       p_student_id: input.studentId,
       p_membership_plan_id: paid ? input.membershipPlanId : null,
@@ -124,15 +126,15 @@ export async function createStudentMembershipCycles(
       p_gift_classes: paid ? null : input.giftClasses,
       p_gift_end_date: paid ? null : input.giftEndDate,
       p_total_amount: paid ? input.totalAmountPerCycle : 0,
-      p_payment_amount: paid ? input.batchPaymentAmount : 0,
-      p_payment_type: paid ? input.paymentType ?? null : null,
+      p_payment_amount: paid && !paymentPending ? input.batchPaymentAmount : 0,
+      p_payment_type: paid && !paymentPending ? input.paymentType ?? null : null,
       p_discount_type: paid ? input.discountType ?? null : null,
       p_discount_value: paid ? input.discountValue ?? null : null,
       p_notes: input.notes ?? null,
       p_billing_date: input.billingDate ?? null,
       p_idempotency_key: idempotencyKey,
       ...(paid && (
-        input.fixedTemplateIds !== undefined
+        paymentPending || input.fixedTemplateIds !== undefined
         || input.recoveryClasses !== undefined
         || input.recoveryReason !== undefined
         || input.sourceMembershipId !== undefined

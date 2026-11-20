@@ -9,8 +9,9 @@ function source(path: string) {
 describe('admin students compact list', () => {
   it('exposes site and expiry filters without hiding student search', () => {
     const page = source('app/admin/alumnos/page.tsx')
-    expect(page).toContain('AdminFilterBar')
     expect(page).toContain('Filtrar por sede')
+    expect(page).toContain('Filtrar por categoría')
+    expect(page).toContain('getAdminStudentCategories(matchingScope)')
     expect(page).toContain('Próximo vencimiento')
     expect(page).not.toContain('block truncate font-bold text-slate-950')
   })
@@ -24,7 +25,8 @@ describe('admin students compact list', () => {
     expect(page).toContain('Teléfono')
     expect(page).toContain('Membresía')
     expect(page).toContain('Última asistencia')
-    expect(page).toContain('Vencimiento de membresía')
+    expect(page).toContain('Vigencia total')
+    expect(page.match(/students=\{pageStudents\}/g)).toHaveLength(2)
   })
 
   it('uses one search field and the five approved visible status filters', () => {

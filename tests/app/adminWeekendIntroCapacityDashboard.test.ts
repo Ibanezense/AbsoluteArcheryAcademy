@@ -7,19 +7,14 @@ function source(path: string) {
 }
 
 describe('admin weekend intro capacity dashboard', () => {
-  it('places weekly availability after the operational summary and agenda', () => {
+  it('links to the trial calendar and uses the site capacity panel as the dashboard source for cupos', () => {
     const dashboard = source('app/admin/page.tsx')
 
-    expect(dashboard).toContain(
-      "import WeekendIntroCapacity from '@/components/admin/WeekendIntroCapacity'",
-    )
-    expect(dashboard).toContain('<WeekendIntroCapacity />')
-    expect(dashboard.indexOf('<WeekendIntroCapacity />')).toBeGreaterThan(
-      dashboard.indexOf('<WeeklyAgenda agenda='),
-    )
-    expect(dashboard.indexOf('<WeekendIntroCapacity />')).toBeGreaterThan(
-      dashboard.indexOf('<WeeklySummary />'),
-    )
+    expect(dashboard).toContain('<UpcomingTrialSessions site={site} />')
+    expect(dashboard).toContain('Abrir calendario de pruebas')
+    expect(dashboard).toContain('<DashboardSiteCapacity key={site} site={site} />')
+    expect(dashboard).not.toContain('<WeekendIntroCapacity />')
+    expect(dashboard).not.toContain('Cupos libres esta semana')
   })
 
   it('uses the capacity query and slot builder to render the five weekly groups', () => {

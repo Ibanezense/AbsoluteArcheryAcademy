@@ -1,17 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEventHandler } from 'react'
 import Link from 'next/link'
 import {
-  ArrowRight,
   CalendarClock,
-  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Phone,
   Search,
   UserPlus,
 } from 'lucide-react'
-import { AdminFilterBar } from '@/components/admin/AdminFilterBar'
 import { AdminContentPanel, AdminPageHeader } from '@/components/admin/AdminVisualSystem'
 import { MembershipRenewalAlertAction } from '@/components/admin/MembershipRenewalAlertAction'
 import Avatar from '@/components/ui/Avatar'
@@ -21,11 +20,13 @@ import StudentBirthdayAction from '@/components/admin/StudentBirthdayAction'
 import { useAdminStudentBirthdays } from '@/lib/hooks/useAdminStudentBirthdays'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { useMembershipRenewalAlerts } from '@/lib/hooks/useMembershipRenewalAlerts'
+import { useAcademyLocations } from '@/lib/infrastructureQueries'
 import { useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import type { MembershipRenewalAlertMap } from '@/lib/services/membershipRenewalAlertService'
 import { getStudentRenewalDateState } from '@/lib/utils/studentRenewalDate'
 import {
   filterAdminStudents,
+  getAdminStudentCategories,
   getAdminStudentStatus,
   type AdminStudentFilter,
   type AdminStudentStatus,
@@ -40,6 +41,12 @@ const statusOptions: Array<[AdminStudentFilter, string]> = [
   ['paused', 'En pausa'],
   ['inactive', 'Inactivos'],
 ]
+
+const PAGE_SIZE = 25
+const initialView = { query: '', locationId: '', category: '', status: 'all' as AdminStudentFilter, sort: 'status' as AdminStudentSort, page: 1 }
+type ListView = typeof initialView
+type SavedListView = ListView & { scroll: number; search: string }
+const filterControl = 'min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700'
 
 const statusPresentation: Record<AdminStudentStatus, { label: string; className: string; dot: string }> = {
   active: {
@@ -82,15 +89,25 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : dateFormatter.format(date)
 }
 
-function MembershipEndDate({ value }: { value: string | null }) {
-  const formattedDate = formatDate(value)
-  const isExpiring = getStudentRenewalDateState(value).tone === 'orange'
+function MembershipEndDate({ student }: { student: StudentListRow }) {
+  const formattedDate = formatDate(student.membership_coverage_end)
+  const planEnd = formatDate(student.membership_end)
+  const renewalStart = formatDate(student.next_membership_start)
+  const tone = getStudentRenewalDateState(student.membership_coverage_end).tone
 
   return (
-    <span className={isExpiring ? 'font-semibold text-red-700' : 'font-semibold text-slate-700'}>
-      {formattedDate || 'Sin vencimiento'}
-      {isExpiring && <span className="sr-only">, vence dentro de los próximos siete días</span>}
-    </span>
+    <div className="space-y-0.5">
+      <p className={tone === 'orange' ? 'font-bold text-orange-800' : 'font-semibold text-slate-800'}>
+        {formattedDate || 'Sin fecha registrada'}
+        {tone === 'orange' && <span className="sr-only">, vence en siete días o menos</span>}
+      </p>
+      {student.membership_status === 'active' && planEnd && planEnd !== formattedDate && (
+        <p className="text-xs font-normal text-slate-600">Fin del plan actual: {planEnd}</p>
+      )}
+      {renewalStart && (
+        <p className="text-xs font-normal text-blue-800">{student.membership_status === 'active' ? 'Renovación' : 'Inicio programado'}: {renewalStart}</p>
+      )}
+    </div>
   )
 }
 
@@ -136,10 +153,12 @@ function hasBirthday(student: StudentListRow, flags: Readonly<Record<string, boo
 function DesktopStudentTable({
   students,
   alerts,
+  rememberList,
   birthdays = {},
 }: {
   students: StudentListRow[]
   alerts: MembershipRenewalAlertMap
+  rememberList: MouseEventHandler<HTMLAnchorElement>
   birthdays?: Readonly<Record<string, boolean>>
 }) {
   return (
@@ -150,9 +169,9 @@ function DesktopStudentTable({
             <th className="w-[28%] px-5 py-3.5">Alumno</th>
             <th className="w-[14%] px-4 py-3.5">Teléfono</th>
             <th className="w-[20%] px-4 py-3.5">Membresía</th>
-            <th className="w-[15%] px-4 py-3.5">Última asistencia</th>
-            <th className="w-[15%] px-4 py-3.5">Vencimiento de membresía</th>
-            <th className="w-[8%] px-4 py-3.5 text-right">
+            <th className="w-[12%] px-4 py-3.5">Última asistencia</th>
+            <th className="w-[16%] px-4 py-3.5">Vigencia total</th>
+            <th className="w-[10%] px-4 py-3.5 text-right">
               <span className="sr-only">Acciones</span>
             </th>
           </tr>
@@ -169,10 +188,12 @@ function DesktopStudentTable({
                     <div className="min-w-0">
                       <Link
                         href={`/admin/alumnos/${student.id}`}
-                        className="block break-words font-semibold text-slate-950 transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+                        onClick={rememberList}
+                        className="block break-words font-semibold text-slate-950 transition hover:text-blue-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700"
                       >
                         {student.full_name}
                       </Link>
+                      {student.category && <p className="mt-0.5 break-words text-xs text-slate-600">{student.category}</p>}
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         <StudentStatusBadge student={student} />
                         {hasBirthday(student, birthdays) && <StudentBirthdayBadge />}
@@ -207,25 +228,19 @@ function DesktopStudentTable({
                   </span>
                 </td>
                 <td className="px-4 py-3 align-middle text-sm">
-                  <MembershipEndDate value={student.membership_end} />
+                  <MembershipEndDate student={student} />
                 </td>
                 <td className="px-4 py-3 align-middle">
                   <div className="flex items-center justify-end gap-1">
                     <Link
                       href={`/admin/alumnos/editar/${student.id}`}
-                      className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
+                      onClick={rememberList}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-blue-800 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
                       aria-label={`Editar a ${student.full_name}`}
                       title="Editar"
                     >
-                      <Pencil className="h-4 w-4" />
-                    </Link>
-                    <Link
-                      href={`/admin/alumnos/${student.id}`}
-                      className="grid h-11 w-11 place-items-center rounded-xl text-slate-400 transition hover:bg-white hover:text-accent hover:shadow-sm"
-                      aria-label={`Ver perfil de ${student.full_name}`}
-                      title="Ver perfil"
-                    >
-                      <ArrowRight className="h-4 w-4" />
+                      <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="hidden xl:inline">Editar</span>
                     </Link>
                   </div>
                 </td>
@@ -241,10 +256,12 @@ function DesktopStudentTable({
 function MobileStudentList({
   students,
   alerts,
+  rememberList,
   birthdays = {},
 }: {
   students: StudentListRow[]
   alerts: MembershipRenewalAlertMap
+  rememberList: MouseEventHandler<HTMLAnchorElement>
   birthdays?: Readonly<Record<string, boolean>>
 }) {
   return (
@@ -257,9 +274,10 @@ function MobileStudentList({
             <div className="flex items-start gap-3">
               <Avatar name={student.full_name} url={student.avatar_url} size="md" />
               <div className="min-w-0 flex-1">
-                <Link href={`/admin/alumnos/${student.id}`} className="block break-words font-semibold text-slate-950">
+                <Link href={`/admin/alumnos/${student.id}`} onClick={rememberList} className="block break-words font-semibold text-blue-900 hover:underline">
                   {student.full_name}
                 </Link>
+                {student.category && <p className="mt-0.5 break-words text-xs text-slate-600">{student.category}</p>}
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <StudentStatusBadge student={student} />
                   {hasBirthday(student, birthdays) && <StudentBirthdayBadge />}
@@ -270,7 +288,7 @@ function MobileStudentList({
 
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <MobileDetail label="Clases disponibles" value={`${student.classes_remaining} clases`} />
-              <MobileDetail label="Vencimiento de membresía" value={<MembershipEndDate value={student.membership_end} />} />
+              <MobileDetail label="Vigencia total" value={<MembershipEndDate student={student} />} />
             </dl>
             <details className="mt-2 text-xs text-slate-600">
               <summary className="min-h-11 cursor-pointer py-3 font-medium">Contacto y asistencia</summary>
@@ -290,13 +308,9 @@ function MobileStudentList({
             />
 
             <div className="mt-3 flex items-center justify-end gap-2">
-              <Link href={`/admin/alumnos/editar/${student.id}`} className="btn-outline btn-sm">
+              <Link href={`/admin/alumnos/editar/${student.id}`} onClick={rememberList} className="btn-outline btn-sm">
                 <Pencil className="h-3.5 w-3.5" />
                 Editar
-              </Link>
-              <Link href={`/admin/alumnos/${student.id}`} className="btn btn-sm">
-                Ver perfil
-                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
           </article>
@@ -336,24 +350,68 @@ function StudentListSkeleton() {
 
 export default function AdminAlumnosPage() {
   const { profile } = useAuth()
-  const [query, setQuery] = useState('')
-  const [locationFilter, setLocationFilter] = useState('')
-  const [sort, setSort] = useState<AdminStudentSort>('status')
-  const [statusFilter, setStatusFilter] = useState<AdminStudentFilter>('all')
-  useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get('status')
-    if (statusOptions.some(([value]) => value === requested)) setStatusFilter(requested as AdminStudentFilter)
-  }, [])
+  const storageKey = profile?.id ? `admin-alumnos-list:${profile.id}` : null
+  const [view, setView] = useState(initialView)
+  const [restoreScroll, setRestoreScroll] = useState<number | null>(null)
+  const listStart = useRef<HTMLParagraphElement>(null)
   const { data: students = [], isLoading, isError, refetch } = useStudents()
-  const studentIds = useMemo(() => students.map((student) => student.id), [students])
-  const { data: renewalAlerts = {} } = useMembershipRenewalAlerts(studentIds)
+  const { data: academyLocations = [] } = useAcademyLocations()
 
-  const filteredStudents = useMemo(
-    () => filterAdminStudents(students, query, statusFilter, new Date(), { locationId: locationFilter, sort }),
-    [query, statusFilter, students, locationFilter, sort],
+  useEffect(() => {
+    if (!storageKey) return
+    const search = window.location.search
+    try {
+      const stored = sessionStorage.getItem(storageKey)
+      sessionStorage.removeItem(storageKey)
+      const saved = stored ? JSON.parse(stored) as SavedListView : null
+      if (saved && (saved.search === search || !search)) {
+        const { scroll, search: _search, ...savedView } = saved
+        setView(savedView)
+        setRestoreScroll(scroll)
+        return
+      }
+    } catch {
+      // The list still works when session storage is unavailable.
+    }
+    const requested = new URLSearchParams(search).get('status')
+    setView({ ...initialView, status: statusOptions.find(([value]) => value === requested)?.[0] ?? 'all' })
+    setRestoreScroll(null)
+  }, [storageKey])
+
+  useEffect(() => {
+    if (isLoading || isError || restoreScroll === null) return
+    let scrollFrame = 0
+    const frame = requestAnimationFrame(() => {
+      scrollFrame = requestAnimationFrame(() => {
+        window.scrollTo({ top: restoreScroll, behavior: 'instant' })
+        setRestoreScroll(null)
+      })
+    })
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(scrollFrame) }
+  }, [isLoading, isError, restoreScroll])
+
+  const { query, status, locationId, category, sort } = view
+  const matchingScope = useMemo(
+    () => filterAdminStudents(students, query, status, new Date(), { locationId, sort }),
+    [query, status, students, locationId, sort],
   )
+  const categories = useMemo(() => {
+    const counts = new Map(getAdminStudentCategories(matchingScope).map(({ id, count }) => [id, count]))
+    return getAdminStudentCategories(students)
+      .map(option => ({ ...option, count: counts.get(option.id) ?? 0 }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'es'))
+  }, [matchingScope, students])
+  const filteredStudents = useMemo(
+    () => category ? filterAdminStudents(matchingScope, '', 'all', new Date(), { category, sort }) : matchingScope,
+    [category, matchingScope, sort],
+  )
+  const pageCount = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE))
+  const currentPage = Math.min(view.page, pageCount)
+  const firstIndex = (currentPage - 1) * PAGE_SIZE
+  const pageStudents = useMemo(() => filteredStudents.slice(firstIndex, firstIndex + PAGE_SIZE), [filteredStudents, firstIndex])
 
-  const renderedStudentIds = useMemo(() => filteredStudents.map(student => student.id), [filteredStudents])
+  const renderedStudentIds = useMemo(() => pageStudents.map(student => student.id), [pageStudents])
+  const { data: renewalAlerts = {} } = useMembershipRenewalAlerts(renderedStudentIds)
   const birthdays = useAdminStudentBirthdays(profile?.role === 'admin' ? profile.id : null, renderedStudentIds)
   useEffect(() => {
     const visible = () => { if (document.visibilityState === 'visible') void refetch() }
@@ -362,8 +420,35 @@ export default function AdminAlumnosPage() {
     return () => { window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible) }
   }, [refetch])
 
-  const locations = useMemo(() => Array.from(new Map(students.filter((student) => student.home_location_id).map((student) => [student.home_location_id!, student.home_location_name || 'Sede sin nombre'])).entries()).sort((a, b) => a[1].localeCompare(b[1], 'es')), [students])
-  const activeFilters = Number(statusFilter !== 'all') + Number(Boolean(locationFilter)) + Number(sort !== 'status')
+  const locations = useMemo(() => {
+    const options = new Map(academyLocations.filter(location => location.is_active).map(location => [location.id, location.name]))
+    for (const student of students) {
+      if (student.home_location_id && student.home_location_id !== 'both' && !options.has(student.home_location_id)) {
+        options.set(student.home_location_id, student.home_location_name || 'Sede sin nombre')
+      }
+    }
+    return [...options].sort((a, b) => a[1].localeCompare(b[1], 'es'))
+  }, [academyLocations, students])
+
+  function updateFilters(change: Partial<ListView>) {
+    setView(previous => ({ ...previous, ...change, page: 1 }))
+  }
+
+  const rememberList: MouseEventHandler<HTMLAnchorElement> = event => {
+    if (!storageKey || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    try {
+      const saved: SavedListView = { ...view, page: currentPage, scroll: window.scrollY, search: window.location.search }
+      sessionStorage.setItem(storageKey, JSON.stringify(saved))
+    } catch {
+      // Navigation remains available when session storage is unavailable.
+    }
+  }
+
+  function goToPage(page: number) {
+    setView(previous => ({ ...previous, page }))
+    listStart.current?.focus({ preventScroll: true })
+    listStart.current?.scrollIntoView({ block: 'nearest' })
+  }
 
   return (
     <div className="space-y-4">
@@ -371,65 +456,77 @@ export default function AdminAlumnosPage() {
         title="Alumnos"
         description="Gestiona perfiles, membresías y asistencia desde una sola lista."
         actions={
-          <Link href="/admin/alumnos/editar/new" className="btn h-12 shrink-0 px-5">
+          <>
+          <Link href="/admin/alumnos/claves" className="btn-outline h-12 shrink-0 px-5">Claves de acceso</Link>
+          <Link href="/admin/alumnos/editar/new" onClick={rememberList} className="btn h-12 shrink-0 px-5">
             <UserPlus className="h-5 w-5" />
             Agregar alumno
           </Link>
+          </>
         }
       />
 
       <AdminContentPanel className="overflow-hidden">
         <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <label className="relative block min-w-0 flex-1 lg:max-w-xl">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1.4fr)_minmax(8rem,.8fr)_minmax(12rem,1.1fr)_minmax(10rem,.8fr)]">
+            <label className="relative block min-w-0">
               <span className="sr-only">Buscar alumnos</span>
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => updateFilters({ query: event.target.value })}
                 placeholder="Buscar por nombre, DNI o teléfono"
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-950 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-accent/50 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                className={`${filterControl} bg-slate-50 pl-11 pr-4`}
               />
             </label>
 
-            <p className="whitespace-nowrap text-xs font-semibold text-slate-500 lg:ml-auto">
-              Mostrando <span className="font-semibold text-slate-950">{filteredStudents.length}</span> de {students.length} alumnos
-            </p>
+            <select aria-label="Filtrar por sede" value={locationId} onChange={(event) => updateFilters({ locationId: event.target.value })} className={filterControl}>
+              <option value="">Todas las sedes</option>
+              {locations.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              <option value="both">Ambas sedes</option>
+              <option value="unassigned">Sin sede asignada</option>
+            </select>
+            <select aria-label="Filtrar por categoría" value={category} onChange={(event) => updateFilters({ category: event.target.value })} className={filterControl}>
+              <option value="">Todas las categorías ({matchingScope.length})</option>
+              {categories.map(({ id, label, count }) => (
+                <option key={id} value={id}>{label} ({count})</option>
+              ))}
+            </select>
+            <select aria-label="Ordenar alumnos" value={sort} onChange={(event) => updateFilters({ sort: event.target.value as AdminStudentSort })} className={filterControl}>
+              <option value="status">Estado y nombre</option>
+              <option value="expiry">Próximo vencimiento</option>
+              <option value="name">Nombre</option>
+            </select>
           </div>
-        </div>
-        <div className="p-3 sm:p-4">
-          <AdminFilterBar activeCount={activeFilters} onClear={() => { setStatusFilter('all'); setLocationFilter(''); setSort('status') }}>
-            <div className="grid gap-3 sm:grid-cols-3">
-            <label className="relative block min-w-0">
-              <span className="sr-only">Filtrar alumnos por estado</span>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as AdminStudentFilter)}
-                className="h-12 w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 pr-10 text-sm font-bold text-slate-700 outline-none transition focus:border-accent/50 focus:ring-4 focus:ring-orange-100"
-              >
-                {statusOptions.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-
-              <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Sede
-                <select aria-label="Filtrar por sede" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800">
-                  <option value="">Todas las sedes</option>{locations.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                </select>
-              </label>
-              <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">Orden
-                <select aria-label="Ordenar alumnos" value={sort} onChange={(event) => setSort(event.target.value as AdminStudentSort)} className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800">
-                  <option value="status">Estado y nombre</option><option value="expiry">Próximo vencimiento</option><option value="name">Nombre</option>
-                </select>
-              </label>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Filtrar alumnos por estado" className="flex flex-wrap gap-1.5">
+              {statusOptions.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={status === value}
+                  onClick={() => updateFilters({ status: value })}
+                  className={`min-h-11 rounded-xl border px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 ${status === value ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          </AdminFilterBar>
+            {(query || status !== 'all' || locationId || category || sort !== 'status') && (
+              <button type="button" onClick={() => { setView(initialView); setRestoreScroll(null) }} className="min-h-11 px-2 text-xs font-semibold text-blue-800 underline">
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+          <p ref={listStart} tabIndex={-1} aria-live="polite" className="mt-3 scroll-mt-20 text-xs font-medium text-slate-600">
+            {!isLoading && !isError && (filteredStudents.length > 0
+              ? `Mostrando ${firstIndex + 1}–${firstIndex + pageStudents.length} de ${filteredStudents.length} alumnos`
+              : '0 alumnos')}
+          </p>
         </div>
 
-        {(birthdays.unavailable || birthdays.partial) && <div role="status" className="mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+        {(birthdays.unavailable || birthdays.partial) && <div role="status" className="m-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
           <span>{birthdays.partial ? 'La consulta de cumpleaños está incompleta.' : 'No se pudieron consultar los cumpleaños. La lista de alumnos sigue disponible.'}</span>
           <button type="button" onClick={() => void birthdays.refetch()} className="min-h-11 rounded-lg px-3 font-bold underline">Reintentar cumpleaños</button>
         </div>}
@@ -455,13 +552,24 @@ export default function AdminAlumnosPage() {
                 {query ? <Search className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
               </div>
               <h2 className="mt-4 font-heading text-xl font-semibold text-slate-950">No encontramos alumnos con estos filtros.</h2>
-              <p className="mt-1 text-sm text-slate-500">Prueba con otra búsqueda o cambia el estado seleccionado.</p>
+              <p className="mt-1 text-sm text-slate-500">Prueba con otra búsqueda o cambia los filtros.</p>
             </div>
           </div>
         ) : (
           <>
-            <DesktopStudentTable students={filteredStudents} alerts={renewalAlerts} birthdays={birthdays.flags} />
-            <MobileStudentList students={filteredStudents} alerts={renewalAlerts} birthdays={birthdays.flags} />
+            <DesktopStudentTable students={pageStudents} alerts={renewalAlerts} birthdays={birthdays.flags} rememberList={rememberList} />
+            <MobileStudentList students={pageStudents} alerts={renewalAlerts} birthdays={birthdays.flags} rememberList={rememberList} />
+            {pageCount > 1 && (
+              <nav aria-label="Páginas de alumnos" className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50/80 px-4 py-3 sm:gap-4">
+                <button type="button" className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-blue-900 disabled:text-slate-400" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)}>
+                  <ChevronLeft className="mr-1 inline h-4 w-4" aria-hidden="true" /> Anterior
+                </button>
+                <span className="text-xs font-medium text-slate-600">Página {currentPage} de {pageCount}</span>
+                <button type="button" className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-blue-900 disabled:text-slate-400" disabled={currentPage === pageCount} onClick={() => goToPage(currentPage + 1)}>
+                  Siguiente <ChevronRight className="ml-1 inline h-4 w-4" aria-hidden="true" />
+                </button>
+              </nav>
+            )}
           </>
         )}
       </AdminContentPanel>

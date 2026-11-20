@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import AdminAlumnosPage from '@/app/admin/alumnos/page'
 
 const state = vi.hoisted(() => ({ flags: {} as Record<string, boolean>, students: [] as any[], unavailable: false }))
+vi.mock('@/lib/infrastructureQueries', () => ({ useAcademyLocations: () => ({ data: [] }) }))
 vi.mock('@/lib/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'a1', role: 'admin' } }) }))
 vi.mock('@/lib/queries/studentQueries', () => ({ useStudents: () => ({ data: state.students, isLoading: false, isError: false, refetch: vi.fn() }) }))
 vi.mock('@/lib/hooks/useMembershipRenewalAlerts', () => ({ useMembershipRenewalAlerts: () => ({ data: {} }) }))
@@ -37,7 +38,7 @@ it('preserves search and state filters while birthdays remain an annotation', ()
   expect(rowNames()).toEqual(['Beto Inactivo'])
   expect(screen.queryByText('Cumpleaños hoy')).toBeNull()
   fireEvent.change(screen.getByPlaceholderText('Buscar por nombre, DNI o teléfono'), { target: { value: '' } })
-  fireEvent.change(screen.getByRole('combobox', { name: 'Filtrar alumnos por estado' }), { target: { value: 'paused' } })
+  fireEvent.click(within(screen.getByRole('group', { name: 'Filtrar alumnos por estado' })).getByRole('button', { name: 'En pausa' }))
   expect(rowNames()).toEqual(['Carla Pausa'])
 })
 it('keeps rows usable and distinguishes unavailable birthday data from no birthdays', () => {

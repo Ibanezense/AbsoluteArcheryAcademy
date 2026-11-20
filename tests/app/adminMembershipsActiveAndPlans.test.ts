@@ -17,6 +17,7 @@ describe('admin memberships active list and plans catalog', () => {
     expect(page).toContain('hidden overflow-hidden rounded-[1.35rem] border border-slate-200 lg:block')
     expect(page).toContain('lg:hidden')
     expect(page).toContain('Mostrando')
+    expect(page).toContain('Programadas')
     expect(page).toContain('Renovar')
   })
 
@@ -57,6 +58,8 @@ describe('admin memberships active list and plans catalog', () => {
     expect(page).toContain('Usar en venta')
     expect(page).toContain('Desactivar plan')
     expect(page).toContain('Activar plan')
+    expect(page).toContain('<table aria-label="Planes de membresía"')
+    expect(page).toContain('disabled={usage > 0 || deletingPlanId !== null}')
   })
 
   it('loads, validates, saves and displays the weekly class target from zero to four', () => {
@@ -73,7 +76,7 @@ describe('admin memberships active list and plans catalog', () => {
     expect(page).toContain('0 desactiva la revision semanal de inasistencias.')
     expect(page).toContain('weekly_class_target: weeklyClassTarget')
     expect(page).toContain('La cuota semanal debe ser un entero entre 0 y 4.')
-    expect(page).toContain("plan.weekly_class_target === 0 ? 'Sin revision semanal' : `${plan.weekly_class_target} por semana`")
+    expect(page).toContain("plan.weekly_class_target === 0 ? 'Sin revisión semanal' : `${plan.weekly_class_target} por semana`")
   })
 
   it('opens plan creation and editing in a centered modal instead of a narrow sidebar panel', () => {

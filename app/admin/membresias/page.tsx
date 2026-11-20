@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
-  AlertTriangle,
   ArrowRight,
-  BadgeCheck,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   CreditCard,
   FilePenLine,
   Filter,
   Layers3,
   PackagePlus,
+  Pencil,
+  Power,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react'
 import { AdminContentPanel, AdminPageHeader, AdminStatCard } from '@/components/admin/AdminVisualSystem'
 import { MembershipExpiryExtensionModal } from '@/components/admin/MembershipExpiryExtensionModal'
+import { PendingMembershipPayments } from '@/components/admin/PendingMembershipPayments'
 import Avatar from '@/components/ui/Avatar'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useToast } from '@/components/ui/ToastProvider'
@@ -36,6 +38,9 @@ import { supabase } from '@/lib/supabaseClient'
 import { studentKeys, useStudents, type StudentListRow } from '@/lib/queries/studentQueries'
 import { membershipRenewalAlertKeys } from '@/lib/hooks/useMembershipRenewalAlerts'
 import { isStudentSelectableForMembershipSale } from '@/lib/utils/adminMembershipStudents'
+import { membershipAttention } from '@/lib/utils/adminMembershipAttention'
+import { norm } from '@/lib/utils/searchUtils'
+import { formatAdminDate } from '@/lib/utils/adminPresentation'
 import {
   buildMembershipDeletionConfirmation,
   formatMembershipDeletionSuccess,
@@ -79,9 +84,9 @@ type AssignmentFormState = {
   gift_classes: string
   gift_end_date: string
   payment_type: MembershipPaymentType
+  payment_status: '' | 'paid' | 'pending'
   discount_type: 'none' | 'amount' | 'percentage'
   discount_value: string
-  payment_amount: string
   fixed_template_ids: string[]
   recovery_classes: string
   recovery_reason: string
@@ -115,7 +120,7 @@ type PlanEditorState = {
   is_active: boolean
 }
 
-type ActiveMembershipStatusFilter = 'all' | 'active' | 'expiring' | 'expired' | 'empty' | 'historical'
+type ActiveMembershipStatusFilter = 'all' | 'active' | 'scheduled' | 'expiring' | 'expired' | 'empty' | 'historical'
 type MembershipSort = 'recent' | 'expiration' | 'balance'
 type PlanFilter = 'all' | 'active' | 'inactive'
 
@@ -129,9 +134,9 @@ function emptyAssignmentForm(): AssignmentFormState {
     gift_classes: '1',
     gift_end_date: getLimaDateKey(),
     payment_type: 'manual',
+    payment_status: '',
     discount_type: 'none',
     discount_value: '',
-    payment_amount: '',
     fixed_template_ids: [],
     recovery_classes: '0',
     recovery_reason: '',
@@ -168,13 +173,10 @@ function validateAssignmentForm(
     return 'El descuento porcentual no puede superar 100%.'
   }
 
-  const paymentAmount = form.payment_amount.trim() ? Number(form.payment_amount) : 0
-  if (!Number.isFinite(paymentAmount) || paymentAmount < 0) {
-    return 'El pago total debe ser un numero mayor o igual a cero.'
-  }
   if (finalAmount === null || !Number.isFinite(finalAmount) || finalAmount < 0) {
     return 'El precio final debe ser un numero mayor o igual a cero.'
   }
+  if (finalAmount > 0 && !form.payment_status) return 'Indica si recibiste el pago completo o si queda pendiente.'
   const recoveryClasses = Number(form.recovery_classes || 0)
   if (!Number.isInteger(recoveryClasses) || recoveryClasses < 0) {
     return 'Las recuperaciones deben ser un entero mayor o igual a cero.'
@@ -333,10 +335,10 @@ function MembershipTabs({
   activeTab: MembershipTab
   onChange: (tab: MembershipTab) => void
 }) {
-  const tabs: Array<{ key: MembershipTab; label: string; helper: string }> = [
-    { key: 'summary', label: 'Resumen', helper: 'Operacion diaria' },
-    { key: 'active', label: 'Membresias activas', helper: 'Listado en siguiente bloque' },
-    { key: 'plans', label: 'Catalogo de planes', helper: 'Gestion secundaria' },
+  const tabs: Array<{ key: MembershipTab; label: string }> = [
+    { key: 'summary', label: 'Resumen' },
+    { key: 'active', label: 'Membresías' },
+    { key: 'plans', label: 'Catálogo de planes' },
   ]
 
   return (
@@ -347,16 +349,14 @@ function MembershipTabs({
             key={tab.key}
             type="button"
             onClick={() => onChange(tab.key)}
+            aria-pressed={activeTab === tab.key}
             className={`min-h-14 rounded-[1.15rem] px-4 text-left transition ${
               activeTab === tab.key
-                ? 'bg-accent text-white shadow-[0_14px_30px_rgba(249,115,22,0.24)]'
-                : 'bg-white text-slate-600 hover:bg-orange-50 hover:text-accent'
+                ? 'bg-[#0758aa] text-white'
+                : 'bg-white text-[#084681] hover:bg-blue-50'
             }`}
           >
             <span className="block text-sm font-black">{tab.label}</span>
-            <span className={`mt-0.5 block text-xs ${activeTab === tab.key ? 'text-orange-50' : 'text-slate-400'}`}>
-              {tab.helper}
-            </span>
           </button>
         ))}
       </div>
@@ -479,7 +479,7 @@ function MembershipSaleForm({
           <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Tipo de membresia</p>
           <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
             {([
-              ['paid', 'Membresia pagada'],
+              ['paid', 'Venta o renovación'],
               ['gift', 'Obsequio'],
             ] as const).map(([origin, label]) => (
               <button
@@ -599,20 +599,20 @@ function MembershipSaleForm({
             />
           </label>
 
-          <label className="grid min-w-0 grid-cols-1 gap-2">
-            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Pago total del lote</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              className="h-12 min-w-0 max-w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100"
-              value={form.payment_amount}
-              onChange={(event) => onPatch({ payment_amount: event.target.value })}
-            />
-          </label>
+          {finalAmount !== null && finalAmount > 0 && <fieldset className="grid min-w-0 gap-2">
+            <legend className="text-sm font-bold text-slate-700">Estado del pago</legend>
+            {([['paid', 'Cobrado'], ['pending', 'Pendiente de pago']] as const).map(([value, label]) => (
+              <label key={value} className="flex min-h-11 items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 text-sm font-semibold text-slate-800">
+                <input type="radio" name="membership-payment-status" checked={form.payment_status === value}
+                  onChange={() => onPatch({ payment_status: value })} className="accent-[#0758aa]" />
+                {label}
+              </label>
+            ))}
+            {form.payment_status === 'pending' && <p className="text-xs font-medium text-orange-900">La membresía se activa según su fecha de inicio. Registra el importe completo en Cobros pendientes cuando lo recibas.{Number(form.period_count) > 1 && ' Habrá un cobro pendiente por cada ciclo.'}</p>}
+          </fieldset>}
 
-          <label className="grid min-w-0 grid-cols-1 gap-2">
-            <span className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Metodo de pago</span>
+          {form.payment_status === 'paid' && finalAmount !== null && finalAmount > 0 && <label className="grid min-w-0 grid-cols-1 gap-2">
+            <span className="text-sm font-bold text-slate-700">Método de pago</span>
             <select
               value={form.payment_type}
               onChange={(event) => onPatch({ payment_type: event.target.value as MembershipPaymentType })}
@@ -625,7 +625,7 @@ function MembershipSaleForm({
               <option value="yape">Yape</option>
               <option value="plin">Plin</option>
             </select>
-          </label>
+          </label>}
           </>}
 
           <label className="grid min-w-0 grid-cols-1 gap-2">
@@ -684,7 +684,7 @@ function MembershipSaleForm({
                 {cyclePreview.map((cycle) => (
                   <article key={cycle.cycleNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-black text-slate-950">Ciclo {cycle.cycleNumber} · {cycle.origin === 'gift' ? 'Obsequio' : 'Membresia pagada'}</p>
+                      <p className="text-sm font-black text-slate-950">Ciclo {cycle.cycleNumber} · {cycle.origin === 'gift' ? 'Obsequio' : selectedPlan?.name || 'Membresía'}</p>
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-accent">
                         {cycle.classes} clases
                       </span>
@@ -694,7 +694,7 @@ function MembershipSaleForm({
                 ))}
                 <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                   <SummaryLine label="Precio por ciclo" value={formatMoney(form.origin === 'gift' ? 0 : finalAmount, selectedPlan?.currency)} />
-                  <SummaryLine label="Total combinado" value={formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)} accent />
+                  <SummaryLine label={form.origin === 'paid' && form.payment_status === 'pending' && finalAmount ? 'Total por cobrar' : 'Total combinado'} value={formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)} accent />
                 </div>
               </div>
             )}
@@ -718,6 +718,8 @@ function MembershipSaleForm({
               <SummaryLine label="Plan actual" value={currentMembership?.custom_name || selectedStudent?.membership_name || 'Sin membresia previa'} />
               <SummaryLine label="Clases restantes del ciclo actual" value={currentRemaining} accent={currentRemaining > 0} />
               <SummaryLine label="Vencimiento actual" value={formatDate(currentMembership?.end_date || selectedStudent?.membership_end)} />
+              {selectedStudent?.membership_coverage_end && selectedStudent.membership_coverage_end !== currentMembership?.end_date &&
+                <SummaryLine label="Vigencia total" value={formatDate(selectedStudent.membership_coverage_end)} />}
             </div>
             <p className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-800">
               Los saldos existentes se conservan separados. El ciclo mas antiguo se consume primero.
@@ -901,7 +903,7 @@ function MembershipsActiveTab({
   onCancelEditor: () => void
   onDelete: (membership: AdminStudentMembership) => void
 }) {
-  const normalizedSearch = search.trim().toLowerCase()
+  const normalizedSearch = norm(search.trim())
   const membershipStatusesById = useMemo(() => {
     const membershipsByStudent = new Map<string, AdminStudentMembership[]>()
 
@@ -930,14 +932,15 @@ function MembershipsActiveTab({
       .filter((membership) => {
         const status = membershipStatusesById[membership.id] || membershipOperationalStatus(membership)
         const matchesSearch = !normalizedSearch
-          || membership.custom_name.toLowerCase().includes(normalizedSearch)
-          || (membership.student?.full_name || '').toLowerCase().includes(normalizedSearch)
+          || norm(membership.custom_name).includes(normalizedSearch)
+          || norm(membership.student?.full_name || '').includes(normalizedSearch)
 
         if (!matchesSearch) return false
         if (statusFilter === 'all') return true
-        if (statusFilter === 'active') return ['current', 'queued', 'scheduled'].includes(status)
+        if (statusFilter === 'active') return ['current', 'queued'].includes(status)
+        if (statusFilter === 'historical') return ['historical', 'consumed', 'cancelled', 'expired'].includes(status)
         if (statusFilter === 'expiring' || statusFilter === 'empty') {
-          return membershipOperationalStatus(membership) === statusFilter
+          return status !== 'scheduled' && membershipOperationalStatus(membership) === statusFilter
         }
         return status === statusFilter
       })
@@ -953,7 +956,7 @@ function MembershipsActiveTab({
       <AdminContentPanel className="p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-black text-slate-950">Membresias activas</p>
+            <p className="text-sm font-black text-slate-950">Listado de membresías</p>
             <p className="mt-1 text-sm text-slate-500">Controla saldo, vencimiento y renovacion sin salir de la vista.</p>
           </div>
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3 xl:min-w-[760px]">
@@ -970,7 +973,8 @@ function MembershipsActiveTab({
               <Filter className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select className="h-12 min-w-0 max-w-full w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as ActiveMembershipStatusFilter)}>
                 <option value="all">Todos los estados</option>
-                <option value="active">Activas</option>
+                <option value="active">Vigentes</option>
+                <option value="scheduled">Programadas</option>
                 <option value="expiring">Por vencer</option>
                 <option value="expired">Vencidas</option>
                 <option value="empty">Sin clases</option>
@@ -1262,106 +1266,90 @@ function PlansCatalogTab({
     return true
   })
 
-  function usageForPlan(planId: string) {
-    return memberships.filter((membership) => membership.membership_plan_id === planId).length
+  const usageByPlan = new Map<string, number>()
+  for (const membership of memberships) {
+    if (membership.membership_plan_id) {
+      usageByPlan.set(membership.membership_plan_id, (usageByPlan.get(membership.membership_plan_id) || 0) + 1)
+    }
   }
+  const iconButton = 'inline-grid size-11 shrink-0 place-items-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0758aa] disabled:cursor-not-allowed disabled:opacity-40'
 
   return (
     <div className="space-y-5">
       {planEditor && (
-        <PlanEditorModal
-          form={planEditor}
-          isSaving={savingPlan}
-          onPatch={onPatchPlan}
-          onSubmit={onSavePlan}
-          onCancel={onCancelPlan}
-        />
+        <PlanEditorModal form={planEditor} isSaving={savingPlan} onPatch={onPatchPlan} onSubmit={onSavePlan} onCancel={onCancelPlan} />
       )}
 
-      <div className="space-y-5">
-        <AdminContentPanel className="p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-black text-slate-950">Catalogo de planes</p>
-              <p className="mt-1 text-sm text-slate-500">Administra planes disponibles para nuevas ventas y renovaciones.</p>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <select className="h-12 min-w-0 max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-accent/40 focus:ring-4 focus:ring-orange-100" value={planFilter} onChange={(event) => onFilterChange(event.target.value as PlanFilter)}>
-                <option value="all">Todos los planes</option>
-                <option value="active">Activos</option>
-                <option value="inactive">Inactivos</option>
-              </select>
-              <button type="button" onClick={onNewPlan} className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white">
-                <Plus className="h-4 w-4" />
-                Nuevo plan
-              </button>
-            </div>
+      <AdminContentPanel className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-bold text-[#101e3e]">Catálogo de planes</h2>
+          <div className="flex flex-wrap gap-2">
+            <select aria-label="Filtrar planes por estado" className="min-h-11 max-w-full rounded-xl border border-blue-100 bg-white px-3 text-sm"
+              value={planFilter} onChange={event => onFilterChange(event.target.value as PlanFilter)}>
+              <option value="all">Todos los planes</option>
+              <option value="active">Activos</option>
+              <option value="inactive">Inactivos</option>
+            </select>
+            <button type="button" onClick={onNewPlan} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#0758aa] px-4 text-sm font-bold text-white hover:bg-[#084681]">
+              <Plus className="size-4" aria-hidden="true" /> Nuevo plan
+            </button>
           </div>
-        </AdminContentPanel>
-
-        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
-          {visiblePlans.map((plan) => {
-            const usage = usageForPlan(plan.id)
-
-            return (
-              <article key={plan.id} className="group rounded-[1.35rem] border border-slate-200 bg-white p-5 shadow-[0_18px_45px_rgba(15,23,42,0.055)] transition hover:-translate-y-0.5 hover:border-accent/30">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl border border-orange-100 bg-orange-50 text-accent">
-                    <PackagePlus className="h-5 w-5" />
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${plan.is_active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
-                    {plan.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
-                </div>
-                <h3 className="mt-4 text-lg font-black text-slate-950">{plan.name}</h3>
-                <p className="mt-2 min-h-12 text-sm leading-6 text-slate-500">{plan.description || 'Sin descripcion operativa.'}</p>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.classes_included}</p><p className="text-slate-500">Clases</p></div>
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-base font-black text-slate-950">{plan.weekly_class_target === 0 ? 'Sin revision semanal' : `${plan.weekly_class_target} por semana`}</p><p className="text-slate-500">Cuota semanal</p></div>
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-2xl font-black text-slate-950">{plan.duration_days === 30 ? '1' : plan.duration_days || '-'}</p><p className="text-slate-500">{plan.duration_days === 30 ? 'Mes calendario' : 'Días'}</p></div>
-                  <div className="rounded-2xl bg-slate-50 p-3"><p className="font-heading text-lg font-black text-slate-950">{formatMoney(plan.base_price, plan.currency)}</p><p className="text-slate-500">Precio</p></div>
-                </div>
-                <p className="mt-4 text-xs font-bold text-slate-500">{usage} ciclos historicos o actuales asociados.</p>
-                <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => onUsePlan(plan)} disabled={assignmentLocked} className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-white disabled:opacity-60">Usar en venta</button>
-                  <button type="button" onClick={() => onEditPlan(plan)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700">Editar</button>
-                  <button type="button" onClick={() => onTogglePlan(plan)} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
-                    {plan.is_active ? 'Desactivar plan' : 'Activar plan'}
-                  </button>
-                  <button type="button" onClick={() => onDeletePlan(plan)} disabled={deletingPlanId === plan.id} className="rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-black text-rose-600 disabled:opacity-60">
-                    {deletingPlanId === plan.id ? 'Eliminando...' : 'Eliminar'}
-                  </button>
-                </div>
-              </article>
-            )
-          })}
         </div>
-
-        {visiblePlans.length === 0 && (
-          <AdminContentPanel className="p-8 text-center">
-            <Layers3 className="mx-auto h-10 w-10 text-slate-300" />
-            <p className="mt-3 text-sm font-black text-slate-950">No hay planes para este filtro.</p>
-            <p className="mt-1 text-sm text-slate-500">Crea un plan o cambia el filtro de estado.</p>
-          </AdminContentPanel>
-        )}
-      </div>
-
-      <AdminContentPanel className="p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-4">
-            <BadgeCheck className="mt-1 h-8 w-8 text-accent" />
-            <div>
-              <h3 className="text-lg font-black text-slate-950">Gestion segura de catalogo</h3>
-              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                La eliminacion se bloqueara si el plan esta asociado a ciclos existentes. Para planes usados, desactivalos en lugar de eliminarlos.
-              </p>
-            </div>
-          </div>
-          <button type="button" onClick={onNewPlan} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white">
-            <FilePenLine className="h-4 w-4" />
-            Crear plan
-          </button>
-        </div>
+        {visiblePlans.length ? (
+          <table aria-label="Planes de membresía" className="w-full border-collapse text-left text-sm">
+            <thead className="border-y border-blue-100 bg-blue-50 text-xs font-bold text-[#084681]">
+              <tr>
+                <th scope="col" className="px-3 py-3 sm:px-5">Plan</th>
+                <th scope="col" className="hidden px-2 py-3 md:table-cell">Clases</th>
+                <th scope="col" className="hidden px-2 py-3 md:table-cell">Cuota semanal</th>
+                <th scope="col" className="hidden px-2 py-3 md:table-cell">Duración</th>
+                <th scope="col" className="hidden px-2 py-3 md:table-cell">Precio</th>
+                <th scope="col" className="hidden px-2 py-3 md:table-cell">Estado</th>
+                <th scope="col" className="px-3 py-3 text-right sm:px-5">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-blue-100">
+              {visiblePlans.map(plan => {
+                const usage = usageByPlan.get(plan.id) || 0
+                const weekly = plan.weekly_class_target === 0 ? 'Sin revisión semanal' : `${plan.weekly_class_target} por semana`
+                const duration = plan.duration_days === 30 ? '1 mes calendario' : plan.duration_days ? `${plan.duration_days} días` : 'Sin duración'
+                const price = formatMoney(plan.base_price, plan.currency)
+                const status = <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${plan.is_active ? 'bg-blue-50 text-[#084681]' : 'bg-slate-100 text-slate-700'}`}>{plan.is_active ? 'Activo' : 'Inactivo'}</span>
+                const toggleLabel = plan.is_active ? 'Desactivar plan' : 'Activar plan'
+                const deleteLabel = usage ? 'Eliminar · plan con ciclos asociados' : 'Eliminar plan'
+                return (
+                  <tr key={plan.id} className="align-top hover:bg-blue-50/40">
+                    <th scope="row" className="break-words px-3 py-3 font-semibold text-[#101e3e] sm:px-5">
+                      {plan.name}
+                      {plan.description && <p className="mt-0.5 text-xs font-normal text-slate-600">{plan.description}</p>}
+                      <p className="mt-1 text-xs font-normal text-slate-600">{usage} {usage === 1 ? 'ciclo asociado' : 'ciclos asociados'}</p>
+                      <div className="mt-1 space-y-1 text-xs font-normal text-slate-700 md:hidden">
+                        <p>{plan.classes_included} clases · {price}</p><p>{duration} · {weekly}</p>{status}
+                      </div>
+                    </th>
+                    <td className="hidden px-2 py-3 md:table-cell">{plan.classes_included}</td>
+                    <td className="hidden px-2 py-3 md:table-cell">{weekly}</td>
+                    <td className="hidden px-2 py-3 md:table-cell">{duration}</td>
+                    <td className="hidden whitespace-nowrap px-2 py-3 font-semibold md:table-cell">{price}</td>
+                    <td className="hidden px-2 py-3 md:table-cell">{status}</td>
+                    <td className="px-2 py-2 text-right sm:px-4">
+                      <div className="flex flex-wrap justify-end">
+                        <button type="button" title="Editar" aria-label={`Editar plan ${plan.name}`} onClick={() => onEditPlan(plan)} className={`${iconButton} text-[#0758aa] hover:bg-blue-100`}><Pencil size={16} aria-hidden="true" /></button>
+                        <button type="button" title={toggleLabel} aria-label={`${toggleLabel} ${plan.name}`} onClick={() => onTogglePlan(plan)} className={`${iconButton} ${plan.is_active ? 'text-orange-800 hover:bg-orange-100' : 'text-[#0758aa] hover:bg-blue-100'}`}><Power size={17} aria-hidden="true" /></button>
+                        <span title={deleteLabel}>
+                          <button type="button" title={deleteLabel} aria-label={`${deleteLabel}: ${plan.name}`} disabled={usage > 0 || deletingPlanId !== null}
+                            onClick={() => onDeletePlan(plan)} className={`${iconButton} text-rose-700 hover:bg-rose-50`}><Trash2 size={16} aria-hidden="true" /></button>
+                        </span>
+                      </div>
+                      {plan.is_active && <button type="button" onClick={() => onUsePlan(plan)} disabled={assignmentLocked}
+                        className="min-h-11 whitespace-nowrap rounded-lg px-2 text-xs font-bold text-[#0758aa] hover:bg-blue-50 disabled:opacity-50">Usar en venta</button>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        ) : <p className="border-t border-blue-100 p-6 text-center text-sm text-slate-600">No hay planes para este filtro.</p>}
       </AdminContentPanel>
     </div>
   )
@@ -1410,6 +1398,8 @@ export default function AdminMembershipsPage() {
   )
 
   const [saleOpen, setSaleOpen] = useState(false)
+  const [pendingPaymentsOpen, setPendingPaymentsOpen] = useState(false)
+  const [recentOpen, setRecentOpen] = useState(false)
   const membershipDeepLinkHandled = useRef(false)
   const [activeTab, setActiveTab] = useState<MembershipTab>('summary')
   const [attentionFilter, setAttentionFilter] = useState<'all' | 'expiring' | 'empty' | 'oneClass'>('all')
@@ -1541,7 +1531,7 @@ export default function AdminMembershipsPage() {
 
   const finalAmount = useMemo(() => {
     if (basePrice === null) return null
-    return Math.max(0, basePrice - computedDiscountAmount)
+    return Number(Math.max(0, basePrice - computedDiscountAmount).toFixed(2))
   }, [basePrice, computedDiscountAmount])
 
   const cyclePreview = useMemo(() => {
@@ -1569,53 +1559,24 @@ export default function AdminMembershipsPage() {
     }
   }, [assignmentForm, finalAmount, selectedPlan])
 
-  useEffect(() => {
-    if (finalAmount === null || assignmentForm.origin !== 'paid') return
-    const suggestedBatchPayment = finalAmount * Number(assignmentForm.period_count || 1)
-    setAssignmentForm((current) => {
-      if (current.payment_amount === suggestedBatchPayment.toString()) return current
-      return { ...current, payment_amount: suggestedBatchPayment.toString() }
-    })
-  }, [assignmentForm.origin, assignmentForm.period_count, basePrice, finalAmount])
-
   const membershipKpis = useMemo(() => {
-    const activeMemberships = allMemberships.filter((membership) => membership.status === 'active')
-    const expiring = activeMemberships.filter((membership) => {
-      const days = daysUntil(membership.end_date)
-      return days !== null && days >= 0 && days <= 7
-    })
-    const withoutClasses = activeMemberships.filter((membership) => membership.classes_remaining <= 0)
-    const oneClass = activeMemberships.filter((membership) => membership.classes_remaining === 1)
+    const today = getLimaDateKey()
+    const activeMemberships = allMemberships.filter(membership => membership.status === 'active' &&
+      membership.start_date <= today && (membership.end_date === null || membership.end_date >= today) && membership.classes_remaining > 0)
     const monthMemberships = allMemberships.filter((membership) => isSameMonth(membership.created_at))
     const monthIncome = monthMemberships.reduce((sum, membership) => sum + Number(membership.total_amount || 0), 0)
 
     return {
       activeMemberships,
-      expiring,
-      withoutClasses,
-      oneClass,
-      monthRenewals: monthMemberships.length,
+      monthCycles: monthMemberships.length,
       monthIncome,
     }
   }, [allMemberships])
 
-  const visibleAttentionStudents = useMemo(() => {
-    if (attentionFilter === 'expiring') {
-      return activeStudents.filter((student) => {
-        const days = daysUntil(student.membership_end)
-        return student.membership_status === 'active' && days !== null && days >= 0 && days <= 7
-      })
-    }
-    if (attentionFilter === 'empty') {
-      return activeStudents.filter((student) => student.membership_status === 'active' && student.classes_remaining <= 0)
-    }
-    if (attentionFilter === 'oneClass') {
-      return activeStudents.filter((student) => student.membership_status === 'active' && student.classes_remaining === 1)
-    }
-    return activeStudents.slice(0, 5)
-  }, [activeStudents, attentionFilter])
+  const attention = useMemo(() => membershipAttention(activeStudents, allMemberships, getLimaDateKey()), [activeStudents, allMemberships])
+  const attentionTitles = { expiring: 'Membresías por vencer', empty: 'Alumnos sin clases', oneClass: 'Alumnos con una clase restante' }
 
-  const recentMemberships = useMemo(() => allMemberships.slice(0, 6), [allMemberships])
+  const recentMemberships = useMemo(() => allMemberships.filter(membership => membership.status !== 'draft').slice(0, 5), [allMemberships])
 
   function patchAssignmentForm(patch: Partial<AssignmentFormState>) {
     if (assignmentSubmissionLockRef.current) return
@@ -1651,6 +1612,13 @@ export default function AdminMembershipsPage() {
     window.setTimeout(() => {
       saleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 0)
+  }
+
+  function openSale(preset: Partial<AssignmentFormState> = {}) {
+    if (assignmentSubmissionLockRef.current) return
+    assignmentIdempotencyKeyRef.current = null
+    setAssignmentForm({ ...emptyAssignmentForm(), ...preset })
+    scrollToSaleForm()
   }
 
   async function refreshAll(throwOnError = false) {
@@ -1860,15 +1828,18 @@ export default function AdminMembershipsPage() {
       return
     }
 
+    const batchTotal = Number(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0).toFixed(2))
+    const paymentPending = assignmentForm.origin === 'paid' && batchTotal > 0 && assignmentForm.payment_status === 'pending'
     const confirmMessage = [
       'Se crearan ciclos independientes sin modificar los saldos existentes.',
       '',
       'Vista previa:',
       `Alumno: ${selectedStudent.full_name}`,
       ...cyclePreview.map((cycle) => (
-        `Ciclo ${cycle.cycleNumber}: ${cycle.origin === 'gift' ? 'Obsequio' : selectedPlan?.name || 'Membresia pagada'} · ${formatDate(cycle.startDate)} - ${formatDate(cycle.endDate)} · ${cycle.classes} clases`
+        `Ciclo ${cycle.cycleNumber}: ${cycle.origin === 'gift' ? 'Obsequio' : selectedPlan?.name || 'Membresía'} · ${formatDate(cycle.startDate)} - ${formatDate(cycle.endDate)} · ${cycle.classes} clases`
       )),
-      `Total combinado: ${formatMoney(cyclePreview.reduce((sum, cycle) => sum + cycle.amount, 0), selectedPlan?.currency)}`,
+      `${paymentPending ? 'Total por cobrar' : 'Total combinado'}: ${formatMoney(batchTotal, selectedPlan?.currency)}`,
+      ...(batchTotal > 0 ? [paymentPending ? 'Pago pendiente' : 'Pago completo recibido'] : []),
     ].join('\n')
 
     let accepted = false
@@ -1915,16 +1886,15 @@ export default function AdminMembershipsPage() {
           membershipPlanId: assignmentForm.membership_plan_id,
           periodCount: Number(assignmentForm.period_count),
           totalAmountPerCycle: finalAmount ?? 0,
-          batchPaymentAmount: assignmentForm.payment_amount.trim()
-            ? Number(assignmentForm.payment_amount)
-            : (finalAmount ?? 0) * Number(assignmentForm.period_count),
+          batchPaymentAmount: paymentPending ? 0 : batchTotal,
+          paymentPending,
           paymentType: assignmentForm.payment_type,
           discountType: assignmentForm.discount_type,
           discountValue: normalizedDiscountValue,
           fixedTemplateIds: assignmentForm.fixed_template_ids,
         })
 
-      toast.push({ message: 'Membresia creada correctamente.', type: 'success' })
+      toast.push({ message: paymentPending ? 'Membresía registrada con pago pendiente.' : 'Membresía creada correctamente.', type: 'success' })
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: studentKeys.all }),
@@ -1933,6 +1903,8 @@ export default function AdminMembershipsPage() {
         queryClient.invalidateQueries({ queryKey: ['admin-students'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-bookings'] }),
         queryClient.invalidateQueries({ queryKey: ['weekly-attendance-review'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-pending-payments'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] }),
       ])
 
       assignmentIdempotencyKeyRef.current = null
@@ -1954,21 +1926,17 @@ export default function AdminMembershipsPage() {
       toast.push({ message: 'No se puede renovar una membresia sin alumno asociado.', type: 'error' })
       return
     }
-    assignmentIdempotencyKeyRef.current = null
     const studentMemberships = allMemberships
       .filter((candidate) => candidate.student?.id === student.id)
       .map((candidate) => ({
         ...candidate,
         status: candidate.status === 'draft' ? 'historical' as const : candidate.status,
       }))
-    setAssignmentForm((current) => ({
-      ...current,
-      origin: 'paid',
+    openSale({
       student_id: student.id,
-      membership_plan_id: membership.membership_plan_id || current.membership_plan_id,
+      membership_plan_id: activePlans.some(plan => plan.id === membership.membership_plan_id) ? membership.membership_plan_id || '' : '',
       start_date: suggestNextMembershipStart(studentMemberships, getLimaDateKey()),
-    }))
-    scrollToSaleForm()
+    })
   }
 
   function patchMembershipEditor(patch: Partial<MembershipEditorState>) {
@@ -2208,7 +2176,7 @@ export default function AdminMembershipsPage() {
   return (
     <div className="min-w-0 space-y-6">
       <AdminPageHeader
-        title="Membresias"
+        title="Membresías"
         description="Gestiona planes, renovaciones y estado de cuenta de tus alumnos"
         actions={
           <>
@@ -2223,11 +2191,11 @@ export default function AdminMembershipsPage() {
             </button>
             <button
               type="button"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-5 text-sm font-black text-white shadow-[0_16px_35px_rgba(249,115,22,0.24)] transition hover:-translate-y-0.5 active:scale-[0.98]"
-              onClick={scrollToSaleForm}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-[#0758aa] px-5 text-sm font-black text-white hover:bg-[#084681]"
+              onClick={() => openSale()}
             >
               <CreditCard className="h-4 w-4" />
-              Nueva venta o renovacion
+              Nueva venta o renovación
             </button>
           </>
         }
@@ -2239,18 +2207,15 @@ export default function AdminMembershipsPage() {
         </AdminContentPanel>
       )}
 
-      {isLoading ? (
+      {activeTab === 'summary' && (isLoading ? (
         <MembershipSkeleton />
       ) : (
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <AdminStatCard label="Membresias activas" value={membershipKpis.activeMemberships.length} helper="Base actual" icon={<CheckCircle2 className="h-5 w-5" />} tone="green" />
-          <AdminStatCard label="Por vencer" value={membershipKpis.expiring.length} helper="Proximos 7 dias" icon={<CalendarDays className="h-5 w-5" />} tone="orange" />
-          <AdminStatCard label="Sin clases" value={membershipKpis.withoutClasses.length} helper="Requieren atencion" icon={<XCircle className="h-5 w-5" />} tone="red" />
-          <AdminStatCard label="Una clase" value={membershipKpis.oneClass.length} helper="Renovacion cercana" icon={<AlertTriangle className="h-5 w-5" />} tone="amber" />
-          <AdminStatCard label="Renovaciones" value={membershipKpis.monthRenewals} helper="Este mes" icon={<RotateCcw className="h-5 w-5" />} tone="blue" />
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <AdminStatCard label="Ciclos vigentes" value={membershipKpis.activeMemberships.length} helper="Con saldo y vigencia actual" icon={<CheckCircle2 className="h-5 w-5" />} tone="blue" />
+          <AdminStatCard label="Ciclos creados" value={membershipKpis.monthCycles} helper="Este mes" icon={<RotateCcw className="h-5 w-5" />} tone="blue" />
           <AdminStatCard label="Valor de ciclos creados" value={formatMoney(membershipKpis.monthIncome, 'PEN')} helper="Creados este mes; no equivale a cobros" icon={<Wallet className="h-5 w-5" />} tone="slate" />
         </section>
-      )}
+      ))}
 
       <MembershipTabs activeTab={activeTab} onChange={setActiveTab} />
       <details className="rounded-xl border border-slate-200 bg-white p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-600">Acciones de vencimiento</summary><div className="pt-3">            <button
@@ -2264,7 +2229,7 @@ export default function AdminMembershipsPage() {
             </button></div></details>
 
       {activeTab === 'summary' && (
-        <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_16rem] xl:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="min-w-0 space-y-6">
             {saleOpen && <div ref={saleRef} className="scroll-mt-4">
               <button type="button" disabled={assignmentSaving || assignmentSubmissionLocked} onClick={() => setSaleOpen(false)} className="mb-3 min-h-11 text-sm font-semibold text-slate-600">Cerrar formulario</button>
@@ -2297,30 +2262,30 @@ export default function AdminMembershipsPage() {
                   <p className="text-sm font-black text-slate-950">Pendientes importantes</p>
                   <p className="mt-1 text-sm text-slate-500">Acciones operativas para renovacion y seguimiento.</p>
                 </div>
-                <button type="button" onClick={() => setAttentionFilter('all')} className="text-sm font-black text-accent">Limpiar filtros</button>
+                {attentionFilter !== 'all' && <button type="button" onClick={() => setAttentionFilter('all')} className="min-h-11 text-sm font-bold text-[#084681]">Quitar filtro</button>}
               </div>
 
               <div className="mt-5 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <MembershipAttentionCard
                   icon={<CalendarDays className="h-5 w-5" />}
-                  title="Membresias por vencer"
-                  value={membershipKpis.expiring.length}
-                  helper="Ciclos activos que vencen en los proximos 7 dias."
+                  title="Membresías por vencer"
+                  value={attention.expiring.length}
+                  helper="La vigencia total termina en siete días o menos."
                   onClick={() => setAttentionFilter('expiring')}
                 />
                 <MembershipAttentionCard
                   icon={<XCircle className="h-5 w-5" />}
                   title="Alumnos sin clases"
-                  value={membershipKpis.withoutClasses.length}
-                  helper="Ciclos activos con saldo agotado."
+                  value={attention.empty.length}
+                  helper="Sin saldo entre sus ciclos vigentes y programados."
                   tone="red"
                   onClick={() => setAttentionFilter('empty')}
                 />
                 <MembershipAttentionCard
                   icon={<ShieldAlert className="h-5 w-5" />}
                   title="Una clase restante"
-                  value={membershipKpis.oneClass.length}
-                  helper="Renovacion cercana antes de agotar saldo."
+                  value={attention.oneClass.length}
+                  helper="Una clase sin consumir entre sus ciclos."
                   tone="amber"
                   onClick={() => setAttentionFilter('oneClass')}
                 />
@@ -2335,88 +2300,56 @@ export default function AdminMembershipsPage() {
                 />
               </div>
 
-              <div className="mt-5 rounded-[1.35rem] border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-sm font-black text-slate-950">
-                  <Search className="h-4 w-4 text-accent" />
-                  Alumnos destacados
-                </div>
-                {visibleAttentionStudents.length === 0 ? (
-                  <p className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-                    No hay membresias para los filtros seleccionados.
-                  </p>
-                ) : (
-                  <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-                    {visibleAttentionStudents.map((student) => (
-                      <div key={student.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-                        <Avatar name={student.full_name} url={student.avatar_url} size="md" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-slate-950">{student.full_name}</p>
-                          <p className="text-xs text-slate-500">{student.membership_name || 'Sin plan'} · {student.classes_remaining} clases</p>
+              {attentionFilter !== 'all' && <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                <h3 className="text-sm font-bold text-[#101e3e]">{attentionTitles[attentionFilter]} · {attention[attentionFilter].length}</h3>
+                {attention[attentionFilter].length === 0 ? <p className="mt-2 text-sm text-slate-600">No hay alumnos en este grupo.</p> : (
+                  <ul className="mt-2 divide-y divide-blue-100">
+                    {attention[attentionFilter].map(({ student, end, balance }) => (
+                      <li key={student.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-bold text-[#101e3e]">{student.full_name}</p>
+                          <p className="text-xs text-slate-600">{balance} {balance === 1 ? 'clase' : 'clases'}{end && ` · Vigencia hasta ${formatDate(end)}`}</p>
                         </div>
-                        <button
-                          type="button"
-                          disabled={assignmentSubmissionLocked}
-                          onClick={() => {
-                            patchAssignmentForm({ origin: 'paid', student_id: student.id })
-                            scrollToSaleForm()
-                          }}
-                          className="rounded-xl bg-orange-50 px-3 py-2 text-xs font-black text-accent disabled:opacity-60"
-                        >
-                          Renovar
-                        </button>
-                      </div>
+                        <button type="button" disabled={assignmentSubmissionLocked} onClick={() => {
+                          const current = currentMembershipForStudent(student.id, allMemberships)
+                          if (current) selectMembershipForRenewal(current)
+                          else openSale({ student_id: student.id })
+                        }} className="min-h-11 rounded-lg px-3 text-xs font-bold text-[#0758aa] hover:bg-blue-100 disabled:opacity-50">Renovar</button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </section>}
+            </AdminContentPanel>
+
+            <AdminContentPanel className="p-4">
+              <button type="button" aria-expanded={pendingPaymentsOpen} aria-controls="membership-pending-payments"
+                onClick={() => setPendingPaymentsOpen(open => !open)} className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-bold text-[#084681]">
+                <span className="inline-flex items-center gap-2"><Wallet className="h-4 w-4 text-orange-800" aria-hidden="true" /> Cobros pendientes</span>
+                <ChevronDown className={`h-4 w-4 ${pendingPaymentsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="membership-pending-payments" hidden={!pendingPaymentsOpen}>{pendingPaymentsOpen && <PendingMembershipPayments />}</div>
             </AdminContentPanel>
           </div>
 
-          <aside className="min-w-0 space-y-6">
-            <AdminContentPanel className="p-5">
-              <h2 className="text-base font-black text-slate-950">Renovaciones recientes</h2>
-              <p className="mt-1 text-sm text-slate-500">Últimos ciclos registrados.</p>
-              <div className="mt-4 space-y-3">
-                {recentMemberships.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-500">
-                    Todavia no hay membresias registradas.
-                  </p>
-                ) : (
-                  recentMemberships.map((membership) => (
-                    <article key={membership.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                      <div className="flex items-start gap-3">
-                        <Avatar name={membership.student?.full_name || 'Alumno'} url={membership.student?.avatar_url || null} size="md" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-slate-950">{membership.student?.full_name || 'Alumno eliminado'}</p>
-                          <p className="mt-1 text-xs text-slate-500">{membership.custom_name}</p>
-                          <p className="mt-2 text-sm font-black text-accent">{formatMoney(membership.total_amount, membership.currency)}</p>
-                        </div>
-                      </div>
-                    </article>
-                  ))
+          <aside className="min-w-0 space-y-4">
+            <AdminContentPanel className="p-4">
+              <h2 className="hidden text-sm font-bold text-[#101e3e] md:block">Ciclos recientes</h2>
+              <button type="button" aria-expanded={recentOpen} aria-controls="membership-recent-cycles" onClick={() => setRecentOpen(open => !open)}
+                className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-bold text-[#084681] md:hidden">
+                Ciclos recientes <ChevronDown className={`h-4 w-4 ${recentOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="membership-recent-cycles" className={recentOpen ? 'block' : 'hidden md:block'}>
+                {recentMemberships.length === 0 ? <p className="mt-2 text-xs text-slate-600">Todavía no hay ciclos registrados.</p> : (
+                  <ul className="mt-2 divide-y divide-blue-100">
+                    {recentMemberships.map(membership => (
+                      <li key={membership.id} className="py-2">
+                        <p className="break-words text-sm font-semibold text-[#101e3e]">{membership.student?.full_name || 'Alumno eliminado'}</p>
+                        <p className="break-words text-xs text-slate-600">{membership.custom_name} · {formatAdminDate(membership.created_at)}</p>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </div>
-            </AdminContentPanel>
-
-            <AdminContentPanel className="p-5">
-              <h2 className="text-base font-black text-slate-950">Acceso rapido a catalogo</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">Planes activos disponibles para venta o renovacion.</p>
-              <div className="mt-4 grid gap-3">
-                {activePlans.slice(0, 3).map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    disabled={assignmentSubmissionLocked}
-                    onClick={() => {
-                      patchAssignmentForm({ origin: 'paid', membership_plan_id: plan.id })
-                      scrollToSaleForm()
-                    }}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-accent/30 hover:bg-orange-50 disabled:opacity-60"
-                  >
-                    <p className="text-sm font-black text-slate-950">{plan.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{plan.classes_included} clases · {formatMoney(plan.base_price, plan.currency)}</p>
-                  </button>
-                ))}
               </div>
             </AdminContentPanel>
           </aside>
@@ -2463,16 +2396,7 @@ export default function AdminMembershipsPage() {
           onCancelPlan={() => setPlanEditor(null)}
           onTogglePlan={togglePlanStatus}
           onDeletePlan={deletePlan}
-          onUsePlan={(plan) => {
-            if (assignmentSubmissionLockRef.current) return
-            assignmentIdempotencyKeyRef.current = null
-            setAssignmentForm((current) => ({
-              ...current,
-              origin: 'paid',
-              membership_plan_id: plan.id,
-            }))
-            scrollToSaleForm()
-          }}
+          onUsePlan={(plan) => { if (plan.is_active) openSale({ membership_plan_id: plan.id }) }}
         />
       )}
 
