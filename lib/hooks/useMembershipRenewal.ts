@@ -155,6 +155,9 @@ export function useApproveMembershipRenewalRequest() {
       queryClient.invalidateQueries({ queryKey: ['admin-membership-renewal-requests'] })
       queryClient.invalidateQueries({ queryKey: ['membership-plans'] })
       queryClient.invalidateQueries({ queryKey: ['student-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-students'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-membership-followups'] })
       invalidateMembershipRenewalCaches(queryClient)
     },
   })

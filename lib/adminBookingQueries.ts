@@ -244,6 +244,10 @@ export function useAdminBookSession() {
     onSuccess: () => {
       // Invalidar múltiples queries para actualizar la UI
       queryClient.invalidateQueries({ queryKey: studentKeys.all })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard-site-capacity'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-session-calendar'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-student-search'] })
       queryClient.invalidateQueries({ queryKey: ['admin-bookings'] })
       queryClient.invalidateQueries({ queryKey: ['admin-students'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })

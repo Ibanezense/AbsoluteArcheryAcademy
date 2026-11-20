@@ -525,6 +525,10 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   async function refreshStudentData() {
     await queryClient.invalidateQueries({ queryKey: studentKeys.all })
     await queryClient.invalidateQueries({ queryKey: membershipRenewalAlertKeys.all })
+    await queryClient.invalidateQueries({ queryKey: ['admin-students'] })
+    await queryClient.invalidateQueries({ queryKey: ['admin-dashboard-operational'] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboard-membership-followups'] })
+    await queryClient.invalidateQueries({ queryKey: ['admin-student-search'] })
     await invalidateStudentBirthdayQueries(queryClient, params.id)
   }
 
