@@ -50,8 +50,12 @@ export async function GET(request: Request) {
     if (error) throw new ProgressError(503, 'unavailable')
     if (!data || data.id !== studentId)
       throw new ProgressError(403, 'forbidden')
-    await authorize(request)
-    await checkAccess()
+    const [sessionCheck, studentCheck] = await Promise.allSettled([
+      authorize(request),
+      checkAccess(),
+    ])
+    if (sessionCheck.status === 'rejected') throw sessionCheck.reason
+    if (studentCheck.status === 'rejected') throw studentCheck.reason
     const text = (value: unknown) => (typeof value === 'string' ? value : null)
     const number = (value: unknown) =>
       typeof value === 'number' && Number.isFinite(value) ? value : null

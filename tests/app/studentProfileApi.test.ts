@@ -57,6 +57,26 @@ describe('private student profile', () => {
     expect(from).toHaveBeenCalledTimes(1)
     expect(auth.authorize).toHaveBeenCalledTimes(2)
   })
+  it('starts both final checks after the read and waits for both before returning the profile', async () => {
+    let finishAuthorization!: (client: never) => void
+    const finalAuthorization = new Promise<never>(resolve => { finishAuthorization = resolve })
+    vi.mocked(auth.authorize)
+      .mockResolvedValueOnce({ rpc, from } as never)
+      .mockReturnValueOnce(finalAuthorization)
+
+    let returned = false
+    const response = GET(request()).then(result => { returned = true; return result })
+    try {
+      await vi.waitFor(() => expect(rpc).toHaveBeenCalledTimes(2))
+      expect(single).toHaveBeenCalledOnce()
+      expect(single.mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[1])
+      expect(returned).toBe(false)
+    } finally {
+      finishAuthorization({ rpc, from } as never)
+      await response
+    }
+    expect((await response).status).toBe(200)
+  })
   it('never reads student data for an invalid session', async () => {
     vi.mocked(auth.authorize).mockRejectedValue(
       new auth.ProgressError(401, 'invalid_session'),
