@@ -371,7 +371,7 @@ export default function AdminAlumnoEditorPage() {
 
   return (
     <div className="space-y-6">
-        <section className="rounded-3xl border border-white/10 bg-card p-5 sm:p-6">
+        <section className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex items-start gap-3">
               <button

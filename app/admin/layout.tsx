@@ -30,11 +30,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminGuard>
-      <div className={`admin-workspace flex min-h-screen ${pathname === '/admin' ? 'academy-admin-home bg-[#f3f7fc]' : 'bg-[#f2f5f7]'}`}>
+      <div className="admin-workspace academy-admin-home flex min-h-screen bg-[#f3f7fc]">
         <AdminSidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
         <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
-          <header className={`sport-dark sticky top-0 z-30 border-b border-slate-800 bg-[#101e2a] px-4 py-3 ${pathname === '/admin' ? 'academy-admin-masthead' : 'lg:hidden'}`}>
+          <header className="sport-dark academy-admin-masthead sticky top-0 z-30 border-b border-slate-800 bg-[#101e2a] px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
                 <Image
@@ -47,10 +47,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   priority
                 />
               </div>
-              {pathname === '/admin' && <div className="ml-auto mr-2 flex items-center gap-3 text-white lg:mr-0">
+              <div className="ml-auto mr-2 flex items-center gap-3 text-white lg:mr-0">
                 <Link href="/admin/notificaciones" aria-label="Notificaciones" className="grid h-11 w-11 place-items-center rounded-lg hover:bg-white/10"><Bell size={20} /></Link>
                 <span className="hidden items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold sm:inline-flex"><UserRound size={16} /> Admin</span>
-              </div>}
+              </div>
               <button
                 onClick={() => setIsSidebarOpen(true)}
                 className="grid h-11 w-11 place-items-center rounded-lg text-white transition hover:bg-slate-800 lg:hidden"

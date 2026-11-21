@@ -394,7 +394,7 @@ function InfoRow({ label, value, danger = false }: { label: string; value: React
 
 function KpiCard({ icon, label, value, helper, tone }: { icon: ReactNode; label: string; value: string | number; helper: string; tone: string }) {
   return (
-    <article className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+    <article className="min-w-0 rounded-xl border border-blue-100 bg-[#f7faff] p-3">
       <div className="flex items-center gap-2 text-xs text-slate-600"><span className={`rounded-md p-1 ${tone}`}>{icon}</span>{label}</div>
       <p className="mt-2 break-words text-xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-1 text-xs leading-4 text-slate-500">{helper}</p>
@@ -1032,7 +1032,7 @@ export default function AdminAlumnoDetailPage({ params }: { params: { id: string
   const headerActions = (
     <>
       <button type="button" onClick={() => setBookingOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white"><CalendarDays className="h-4 w-4" />Reservar clase</button>
-      <Link href={`/admin/membresias?studentId=${encodeURIComponent(data.id)}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700"><WalletCards className="h-4 w-4" />Renovar</Link>
+      <Link href={`/admin/membresias?studentId=${encodeURIComponent(data.id)}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 text-sm font-semibold text-[#0758aa] hover:bg-blue-50"><WalletCards className="h-4 w-4" />Renovar</Link>
       <div ref={generalActionsRef} className="relative">
         <button type="button" aria-label="Acciones del alumno" aria-expanded={generalActionsOpen} onClick={() => setGeneralActionsOpen((open) => !open)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-accent/40 hover:text-accent">
           Acciones <ChevronDown className="h-4 w-4" />

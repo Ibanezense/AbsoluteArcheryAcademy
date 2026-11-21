@@ -187,3 +187,28 @@ button:disabled { cursor: not-allowed; }
 .admin-workspace aside .text-accent { color: #fb923c; }
 
 .admin-workspace aside .text-slate-500 { color: #94a3b8; }
+
+/* Student administration: shared blue actions and orange highlights. */
+.admin-workspace .student-admin-surface :is(button, a).btn,
+.admin-workspace .student-admin-surface :is(button, a).bg-accent {
+  background-color: #0758aa;
+  color: #fff;
+}
+.admin-workspace .student-admin-surface :is(button, a).btn:hover:not(:disabled),
+.admin-workspace .student-admin-surface :is(button, a).bg-accent:hover:not(:disabled) {
+  background-color: #064786;
+}
+.admin-workspace .student-admin-surface :is(button, a).btn-outline,
+.admin-workspace .student-admin-surface :is(button, a).btn-ghost {
+  border-color: #bfd5ed;
+  color: #0758aa;
+}
+.admin-workspace .student-admin-surface :is(button, a).btn-outline:hover:not(:disabled),
+.admin-workspace .student-admin-surface :is(button, a).btn-ghost:hover:not(:disabled) {
+  border-color: #7aafd9;
+  background-color: #eff6ff;
+}
+.admin-workspace .student-admin-surface [role="tab"][aria-selected="true"] {
+  border-color: #0758aa;
+  color: #0758aa;
+}

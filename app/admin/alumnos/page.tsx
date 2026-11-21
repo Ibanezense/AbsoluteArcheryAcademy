@@ -507,7 +507,7 @@ export default function AdminAlumnosPage() {
                   type="button"
                   aria-pressed={status === value}
                   onClick={() => updateFilters({ status: value })}
-                  className={`min-h-11 rounded-xl border px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 ${status === value ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                  className={`min-h-11 rounded-xl border px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 ${status === value ? 'border-orange-300 bg-orange-50 text-orange-900' : 'border-blue-100 text-slate-700 hover:bg-blue-50'}`}
                 >
                   {label}
                 </button>
