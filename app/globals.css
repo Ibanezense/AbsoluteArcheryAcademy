@@ -135,7 +135,7 @@ button:disabled { cursor: not-allowed; }
   min-height: 4.25rem;
   background: linear-gradient(132deg, #0c1b35 0 31%, #f28b26 31% 32%, #132b4f 32% 100%);
 }
-.academy-admin-home main :is(h1,h2,h3) { font-family: inherit; }
+.academy-admin-start main :is(h1,h2,h3) { font-family: inherit; }
 @media (min-width: 1024px) {
   .academy-admin-home .academy-admin-masthead {
     margin-inline-start: -16rem;

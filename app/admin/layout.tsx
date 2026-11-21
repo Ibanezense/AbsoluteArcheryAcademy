@@ -30,7 +30,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminGuard>
-      <div className="admin-workspace academy-admin-home flex min-h-screen bg-[#f3f7fc]">
+      <div className={`admin-workspace academy-admin-home flex min-h-screen bg-[#f3f7fc] ${pathname === '/admin' ? 'academy-admin-start' : ''}`}>
         <AdminSidebar isOpen={isSidebarOpen} onClose={closeSidebar} />
 
         <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
